@@ -189,7 +189,15 @@ function Carte({
           {l.taux === null ? (
             <span className="text-blanc">—</span>
           ) : (
-            `${Math.round(l.taux * 100)} %`
+            <>
+              {Math.round(l.taux * 100)} %
+              {/* Un taux mesuré sur 5 à 19 réponses se lit, mais avec prudence. */}
+              {l.nbReponses < 20 && (
+                <span className="ml-1 text-xs text-blanc" title={`${l.nbReponses} réponses seulement`}>
+                  ⚠
+                </span>
+              )}
+            </>
           )}
         </span>
       </button>

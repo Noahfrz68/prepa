@@ -28,6 +28,9 @@ export const QUESTIONS_DIAGNOSTIC = 7
  * En demander 7 faisait tirer deux textes, donc 10 questions à traiter dans
  * le temps de 7 : le sous-test était à la fois plus lourd et plus court que
  * les autres. Un texte, cinq questions, 400 s — la cadence réelle.
+ *
+ * C'est le repli : quand la banque a un texte long de sept questions
+ * validées, la préparation (core/db/epreuve.ts) le sert à la place, 560 s.
  */
 export const QUESTIONS_DIAGNOSTIC_COMPREHENSION = 5
 

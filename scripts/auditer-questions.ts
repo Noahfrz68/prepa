@@ -19,6 +19,7 @@
  */
 import Database from 'better-sqlite3'
 import path from 'node:path'
+import { ALERTE_LETTRE_DOMINANTE, alerteRepartition } from '../core/import/permutation'
 
 interface Item {
   id: number
@@ -125,6 +126,28 @@ for (const it of items) {
   }
 
   if (!it.explication_reference?.trim()) noter('sans-correction', it, '')
+}
+
+/* ------------------------------------------- répartition des réponses -- */
+
+// Une lettre qui porte trop de bonnes réponses se devine sans lire la question.
+const bonnesParSection = new Map<string, string[]>()
+for (const it of items) {
+  if (!bonnesParSection.has(it.section)) bonnesParSection.set(it.section, [])
+  bonnesParSection.get(it.section)!.push(it.bonne_reponse)
+}
+for (const [section, bonnes] of bonnesParSection) {
+  const a = alerteRepartition(bonnes)
+  if (a) {
+    defauts.set('lettre-dominante', [
+      ...(defauts.get('lettre-dominante') ?? []),
+      {
+        id: 0,
+        section,
+        detail: `${a.lettre} porte ${Math.round(a.part * 100)} % des ${a.n} bonnes réponses (seuil ${Math.round(ALERTE_LETTRE_DOMINANTE * 100)} %)`,
+      },
+    ])
+  }
 }
 
 /* ---------------------------------------------------------------- sortie -- */

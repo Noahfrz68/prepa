@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MINUTES_BLANC,
   composerSemaine,
+  projeterCalendrier,
   semainesLisibles,
   type BesoinSection,
   type ParametresSemaine,
@@ -24,6 +25,7 @@ const base: ParametresSemaine = {
     (s) => section(s),
   ),
   semainesDepuisDernierBlanc: null,
+  joursDepuisDerniereEpreuve: 4,
   aDejaPasseUneEpreuve: true,
   banqueSuffisantePourBlanc: true,
 }
@@ -68,5 +70,92 @@ describe('semainesLisibles', () => {
     expect(semainesLisibles(5)).toBe('5 jours')
     expect(semainesLisibles(7)).toBe('1 semaine')
     expect(semainesLisibles(59)).toBe('8 semaines')
+  })
+})
+
+describe('composerSemaine — diagnostics réguliers', () => {
+  const diagnostic = (p: ReturnType<typeof composerSemaine>) =>
+    p.taches.find((t) => t.type === 'diagnostic')
+
+  it('programme un diagnostic quand la dernière mesure date de deux semaines', () => {
+    const p = composerSemaine({ ...base, semainesDepuisDernierBlanc: 3, joursDepuisDerniereEpreuve: 16 })
+    expect(diagnostic(p)?.raison).toMatch(/il y a 16 jours/)
+  })
+
+  it('n’en programme pas si la dernière mesure est récente', () => {
+    const p = composerSemaine({ ...base, semainesDepuisDernierBlanc: 3, joursDepuisDerniereEpreuve: 5 })
+    expect(diagnostic(p)).toBeUndefined()
+  })
+
+  it('ne double pas un blanc déjà prévu la même semaine', () => {
+    const p = composerSemaine({ ...base, semainesDepuisDernierBlanc: null, joursDepuisDerniereEpreuve: 30 })
+    expect(p.taches.filter((t) => t.type === 'blanc' || t.type === 'diagnostic')).toHaveLength(1)
+  })
+})
+
+describe('composerSemaine — dernier mois', () => {
+  it('programme un blanc chaque semaine dans le dernier mois', () => {
+    const p = composerSemaine({ ...base, joursRestants: 21, semainesDepuisDernierBlanc: 1.1 })
+    expect(p.taches.some((t) => t.type === 'blanc')).toBe(true)
+  })
+
+  it('garde deux semaines d’écart entre six et quatre semaines de l’échéance', () => {
+    const p = composerSemaine({ ...base, joursRestants: 38, semainesDepuisDernierBlanc: 1.1 })
+    expect(p.taches.some((t) => t.type === 'blanc')).toBe(false)
+  })
+})
+
+describe('composerSemaine — report', () => {
+  const series = (p: ReturnType<typeof composerSemaine>, section: string) =>
+    p.taches.find((t) => t.type === 'entrainement' && t.section === section)
+
+  it('reporte les séries non faites en tête, et le dit', () => {
+    const p = composerSemaine({
+      ...base,
+      semainesDepuisDernierBlanc: 3,
+      reports: [{ section: 'logique', series: 2 }],
+    })
+    expect(series(p, 'logique')?.raison).toMatch(/Dont 2 reportées/)
+    expect(p.notes.join(' ')).toMatch(/reportées/)
+  })
+
+  it('ne consacre jamais plus de la moitié des séries au report', () => {
+    const p = composerSemaine({
+      ...base,
+      budgetMinutes: 100,
+      semainesDepuisDernierBlanc: 3,
+      reports: [{ section: 'logique', series: 9 }],
+    })
+    const total = p.taches.filter((t) => t.type === 'entrainement').reduce((a, t) => a + t.quantite, 0)
+    expect(series(p, 'logique')!.raison).toMatch(new RegExp(`Dont ${Math.floor(total / 2)} report`))
+  })
+})
+
+describe('projeterCalendrier', () => {
+  const cal = projeterCalendrier({
+    semaineDu: '2026-09-21',
+    joursRestants: 59,
+    budgetMinutes: 600,
+    leconsRestantes: 21,
+    semainesDepuisDernierBlanc: null,
+    joursDepuisDerniereEpreuve: 4,
+  })
+
+  it('va jusqu’à la semaine de l’examen', () => {
+    expect(cal[cal.length - 1].examen).toBe(true)
+    expect(cal.filter((s) => s.examen)).toHaveLength(1)
+  })
+
+  it('place un premier blanc tout de suite, puis suit les règles du plan', () => {
+    expect(cal[0].epreuve).toBe('blanc')
+    // Dans le dernier mois (moins de 28 jours au lundi), un blanc par semaine.
+    const dernierMois = cal.filter((_, i) => 59 - i * 7 <= 28 && 59 - i * 7 >= 7)
+    expect(dernierMois.every((s) => s.epreuve === 'blanc')).toBe(true)
+  })
+
+  it('épuise le cours et ne remonte jamais', () => {
+    const lecons = cal.map((s) => s.leconsRestantes)
+    expect(lecons.every((n, i) => i === 0 || n <= lecons[i - 1])).toBe(true)
+    expect(lecons[lecons.length - 1]).toBe(0)
   })
 })

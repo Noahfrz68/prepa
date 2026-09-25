@@ -11,6 +11,9 @@
   --juste: #4ade80;
   --faux: #f87171;
   --blanc-reponse: #fbbf24;
+  /* Série des graphiques : l'accent un cran plus sombre, pour rester dans la
+     bande de luminosité lisible sur fond sombre (OKLCH L 0,48-0,67). */
+  --serie: #4b8df8;
 }
 
 @theme inline {
@@ -24,6 +27,7 @@
   --color-juste: var(--juste);
   --color-faux: var(--faux);
   --color-blanc: var(--blanc-reponse);
+  --color-serie: var(--serie);
 }
 
 html,
@@ -55,4 +59,31 @@ body {
 
 .chiffres {
   font-variant-numeric: tabular-nums;
+}
+
+/* Impression : encre noire sur papier blanc, sans les commandes de l'écran.
+   Sert aux fiches récapitulatives et à l'épreuve sur papier. */
+@media print {
+  :root {
+    --fond: #ffffff;
+    --fond-carte: #ffffff;
+    --fond-carte-clair: #f3f3f3;
+    --bord: #bbbbbb;
+    --texte: #000000;
+    --texte-doux: #333333;
+    --accent: #000000;
+    --serie: #000000;
+  }
+  .sans-impression {
+    display: none !important;
+  }
+  .saut-avant {
+    break-before: page;
+  }
+  .sans-coupure {
+    break-inside: avoid;
+  }
+  a {
+    text-decoration: none;
+  }
 }

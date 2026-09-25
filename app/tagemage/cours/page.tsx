@@ -8,6 +8,7 @@ import { FICHES, REGLES_GENERALES } from '@/exams/tagemage/cours'
 import { LECONS, PARCOURS, PAR_SKILL, TABLES } from '@/exams/tagemage/lecons'
 import { etatSectionsTageMage, mesuresParSkill, temoinsAnnale } from '@/core/db/queries'
 import { etudeDesLecons } from '@/core/db/semaine'
+import { SECTIONS } from '@/exams/tagemage'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,6 +118,18 @@ export default function CoursTageMage() {
               premier — sa fiche de conduite est déjà ouverte plus bas.
             </>
           )}
+        </p>
+        <p className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+          <span className="text-doux">Fiches récapitulatives à imprimer :</span>
+          {SECTIONS.map((s) => (
+            <Link
+              key={s.id}
+              href={`/tagemage/cours/fiche/${s.id}`}
+              className="text-accent hover:underline"
+            >
+              {s.libelle}
+            </Link>
+          ))}
         </p>
       </header>
 

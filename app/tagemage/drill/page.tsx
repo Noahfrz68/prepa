@@ -7,9 +7,16 @@ export const dynamic = 'force-dynamic'
 export default async function PageDrill({
   searchParams,
 }: {
-  searchParams: Promise<{ section?: string; taille?: string; skills?: string; carnet?: string }>
+  searchParams: Promise<{
+    section?: string
+    taille?: string
+    skills?: string
+    carnet?: string
+    revanche?: string
+    sprint?: string
+  }>
 }) {
-  const { section, taille, skills, carnet } = await searchParams
+  const { section, taille, skills, carnet, revanche, sprint } = await searchParams
 
   const depuisCarnet = carnet === '1'
 
@@ -29,6 +36,10 @@ export default async function PageDrill({
       taille={n}
       skills={cibles}
       carnet={depuisCarnet}
+      revanche={Number(revanche) > 0 ? Number(revanche) : undefined}
+      // Le sprint chronomètre la série comme un sous-test : 80 s par question,
+      // d'un seul bloc. La compréhension se joue par textes et garde son flux.
+      sprint={sprint === '1' && section !== 'comprehension' && !depuisCarnet}
     />
   )
 }

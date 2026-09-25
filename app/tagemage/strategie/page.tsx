@@ -28,7 +28,9 @@ export default function PageStrategie() {
         <h1 className="text-2xl font-semibold tracking-tight">Stratégie de score</h1>
         <p className="mt-1 text-sm text-doux">
           Calculé sur tes {s.nTentatives} tentative{s.nTentatives > 1 ? 's' : ''}. Aucune de ces
-          valeurs n’est estimée ni générée : elles sortent toutes de tes réponses.
+          valeurs n’est estimée ni générée : elles sortent toutes de tes réponses. La réussite y
+          compte les sauts comme des questions ratées, comme partout ailleurs — sauf la
+          calibration, où un saut ne déclare aucune confiance.
         </p>
       </header>
 

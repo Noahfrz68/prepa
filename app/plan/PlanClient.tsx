@@ -256,7 +256,10 @@ function Ligne({
         {t.faitLe && !mesureFaite && ' · cochée à la main'}
       </p>
       {t.type === 'entrainement' && t.tauxActuel !== null && (
-        <p className="mt-1 text-xs text-doux">
+        <p
+          className="mt-1 text-xs text-doux"
+          title="Bonnes réponses sur questions servies, sauts compris"
+        >
           Réussite aujourd’hui :{' '}
           <span className="chiffres text-texte">{Math.round(t.tauxActuel * 100)} %</span>
         </p>

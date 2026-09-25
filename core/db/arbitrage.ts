@@ -16,6 +16,7 @@ import {
   type Arbitrage,
   type EntreeExamen,
 } from '@/core/scheduler/arbitrage'
+import { estimerScoreParSousTest } from '@/core/stats/diagnostic'
 
 const LIBELLES: Record<string, string> = { tagemage: 'TAGE MAGE', toeic_lr: 'TOEIC' }
 export const ECHELLE_MAX: Record<string, number> = { tagemage: 600, toeic_lr: 990 }
@@ -54,9 +55,15 @@ export function scoreEstime(examId: string): number | null {
 
 /** Une épreuve close, telle qu'elle apparaît dans l'historique de l'accueil. */
 export interface ScoreHistorique {
+  sessionId: number
   jour: string
   score: number
   type: string
+  /** Intervalle à 95 % du score (TAGE MAGE) ; null quand il n'est pas calculable. */
+  bas: number | null
+  haut: number | null
+  /** Questions répondues dans l'épreuve. */
+  n: number
 }
 
 /**
@@ -76,15 +83,37 @@ export function historiqueScores(examId: string, combien = 6): ScoreHistorique[]
       // Tri sur la date, pas sur l'identifiant : les deux coïncident tant que
       // les séances sont créées dans l'ordre, mais c'est la chronologie que la
       // courbe prétend montrer, et c'est donc elle qui doit la commander.
-      `SELECT date(debut, 'localtime') AS jour, score_echelle AS score, type
+      `SELECT id AS sessionId, date(debut, 'localtime') AS jour, score_echelle AS score, type
          FROM exam_session
         WHERE exam_id = ? AND type IN ('blanc','diagnostic') AND fin IS NOT NULL
           AND score_echelle IS NOT NULL
         ORDER BY debut DESC, id DESC LIMIT ?`,
     )
-    .all(examId, combien) as ScoreHistorique[]
+    .all(examId, combien) as Array<Omit<ScoreHistorique, 'bas' | 'haut' | 'n'>>
 
-  return lignes.reverse()
+  // L'intervalle de chaque épreuve, recalculé comme au bilan : un score sans
+  // sa marge d'erreur fait lire comme un progrès ce qui n'est que du bruit
+  // (214 → 431 sur 42 questions, c'est ±70 points de chaque côté).
+  const parSection = db().prepare(
+    `SELECT i.section, COUNT(*) AS n, SUM(a.est_correct) AS justes, SUM(a.a_saute) AS blanches
+       FROM attempt a JOIN item i ON i.id = a.item_id
+      WHERE a.session_id = ?
+      GROUP BY i.section`,
+  )
+
+  return lignes.reverse().map((l) => {
+    if (examId !== 'tagemage') return { ...l, bas: null, haut: null, n: 0 }
+    const sections = parSection.all(l.sessionId) as Array<{ n: number; justes: number; blanches: number }>
+    const s = estimerScoreParSousTest(
+      sections.map((x) => ({
+        nItems: x.n,
+        justes: x.justes,
+        blanches: x.blanches,
+        fausses: x.n - x.justes - x.blanches,
+      })),
+    )
+    return { ...l, bas: s.bas, haut: s.haut, n: sections.reduce((a, x) => a + x.n, 0) }
+  })
 }
 
 /**

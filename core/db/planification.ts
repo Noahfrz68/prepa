@@ -187,7 +187,8 @@ export const MINUTES_MAX_PAR_QUESTION = 4
  * vingt-cinq minutes comptait pour une dizaine. On prend désormais la durée
  * de la séance, de son ouverture à sa dernière réponse, plafonnée à
  * MINUTES_MAX_PAR_QUESTION par question pour qu'un onglet oublié ouvert ne
- * compte pas comme du travail — et jamais moins que le temps de réponse.
+ * compte pas comme du travail — et jamais moins que le temps de réponse. Le
+ * temps de lecture des corrections, mesuré après la clôture, s'y ajoute.
  */
 export function volumeRealiseMinutes(semaineDu: string, examId = 'tagemage'): number {
   const r = db()
@@ -199,7 +200,7 @@ export function volumeRealiseMinutes(semaineDu: string, examId = 'tagemage'): nu
                     (julianday(COALESCE(s.fin, MAX(a.created_at))) - julianday(s.debut)) * 1440,
                     COUNT(a.id) * ?
                   )
-                ) AS minutes
+                ) + s.correction_ms / 60000.0 AS minutes
            FROM exam_session s
            JOIN attempt a ON a.session_id = s.id
           WHERE s.exam_id = ?

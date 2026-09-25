@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { reponseErreur } from '@/app/api/erreurs'
 import {
   detecterSuspects,
+  envoyerEnRelecture,
   fileRelecture,
+  marquerVerifiee,
+  questionsAVerifier,
   supprimerItem,
   validerItem,
 } from '@/core/db/contenu'
@@ -18,7 +21,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
-      action?: 'valider' | 'supprimer' | 'detecter' | 'classer'
+      action?: 'valider' | 'supprimer' | 'detecter' | 'classer' | 'verifiee' | 'relecture'
       id?: number
       correction?: {
         enonce?: string
@@ -39,6 +42,16 @@ export async function POST(request: Request) {
     }
 
     if (!body.id) return NextResponse.json({ erreur: 'Identifiant manquant.' }, { status: 400 })
+
+    if (body.action === 'verifiee') {
+      marquerVerifiee(Number(body.id))
+      return NextResponse.json({ aVerifier: questionsAVerifier(), file: fileRelecture(20) })
+    }
+
+    if (body.action === 'relecture') {
+      envoyerEnRelecture(Number(body.id))
+      return NextResponse.json({ aVerifier: questionsAVerifier(), file: fileRelecture(20) })
+    }
 
     if (body.action === 'supprimer') {
       const r = supprimerItem(Number(body.id))

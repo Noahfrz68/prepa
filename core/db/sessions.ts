@@ -66,6 +66,22 @@ export function rangerSessionsAbandonnees(d: Database.Database = db()): Rangemen
   return res
 }
 
+/**
+ * Ajoute le temps de lecture des corrections d'une séance close. Plafonné à
+ * une heure au total : au-delà, ce n'est plus de la lecture.
+ */
+export function ajouterTempsCorrection(
+  sessionId: number,
+  ms: number,
+  d: Database.Database = db(),
+): void {
+  const borne = Math.max(0, Math.min(30 * 60 * 1000, Math.round(Number(ms) || 0)))
+  d.prepare(
+    `UPDATE exam_session SET correction_ms = MIN(3600000, correction_ms + ?)
+      WHERE id = ? AND fin IS NOT NULL`,
+  ).run(borne, sessionId)
+}
+
 /** Abandon explicite d'une session par l'utilisateur (bouton « Abandonner »). */
 export function abandonnerSession(sessionId: number, d: Database.Database = db()): void {
   d.transaction(() => {

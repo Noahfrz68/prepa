@@ -3,6 +3,8 @@ import { lireCases, lireFigure } from '@/core/figures/lire'
 import type { Case, Figure } from '@/core/figures/types'
 import { PAR_SKILL } from '@/exams/tagemage/lecons'
 import { SECTIONS_PAR_ID } from '@/exams/tagemage'
+import { estDue, etatReprise, type EtatReprise } from '@/core/scheduler/reprise'
+import { LIBELLE_CAUSE, type CauseErreur } from '@/core/stats/causes'
 
 /**
  * Le carnet d'erreurs.
@@ -47,6 +49,12 @@ export interface EntreeCarnet {
   reussieDepuis: boolean
   note: string | null
   comprisLe: string | null
+  /** Cause déclarée de l'erreur (migration 021). */
+  cause: CauseErreur | null
+  /** Reprise espacée : J+1, J+3, J+7 après la dernière erreur. */
+  reprise: EtatReprise
+  /** La reprise est due aujourd'hui ou avant. */
+  aRejouer: boolean
   /** Disposition dessinée de l'énoncé, pour les questions graphiques. */
   figure: Figure | null
   /** Les cinq propositions dessinées, dans l'ordre de `options`. */
@@ -59,10 +67,16 @@ export interface EntreeCarnet {
 
 export type OrdreCarnet = 'priorite' | 'recentes'
 
+export { CAUSES, LIBELLE_CAUSE, type CauseErreur } from '@/core/stats/causes'
+
 export interface FiltreCarnet {
   section?: string
   /** Un seul type de question : ce qui revient le plus se travaille d'un bloc. */
   skillId?: string
+  /** Une seule cause déclarée. */
+  cause?: CauseErreur
+  /** Seulement les questions dont la reprise espacée est due. */
+  dues?: boolean
   /**
    * 'priorite' (par défaut) : d'abord ce qui n'a pas été réussi depuis, puis ce
    * qui a été raté le plus souvent, puis le plus récent. 'recentes' : la plus
@@ -95,6 +109,10 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
     conditions.push('i.skill_id = ?')
     params.push(f.skillId)
   }
+  if (f.cause) {
+    conditions.push('c.cause = ?')
+    params.push(f.cause)
+  }
   if (!f.inclureComprises) conditions.push('c.compris_le IS NULL')
 
   const lignes = db()
@@ -103,7 +121,12 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
               i.info_1, i.info_2, i.bonne_reponse, i.explication_reference, i.diagnostics,
               i.figure, i.options_figure, i.tags,
               m.hash_script AS image_hash,
-              c.note, c.compris_le,
+              c.note, c.compris_le, c.cause,
+              date(MAX(a.created_at), 'localtime')                                  AS derniere_tentative,
+              (SELECT COUNT(*) FROM attempt r
+                WHERE r.item_id = i.id AND r.est_correct = 1
+                  AND r.created_at > (SELECT MAX(e.created_at) FROM attempt e
+                                       WHERE e.item_id = i.id AND e.est_correct = 0))  AS reussites_depuis,
               SUM(CASE WHEN a.est_correct = 0 AND a.a_saute = 0 THEN 1 ELSE 0 END) AS echecs,
               SUM(CASE WHEN a.a_saute = 1 THEN 1 ELSE 0 END)                       AS sauts,
               SUM(CASE WHEN a.est_correct = 1 THEN 1 ELSE 0 END)                   AS reussites,
@@ -129,8 +152,10 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
     )
     .all(...params, f.limite ?? 200) as Array<Record<string, unknown>>
 
-  return lignes.map((l) => {
+  const aujourdhui = new Date().toLocaleDateString('sv-SE')
+  const toutes = lignes.map((l) => {
     const skillId = (l.skill_id as string) ?? null
+    const reprise = etatReprise(l.derniere_tentative as string, Number(l.reussites_depuis ?? 0))
     return {
       itemId: l.id as number,
       section: l.section as string,
@@ -153,12 +178,17 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
       reussieDepuis: Boolean(l.dernier_juste),
       note: (l.note as string) ?? null,
       comprisLe: (l.compris_le as string) ?? null,
+      cause: (l.cause as CauseErreur) ?? null,
+      reprise,
+      aRejouer: estDue(reprise, aujourdhui),
       figure: lireFigure(l.figure),
       optionsFigure: lireCases(l.options_figure),
       imageHash: (l.image_hash as string) ?? null,
       annale: l.tags === 'annale',
     }
   })
+
+  return f.dues ? toutes.filter((e) => e.aRejouer) : toutes
 }
 
 export interface ResumeCarnet {
@@ -167,6 +197,10 @@ export interface ResumeCarnet {
   parSection: Array<{ section: string; libelle: string; n: number }>
   /** Les types de question qui reviennent le plus dans ce qui reste à revoir. */
   parType: Array<{ skillId: string; libelle: string; section: string; n: number }>
+  /** Erreurs par cause déclarée, pour les questions restant à revoir. */
+  parCause: Array<{ cause: CauseErreur; libelle: string; n: number }>
+  /** Questions dont la reprise espacée est due aujourd'hui. */
+  aRejouerAujourdhui: number
 }
 
 /** De quoi afficher un compteur sans charger tout le carnet. */
@@ -210,10 +244,24 @@ export function resumeCarnet(): ResumeCarnet {
     )
     .all() as ResumeCarnet['parType']
 
+  const parCause = (
+    db()
+      .prepare(
+        `SELECT cause, COUNT(*) AS n FROM carnet_note
+          WHERE cause IS NOT NULL AND compris_le IS NULL
+          GROUP BY cause ORDER BY n DESC`,
+      )
+      .all() as Array<{ cause: CauseErreur; n: number }>
+  ).map((r) => ({ ...r, libelle: LIBELLE_CAUSE[r.cause] }))
+
+  const aRejouerAujourdhui = entreesCarnet({ limite: 1000 }).filter((e) => e.aRejouer).length
+
   return {
     aTravailler,
     comprises,
     parType,
+    parCause,
+    aRejouerAujourdhui,
     parSection: [...parSection.entries()]
       .map(([section, n]) => ({
         section,
@@ -233,7 +281,7 @@ export function noterItem(itemId: number, note: string): void {
     d.prepare(
       `UPDATE carnet_note SET note = NULL, maj_le = datetime('now') WHERE item_id = ?`,
     ).run(itemId)
-    d.prepare(`DELETE FROM carnet_note WHERE item_id = ? AND note IS NULL AND compris_le IS NULL`).run(
+    d.prepare(`DELETE FROM carnet_note WHERE item_id = ? AND note IS NULL AND compris_le IS NULL AND cause IS NULL`).run(
       itemId,
     )
     return
@@ -261,7 +309,7 @@ export function marquerCompris(itemId: number, compris: boolean): void {
     `UPDATE carnet_note SET compris_le = NULL, maj_le = datetime('now') WHERE item_id = ?`,
   ).run(itemId)
   // Une ligne qui ne porte plus rien n'a pas à rester.
-  d.prepare(`DELETE FROM carnet_note WHERE item_id = ? AND note IS NULL AND compris_le IS NULL`).run(
+  d.prepare(`DELETE FROM carnet_note WHERE item_id = ? AND note IS NULL AND compris_le IS NULL AND cause IS NULL`).run(
     itemId,
   )
 }
@@ -291,12 +339,39 @@ export function itemsARejouer(
           ${skillId ? 'AND i.skill_id = ?' : ''}
         GROUP BY i.id
        HAVING ratés > 0
-        ORDER BY ratés DESC, RANDOM()
-        LIMIT ?`,
+        ORDER BY ratés DESC, RANDOM()`,
     )
-    .all(...(section ? [section] : []), ...(skillId ? [skillId] : []), taille) as Array<{
+    .all(...(section ? [section] : []), ...(skillId ? [skillId] : [])) as Array<{
     id: number
   }>
 
-  return lignes.map((l) => l.id)
+  // Les reprises espacées dues passent devant : c'est leur jour. Le reste
+  // garde l'ordre « ce qui résiste le plus ».
+  const dues = new Set(
+    entreesCarnet({
+      section: section ?? undefined,
+      skillId: skillId ?? undefined,
+      dues: true,
+      limite: 1000,
+    }).map((e) => e.itemId),
+  )
+  return [...lignes.filter((l) => dues.has(l.id)), ...lignes.filter((l) => !dues.has(l.id))]
+    .slice(0, taille)
+    .map((l) => l.id)
+}
+
+/** Déclare (ou retire) la cause d'une erreur. */
+export function declarerCause(itemId: number, cause: CauseErreur | null): void {
+  const d = db()
+  if (cause === null) {
+    d.prepare(`UPDATE carnet_note SET cause = NULL, maj_le = datetime('now') WHERE item_id = ?`).run(itemId)
+    d.prepare(
+      `DELETE FROM carnet_note WHERE item_id = ? AND note IS NULL AND compris_le IS NULL AND cause IS NULL`,
+    ).run(itemId)
+    return
+  }
+  d.prepare(
+    `INSERT INTO carnet_note (item_id, cause) VALUES (?, ?)
+     ON CONFLICT (item_id) DO UPDATE SET cause = excluded.cause, maj_le = datetime('now')`,
+  ).run(itemId, cause)
 }

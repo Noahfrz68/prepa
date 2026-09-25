@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server'
 import { reponseErreur } from '@/app/api/erreurs'
-import { entreesCarnet, marquerCompris, noterItem, resumeCarnet } from '@/core/db/carnet'
+import {
+  CAUSES,
+  declarerCause,
+  entreesCarnet,
+  marquerCompris,
+  noterItem,
+  resumeCarnet,
+  type CauseErreur,
+} from '@/core/db/carnet'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,9 +22,12 @@ export async function GET(request: Request) {
   const inclureComprises = url.searchParams.get('comprises') === '1'
   const skillId = url.searchParams.get('type') || undefined
   const ordre = url.searchParams.get('ordre') === 'recentes' ? 'recentes' : 'priorite'
+  const causeDemandee = url.searchParams.get('cause')
+  const cause = CAUSES.includes(causeDemandee as CauseErreur) ? (causeDemandee as CauseErreur) : undefined
+  const dues = url.searchParams.get('dues') === '1'
 
   return NextResponse.json({
-    entrees: entreesCarnet({ section: section || undefined, skillId, ordre, inclureComprises }),
+    entrees: entreesCarnet({ section: section || undefined, skillId, ordre, cause, dues, inclureComprises }),
     resume: resumeCarnet(),
   })
 }
@@ -24,7 +35,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
-      action?: 'noter' | 'compris'
+      action?: 'noter' | 'compris' | 'cause'
+      cause?: string | null
       itemId?: number
       note?: string
       compris?: boolean
@@ -44,6 +56,15 @@ export async function POST(request: Request) {
         )
       }
       noterItem(id, note)
+      return NextResponse.json({ ok: true, resume: resumeCarnet() })
+    }
+
+    if (body.action === 'cause') {
+      const c = body.cause ?? null
+      if (c !== null && !CAUSES.includes(c as CauseErreur)) {
+        return NextResponse.json({ erreur: 'Cause inconnue.' }, { status: 400 })
+      }
+      declarerCause(id, c as CauseErreur | null)
       return NextResponse.json({ ok: true, resume: resumeCarnet() })
     }
 

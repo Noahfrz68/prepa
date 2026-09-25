@@ -9,12 +9,14 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
-    const { section, taille, skills, carnet } = (await request.json()) as {
+    const { section, taille, skills, carnet, revanche } = (await request.json()) as {
       section?: string
       taille?: number
       skills?: string[]
       /** Rejouer ce qui a été raté, plutôt que de tirer dans la banque. */
       carnet?: boolean
+      /** Question ratée dont on veut rejouer le modèle tout de suite. */
+      revanche?: number
     }
     if (!section) {
       return NextResponse.json({ erreur: 'Section manquante.' }, { status: 400 })
@@ -40,7 +42,9 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      demarrerDrill(section, n, Array.isArray(skills) ? skills : [], imposes),
+      demarrerDrill(section, n, Array.isArray(skills) ? skills : [], imposes, {
+        modeleDe: Number.isInteger(Number(revanche)) && Number(revanche) > 0 ? Number(revanche) : undefined,
+      }),
     )
   } catch (e) {
     return reponseErreur(e)

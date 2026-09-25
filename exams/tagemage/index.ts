@@ -235,3 +235,26 @@ export function skillsTageMage(): SkillRow[] {
   }
   return rows
 }
+
+/**
+ * L'arbre de décision des conditions minimales : trois questions fermées au
+ * lieu de cinq propositions à comparer.
+ *
+ *   (1) seule suffit ? (2) seule suffit ?
+ *     oui / oui → D · oui / non → A · non / oui → B
+ *     non / non → ensemble ? oui → C · non → E
+ *
+ * Répondre dans cet ordre est la procédure de la leçon « Le format A–E » : on
+ * ne se demande « ensemble ? » qu'une fois établi qu'aucune ne suffit seule.
+ */
+export function lettreConditionsMinimales(
+  unSeule: boolean,
+  deuxSeule: boolean,
+  ensemble: boolean | null,
+): 'A' | 'B' | 'C' | 'D' | 'E' | null {
+  if (unSeule && deuxSeule) return 'D'
+  if (unSeule) return 'A'
+  if (deuxSeule) return 'B'
+  if (ensemble === null) return null
+  return ensemble ? 'C' : 'E'
+}

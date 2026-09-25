@@ -8,11 +8,15 @@ import DebriefIA from '@/app/_composants/DebriefIA'
 import GroupeComprehension, { type ReponseGroupe } from './GroupeComprehension'
 import { poster } from '@/app/_composants/reseau'
 import Panne, { type EtatPanne } from '@/app/_composants/Panne'
+import Difficulte from '@/app/_composants/Difficulte'
+import TempsCorrection from '@/app/_composants/TempsCorrection'
+import type { DifficulteObservee } from '@/core/stats/difficulte'
 import {
   OPTIONS_CONDITIONS_MINIMALES,
   RAPPEL_CONDITIONS_MINIMALES,
   SECONDES_PAR_QUESTION,
   SECTIONS_PAR_ID,
+  lettreConditionsMinimales,
   type SectionTageMage,
 } from '@/exams/tagemage'
 
@@ -32,6 +36,7 @@ interface ItemDrill {
 }
 
 interface Correction {
+  difficulte?: DifficulteObservee | null
   itemId: number
   enonce: string
   typeItem: 'qcm' | 'conditions_minimales'
@@ -72,11 +77,17 @@ export default function DrillClient({
   taille,
   skills = [],
   carnet = false,
+  revanche,
+  sprint = false,
 }: {
   section: SectionTageMage
   taille: number
   skills?: string[]
   carnet?: boolean
+  /** Question ratée dont on rejoue le modèle (voir questionsDeRevanche). */
+  revanche?: number
+  /** Un seul chronomètre pour toute la série, 80 s par question, comme un sous-test. */
+  sprint?: boolean
 }) {
   const spec = SECTIONS_PAR_ID.get(section)
   // En mode carnet la série peut traverser les sous-tests : le bandeau annonce
@@ -91,12 +102,19 @@ export default function DrillClient({
   const [reponse, setReponse] = useState<string | null>(null)
   const [recap, setRecap] = useState<Recap | null>(null)
   const [ecoule, setEcoule] = useState(0)
+  /** Temps écoulé depuis le début de la série, relevé par le même chronomètre. */
+  const [ecouleSerie, setEcouleSerie] = useState(0)
   /** Un envoi qui n'est pas passé, et de quoi le rejouer sans rien perdre. */
   const [enPanne, setEnPanne] = useState<EtatPanne | null>(null)
 
   const debutItem = useRef<number>(Date.now())
+  /** Début de la série : sert au rythme cumulé et au chronomètre du sprint. */
+  const debutSerie = useRef<number>(0)
+  const sprintClos = useRef(false)
   const tempsReponse = useRef<number>(0)
   const enCours = useRef(false)
+  /** Conditions minimales : répondre par l'arbre de décision plutôt que par les cinq propositions. */
+  const [arbre, setArbre] = useState(false)
 
   const item = items[index]
 
@@ -175,7 +193,7 @@ export default function DrillClient({
 
   useEffect(() => {
     let annule = false
-    const cle = `${section}|${taille}|${skills.join(',')}|${carnet}`
+    const cle = `${section}|${taille}|${skills.join(',')}|${carnet}|${revanche ?? ''}`
 
     if (demande.current?.cle !== cle) {
       demande.current = {
@@ -185,6 +203,7 @@ export default function DrillClient({
           taille,
           skills,
           carnet,
+          revanche,
         }),
       }
     }
@@ -195,6 +214,7 @@ export default function DrillClient({
         setSessionId(data.sessionId)
         setItems(data.items)
         debutItem.current = Date.now()
+        debutSerie.current = Date.now()
         setPhase('question')
       },
       (e: unknown) => {
@@ -208,13 +228,19 @@ export default function DrillClient({
       annule = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section, taille, skills.join(','), carnet])
+  }, [section, taille, skills.join(','), carnet, revanche])
 
   /* ---------------------------------------------------------- chrono -- */
 
+  // Le chronomètre tourne aussi pendant la déclaration de confiance : en
+  // sprint, c'est du temps de sous-test comme un autre.
   useEffect(() => {
-    if (phase !== 'question') return
-    const t = setInterval(() => setEcoule(Date.now() - debutItem.current), 200)
+    if (phase !== 'question' && phase !== 'confiance') return
+    const t = setInterval(() => {
+      const maintenant = Date.now()
+      setEcoule(maintenant - debutItem.current)
+      setEcouleSerie(maintenant - debutSerie.current)
+    }, 200)
     return () => clearInterval(t)
   }, [phase, index])
 
@@ -295,6 +321,49 @@ export default function DrillClient({
     },
     [envoyer, reponse],
   )
+
+  /* ---------------------------------------------------------- sprint -- */
+
+  const dureeSprintMs = items.length * SECONDES_PAR_QUESTION * 1000
+  const restantSprintMs = sprint ? dureeSprintMs - ecouleSerie : 0
+
+  /**
+   * Fin du temps : comme à l'épreuve, ce qui n'a pas été traité est compté
+   * non traité — la question en cours comprise, même si une lettre était
+   * choisie sans que sa confiance soit déclarée. Puis la série se clôt.
+   */
+  const clore = useCallback(async () => {
+    if (sprintClos.current || sessionId === null) return
+    sprintClos.current = true
+    enCours.current = true
+    setPhase('chargement')
+    try {
+      for (let i = index; i < items.length; i++) {
+        await poster('/api/drill/attempt', {
+          sessionId,
+          itemId: items[i].id,
+          reponse: null,
+          aSaute: true,
+          nonTraitee: true,
+          tempsMs: i === index ? Date.now() - debutItem.current : 0,
+          confiance: 1,
+        })
+      }
+      setRecap(await poster<Recap>('/api/drill/finish', { sessionId }))
+      setPhase('recap')
+    } catch (e) {
+      setErreur((e as Error).message)
+      setPhase('erreur')
+    } finally {
+      enCours.current = false
+    }
+  }, [index, items, sessionId])
+
+  useEffect(() => {
+    if (!sprint || items.length === 0) return
+    if (phase !== 'question' && phase !== 'confiance') return
+    if (restantSprintMs <= 0 && !enCours.current) void clore()
+  }, [clore, items.length, phase, restantSprintMs, sprint])
 
   /* -------------------------------------------------------- clavier -- */
 
@@ -377,6 +446,11 @@ export default function DrillClient({
     item.typeItem === 'conditions_minimales' ? OPTIONS_CONDITIONS_MINIMALES : item.options
   const secondes = Math.floor(ecoule / 1000)
   const depassement = secondes > SECONDES_PAR_QUESTION
+  // Rythme cumulé : le budget des questions déjà passées, moins le temps
+  // écoulé depuis le début. Positif, tu as de l'avance ; négatif, du retard —
+  // c'est ce retard-là qui laisse des questions non traitées en fin de sous-test.
+  const avanceS = Math.round(index * SECONDES_PAR_QUESTION - ecouleSerie / 1000)
+  const restantSprintS = Math.max(0, Math.ceil(restantSprintMs / 1000))
 
   // Compréhension : un texte et ses cinq questions, sans chronomètre par
   // question — à l'épreuve, les vingt minutes couvrent les trois textes, et
@@ -400,21 +474,47 @@ export default function DrillClient({
 
   return (
     <Coquille section={titre}>
-      <div className="mb-6 flex items-center justify-between text-sm">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
         <span className="chiffres text-doux">
+          {sprint && <span className="mr-2 text-accent">Sprint</span>}
           Question {index + 1} / {items.length}
         </span>
-        <span className={`chiffres tabular-nums ${depassement ? 'text-blanc' : 'text-doux'}`}>
-          {secondes} s
-          <span className="ml-1 text-xs opacity-60">/ {SECONDES_PAR_QUESTION}</span>
-        </span>
+        {sprint ? (
+          <span
+            className={`chiffres text-lg tabular-nums ${restantSprintS <= 120 ? 'text-faux' : 'text-texte'}`}
+          >
+            {Math.floor(restantSprintS / 60)}:{String(restantSprintS % 60).padStart(2, '0')}
+          </span>
+        ) : (
+          <span className="flex items-baseline gap-4">
+            {index > 0 && (
+              <span
+                className={`chiffres text-xs ${avanceS >= 0 ? 'text-juste' : 'text-blanc'}`}
+                title={`Budget de ${SECONDES_PAR_QUESTION} s par question, cumulé depuis le début de la série`}
+              >
+                {avanceS >= 0 ? `${avanceS} s d’avance` : `${-avanceS} s de retard`}
+              </span>
+            )}
+            <span className={`chiffres tabular-nums ${depassement ? 'text-blanc' : 'text-doux'}`}>
+              {secondes} s
+              <span className="ml-1 text-xs opacity-60">/ {SECONDES_PAR_QUESTION}</span>
+            </span>
+          </span>
+        )}
       </div>
 
       <div className="h-1 w-full overflow-hidden rounded bg-carte-clair">
-        <div
-          className={`h-full transition-all duration-200 ${depassement ? 'bg-blanc' : 'bg-accent'}`}
-          style={{ width: `${Math.min(100, (secondes / SECONDES_PAR_QUESTION) * 100)}%` }}
-        />
+        {sprint ? (
+          <div
+            className={`h-full transition-all duration-200 ${restantSprintS <= 120 ? 'bg-faux' : 'bg-accent'}`}
+            style={{ width: `${Math.max(0, (restantSprintMs / Math.max(1, dureeSprintMs)) * 100)}%` }}
+          />
+        ) : (
+          <div
+            className={`h-full transition-all duration-200 ${depassement ? 'bg-blanc' : 'bg-accent'}`}
+            style={{ width: `${Math.min(100, (secondes / SECONDES_PAR_QUESTION) * 100)}%` }}
+          />
+        )}
       </div>
 
       {phase === 'question' ? (
@@ -444,9 +544,18 @@ export default function DrillClient({
               <p className="mt-3 border-t border-bord pt-3 text-xs text-blanc">
                 {RAPPEL_CONDITIONS_MINIMALES}
               </p>
+              <button
+                onClick={() => setArbre((a) => !a)}
+                className="mt-3 text-xs text-accent hover:underline"
+              >
+                {arbre ? 'Revenir aux cinq propositions' : 'Répondre par l’arbre de décision A–E'}
+              </button>
             </div>
           )}
 
+          {item.typeItem === 'conditions_minimales' && arbre ? (
+            <ArbreConditions key={item.id} onLettre={repondre} />
+          ) : (
           <ul className="mt-6 space-y-2">
             {options.map((texte, i) => (
               <li key={i}>
@@ -463,6 +572,7 @@ export default function DrillClient({
               </li>
             ))}
           </ul>
+          )}
 
           {/* Sur un téléphone les deux blocs se télescopaient en colonnes
               étroites, et le rappel de touche n'y sert à rien : pas de clavier.
@@ -625,6 +735,7 @@ function VueRecap({
       )}
 
       {sessionId !== null && <DebriefIA sessionId={sessionId} />}
+      <TempsCorrection sessionId={sessionId} />
 
       <h2 className="mt-10 mb-4 text-sm uppercase tracking-widest text-doux">Corrections</h2>
       <ol className="space-y-3">
@@ -686,6 +797,7 @@ function LigneCorrection({ numero, c }: { numero: number; c: Correction }) {
         </span>
         <span className="chiffres">{Math.round(c.tempsMs / 1000)} s</span>
         {!c.aSaute && <span>confiance {c.confiance}/4</span>}
+        <Difficulte d={c.difficulte} />
       </div>
 
       <EnonceRappel enonce={c.enonce} figure={c.figure} />
@@ -718,6 +830,13 @@ function LigneCorrection({ numero, c }: { numero: number; c: Correction }) {
         <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
           <Link href={`/tagemage/cours#${c.skillId}`} className="text-accent hover:underline">
             Revoir la leçon →
+          </Link>
+          <Link
+            href={`/tagemage/drill?section=${sectionDe(c.skillId)}&revanche=${c.itemId}&taille=3`}
+            className="text-accent hover:underline"
+            title="Trois questions du même type, du même modèle d’énoncé d’abord"
+          >
+            Revanche : même modèle →
           </Link>
           <Link
             href={`/tagemage/drill?section=${sectionDe(c.skillId)}&skills=${c.skillId}`}
@@ -756,6 +875,88 @@ function Correctif({ c }: { c: Pick<Correction, 'estCorrect' | 'explication' | '
         <p className="mb-1.5 text-xs uppercase tracking-widest text-doux">La démarche</p>
       )}
       <p className="whitespace-pre-line text-sm leading-relaxed text-doux">{texte}</p>
+    </div>
+  )
+}
+
+/**
+ * L'arbre de décision des conditions minimales, question par question.
+ *
+ * Cinq propositions longues se comparent mal sous chronomètre ; trois
+ * questions fermées, posées dans l'ordre de la procédure, mènent à la même
+ * lettre sans relire les propositions. C'est un mode d'apprentissage : la
+ * lettre obtenue passe ensuite par la déclaration de confiance, comme toute
+ * réponse.
+ */
+function ArbreConditions({ onLettre }: { onLettre: (lettre: string) => void }) {
+  const [un, setUn] = useState<boolean | null>(null)
+  const [deux, setDeux] = useState<boolean | null>(null)
+
+  const repondre = (u: boolean | null, d: boolean | null, ensemble: boolean | null) => {
+    if (u === null || d === null) return
+    const l = lettreConditionsMinimales(u, d, ensemble)
+    if (l) onLettre(l)
+  }
+
+  return (
+    <div className="mt-6 space-y-2">
+      <Etape
+        question="L’information (1), à elle seule, permet-elle de répondre ?"
+        valeur={un}
+        onChoix={(v) => {
+          setUn(v)
+          repondre(v, deux, null)
+        }}
+      />
+      {un !== null && (
+        <Etape
+          question="L’information (2), à elle seule, permet-elle de répondre ?"
+          valeur={deux}
+          onChoix={(v) => {
+            setDeux(v)
+            repondre(un, v, null)
+          }}
+        />
+      )}
+      {un === false && deux === false && (
+        <Etape
+          question="Les deux informations ensemble permettent-elles de répondre ?"
+          valeur={null}
+          onChoix={(v) => repondre(false, false, v)}
+        />
+      )}
+    </div>
+  )
+}
+
+function Etape({
+  question,
+  valeur,
+  onChoix,
+}: {
+  question: string
+  valeur: boolean | null
+  onChoix: (v: boolean) => void
+}) {
+  return (
+    <div className="rounded-lg border border-bord bg-carte px-4 py-3">
+      <p className="text-sm">{question}</p>
+      <div className="mt-2 flex gap-2">
+        {[
+          { v: true, l: 'Oui' },
+          { v: false, l: 'Non' },
+        ].map((o) => (
+          <button
+            key={o.l}
+            onClick={() => onChoix(o.v)}
+            className={`rounded-lg border px-4 py-1.5 text-sm transition ${
+              valeur === o.v ? 'border-accent text-accent' : 'border-bord text-doux hover:text-texte'
+            }`}
+          >
+            {o.l}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

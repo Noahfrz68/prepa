@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { aleaDepuis } from '@/core/generation/alea'
 import {
+  alerteRepartition,
   ciblesEquilibrees,
   equilibrer,
   partLettreDominante,
@@ -117,5 +118,25 @@ describe('équilibrage', () => {
     const [r] = equilibrer([q], aleaDepuis(1))
     expect(r.permutation).toBeNull()
     expect(r.question).toBe(q)
+  })
+})
+
+describe('alerteRepartition', () => {
+  const lot = (compte: Record<string, number>) =>
+    Object.entries(compte).flatMap(([l, n]) => Array(n).fill(l) as string[])
+
+  it('signale une lettre au-delà de 35 %', () => {
+    // La banque de compréhension d'origine : B dans la moitié des cas.
+    const a = alerteRepartition(lot({ A: 23, B: 83, C: 45, D: 13, E: 3 }))
+    expect(a?.lettre).toBe('B')
+    expect(a!.part).toBeCloseTo(83 / 167)
+  })
+
+  it('se tait sur une répartition honnête', () => {
+    expect(alerteRepartition(lot({ A: 33, B: 34, C: 33, D: 33, E: 34 }))).toBeNull()
+  })
+
+  it('ne juge pas un lot trop petit', () => {
+    expect(alerteRepartition(lot({ B: 10 }))).toBeNull()
   })
 })

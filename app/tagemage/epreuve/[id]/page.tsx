@@ -7,6 +7,8 @@ import { MINIMUM_ESTIMATION, CIBLE_REUSSITE_LEVIER } from '@/core/stats/diagnost
 import { REPERES } from '@/core/scoring/tagemage'
 import { SECTIONS_PAR_ID } from '@/exams/tagemage'
 import DebriefIA from '@/app/_composants/DebriefIA'
+import Difficulte from '@/app/_composants/Difficulte'
+import TempsCorrection from '@/app/_composants/TempsCorrection'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,6 +100,7 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
       {ecart && <EcartCible ecart={ecart} />}
 
       <DebriefIA sessionId={recap.sessionId} />
+      <TempsCorrection sessionId={recap.sessionId} />
 
       <Fatigue fatigue={fatigue} />
 
@@ -389,6 +392,7 @@ function Ligne({ numero, c }: { numero: number; c: CorrectionEpreuve }) {
         </span>
         <span className="chiffres">{secondes(c.tempsMs)}</span>
         {!c.aSaute && <span>confiance {c.confiance}/4</span>}
+        <Difficulte d={c.difficulte} />
       </div>
 
       <EnonceRappel enonce={c.enonce} figure={c.figure} />
@@ -431,6 +435,13 @@ function Ligne({ numero, c }: { numero: number; c: CorrectionEpreuve }) {
         <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
           <Link href={`/tagemage/cours#${c.skillId}`} className="text-accent hover:underline">
             Revoir la leçon →
+          </Link>
+          <Link
+            href={`/tagemage/drill?section=${c.section}&revanche=${c.itemId}&taille=3`}
+            className="text-accent hover:underline"
+            title="Trois questions du même type, du même modèle d’énoncé d’abord"
+          >
+            Revanche : même modèle →
           </Link>
           <Link
             href={`/tagemage/drill?section=${c.section}&skills=${c.skillId}`}

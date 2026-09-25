@@ -1,7 +1,12 @@
 import Link from 'next/link'
 import { etatExamens } from '@/core/db/queries'
 import { historiqueScores, scoreEstime } from '@/core/db/arbitrage'
-import { planDeLaSemaine, type TacheEnregistree } from '@/core/db/semaine'
+import {
+  JOURS_AVANT_RAPPEL,
+  joursSansActivite,
+  planDeLaSemaine,
+  type TacheEnregistree,
+} from '@/core/db/semaine'
 import { lienTache } from './plan/liens'
 import { rangerSessionsAbandonnees } from '@/core/db/sessions'
 import { resumeCarnet } from '@/core/db/carnet'
@@ -26,6 +31,7 @@ export default function Accueil() {
   // une « séance à faire maintenant » que /plan rangeait déjà dans « Fait ».
   const plan = planDeLaSemaine()
   const prochaine = prochaineSeance(plan.taches)
+  const inactif = joursSansActivite()
   const carnet = resumeCarnet()
   // Même source que l'arbitrage : afficher « non estimé » ici pendant que le
   // plan raisonne sur un écart chiffré serait une contradiction visible.
@@ -42,6 +48,16 @@ export default function Accueil() {
           Instrument de mesure et coach de stratégie de score.
         </p>
       </header>
+
+      {/* Rappel de régularité : l'application est locale et ne peut rien
+          envoyer ; c'est donc à l'ouverture qu'elle le dit. */}
+      {inactif !== null && inactif >= JOURS_AVANT_RAPPEL && (
+        <p className="mb-4 rounded-xl border border-blanc px-5 py-3 text-sm leading-relaxed text-blanc">
+          Aucune séance depuis <span className="chiffres">{inactif}</span> jours. La régularité
+          compte plus que la durée : même une série de quinze questions aujourd’hui entretient
+          le rythme — et un jour de plus sans rien, c’est l’habitude qui se défait.
+        </p>
+      )}
 
       {etape && <PremierPas etape={etape} />}
 
@@ -271,7 +287,7 @@ function CarteExamen({
             : 'Date non renseignée'}
         </p>
 
-        <Progression historique={historique} maximum={maximum} />
+        <Progression historique={historique} maximum={maximum} cible={examen.scoreCible} />
       </div>
 
       <Link

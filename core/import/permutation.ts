@@ -188,3 +188,28 @@ export function partLettreDominante(bonnes: string[]): { lettre: string; part: n
   const [lettre, n] = [...compte.entries()].sort((a, b) => b[1] - a[1])[0]
   return { lettre, part: n / bonnes.length }
 }
+
+/**
+ * Au-delà de cette part, une lettre porte trop de bonnes réponses : répondre
+ * cette lettre par défaut rapporterait plus que le hasard (20 %). 35 % laisse
+ * la marge d'un tirage honnête sur une petite banque, et aurait signalé le
+ * B à 50 % de la compréhension dès le premier import.
+ */
+export const ALERTE_LETTRE_DOMINANTE = 0.35
+
+/** En dessous, la répartition d'un petit lot ne dit rien. */
+export const MINIMUM_ALERTE_REPARTITION = 20
+
+/**
+ * La lettre qui porte trop de bonnes réponses dans une liste, ou null.
+ * Sert au contrôle de la banque (atelier, `npm run audit:questions`) et à
+ * son test : c'est le garde-fou qui empêche le biais de revenir.
+ */
+export function alerteRepartition(
+  bonnes: string[],
+): { lettre: string; part: number; n: number } | null {
+  if (bonnes.length < MINIMUM_ALERTE_REPARTITION) return null
+  const d = partLettreDominante(bonnes)
+  if (!d || d.part <= ALERTE_LETTRE_DOMINANTE) return null
+  return { ...d, n: bonnes.length }
+}

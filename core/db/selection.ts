@@ -75,6 +75,45 @@ export function groupesComprehension(
   }))
 }
 
+/**
+ * Un texte long portant au moins `nbQuestions` questions validées — le moins
+ * vu d'abord. Le diagnostic s'en sert pour aligner la compréhension sur les
+ * 7 questions des autres sous-tests sans faire lire deux passages. Null quand
+ * la banque n'en a pas : l'appelant retombe sur un texte de cinq.
+ */
+export function texteLongComprehension(nbQuestions: number, examId = 'tagemage'): number[] | null {
+  const d = db()
+  const texte = d
+    .prepare(
+      `SELECT i.contexte_texte AS texte,
+              COUNT(*) AS questions,
+              SUM((SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id)) AS vues
+         FROM item i
+        WHERE i.exam_id = ? AND i.section = 'comprehension' AND i.statut = 'valide'
+          AND i.contexte_texte IS NOT NULL AND i.contexte_texte <> ''
+        GROUP BY i.contexte_texte
+       HAVING questions >= ?
+        ORDER BY vues ASC, RANDOM()
+        LIMIT 1`,
+    )
+    .get(examId, nbQuestions) as { texte: string } | undefined
+  if (!texte) return null
+
+  // Les questions dans l'ordre d'import : elles suivent le fil du texte.
+  return (
+    d
+      .prepare(
+        `SELECT i.id
+           FROM item i
+          WHERE i.exam_id = ? AND i.section = 'comprehension' AND i.statut = 'valide'
+            AND i.contexte_texte = ?
+          ORDER BY i.id
+          LIMIT ?`,
+      )
+      .all(examId, texte.texte, nbQuestions) as Array<{ id: number }>
+  ).map((l) => l.id)
+}
+
 /** Les identifiants à plat, dans l'ordre des groupes — texte par texte. */
 export function itemsComprehensionGroupes(nbQuestions: number, examId = 'tagemage'): number[] {
   return groupesComprehension(nbQuestions, examId).flatMap((g) => g.itemIds)

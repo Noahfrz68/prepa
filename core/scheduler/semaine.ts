@@ -40,7 +40,18 @@ export const SEUIL_RELECTURE = 0.6
 
 /** Semaines entre deux blancs, et fenêtre où le blanc devient prioritaire. */
 export const SEMAINES_ENTRE_BLANCS = 2
+
+/** Dans le dernier mois, un blanc chaque semaine : l'endurance se règle au plus près de l'échéance. */
+export const SEMAINES_DERNIER_MOIS = 4
+
+/** Semaines à laisser entre deux blancs, selon l'échéance. */
+export function intervalleBlancs(semainesRestantes: number | null): number {
+  return semainesRestantes !== null && semainesRestantes <= SEMAINES_DERNIER_MOIS ? 1 : SEMAINES_ENTRE_BLANCS
+}
 export const SEMAINES_AVANT_EXAMEN_INTENSIF = 6
+
+/** Hors blancs, une mesure complète au moins tous les quatorze jours. */
+export const JOURS_ENTRE_DIAGNOSTICS = 14
 
 /**
  * Part maximale du budget consacrée au cours, selon l'échéance.
@@ -90,6 +101,10 @@ export interface ParametresSemaine {
   lecons: LeconAPlanifier[]
   sections: BesoinSection[]
   semainesDepuisDernierBlanc: number | null
+  /** Jours depuis la dernière épreuve terminée (diagnostic ou blanc) ; null si aucune. */
+  joursDepuisDerniereEpreuve: number | null
+  /** Séries prévues la semaine passée et non faites, par sous-test. */
+  reports?: Array<{ section: string; series: number }>
   aDejaPasseUneEpreuve: boolean
   banqueSuffisantePourBlanc: boolean
 }
@@ -210,7 +225,7 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
     (p.semainesDepuisDernierBlanc === null ||
       (semainesRestantes !== null &&
         semainesRestantes <= SEMAINES_AVANT_EXAMEN_INTENSIF &&
-        p.semainesDepuisDernierBlanc >= SEMAINES_ENTRE_BLANCS))
+        p.semainesDepuisDernierBlanc >= intervalleBlancs(semainesRestantes)))
   ) {
     const minutes = MINUTES_BLANC
     {
@@ -228,6 +243,28 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
       })
       restant -= minutes
     }
+  }
+
+  // Un diagnostic toutes les deux semaines quand aucun blanc n'a lieu : sans
+  // mesures régulières, la pente de progression (et donc l'arbitrage et
+  // l'écart à la cible) repose sur deux points éloignés, ou sur rien.
+  if (
+    p.aDejaPasseUneEpreuve &&
+    !taches.some((t) => t.type === 'blanc' || t.type === 'diagnostic') &&
+    p.joursDepuisDerniereEpreuve !== null &&
+    p.joursDepuisDerniereEpreuve >= JOURS_ENTRE_DIAGNOSTICS &&
+    restant >= MINUTES_DIAGNOSTIC
+  ) {
+    taches.push({
+      type: 'diagnostic',
+      section: null,
+      libelle: 'Diagnostic',
+      skillIds: [],
+      minutes: MINUTES_DIAGNOSTIC,
+      quantite: 1,
+      raison: `Dernière mesure il y a ${p.joursDepuisDerniereEpreuve} jours : un diagnostic toutes les deux semaines donne la pente de progression, sans laquelle l’écart à ta cible n’est qu’une photo.`,
+    })
+    restant -= MINUTES_DIAGNOSTIC
   }
 
   /* ---------------------------------------------------------- cours -- */
@@ -270,8 +307,35 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
   /* ---------------------------------------------------- entraînement -- */
 
   const nbSeries = Math.floor(restant / MINUTES_PAR_SERIE)
+  let seriesReportees = 0
   if (nbSeries > 0) {
-    for (const { section, series } of repartirSeries(p.sections, nbSeries)) {
+    // Report : ce qui n'a pas été fait la semaine passée passe d'abord, dans
+    // la limite de la moitié des séries, pour que la faiblesse de la semaine
+    // en cours garde sa place.
+    const reportees = new Map<string, number>()
+    let aReporter = Math.floor(nbSeries / 2)
+    for (const r of p.reports ?? []) {
+      const section = p.sections.find((s) => s.section === r.section)
+      if (!section || section.questionsEnBanque < 15 || aReporter <= 0) continue
+      const n = Math.min(r.series, aReporter)
+      reportees.set(r.section, n)
+      aReporter -= n
+      seriesReportees += n
+    }
+
+    const parSection = new Map<string, number>(reportees)
+    for (const { section, series } of repartirSeries(p.sections, nbSeries - seriesReportees)) {
+      parSection.set(section.section, (parSection.get(section.section) ?? 0) + series)
+    }
+
+    for (const section of p.sections) {
+      const series = parSection.get(section.section) ?? 0
+      if (series === 0) continue
+      const report = reportees.get(section.section) ?? 0
+      const mention =
+        report > 0
+          ? ` Dont ${report} reportée${report > 1 ? 's' : ''} de la semaine dernière, non faite${report > 1 ? 's' : ''}.`
+          : ''
       taches.push({
         type: 'entrainement',
         section: section.section,
@@ -280,11 +344,11 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
         minutes: series * MINUTES_PAR_SERIE,
         quantite: series,
         raison:
-          section.taux === null
+          (section.taux === null
             ? 'Jamais mesuré : ces séries serviront d’abord à situer ton niveau.'
             : section.skillIdsDus.length > 0
               ? `${Math.round(section.taux * 100)} % de réussite à la composition du plan · ${section.skillIdsDus.length} type${section.skillIdsDus.length > 1 ? 's' : ''} de question ${section.skillIdsDus.length > 1 ? 'dus' : 'dû'} à la révision.`
-              : `${Math.round(section.taux * 100)} % de réussite à la composition du plan.`,
+              : `${Math.round(section.taux * 100)} % de réussite à la composition du plan.`) + mention,
       })
       restant -= series * MINUTES_PAR_SERIE
     }
@@ -313,7 +377,7 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
       p.semainesDepuisDernierBlanc === null ||
       (semainesRestantes !== null &&
         semainesRestantes <= SEMAINES_AVANT_EXAMEN_INTENSIF &&
-        p.semainesDepuisDernierBlanc >= SEMAINES_ENTRE_BLANCS)
+        p.semainesDepuisDernierBlanc >= intervalleBlancs(semainesRestantes))
     ) {
       // Un blanc était dû : seul le budget l'a empêché.
       notes.push(
@@ -327,14 +391,21 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
         Math.round(((p.joursRestants ?? 0) - SEMAINES_AVANT_EXAMEN_INTENSIF * 7) / 7),
       )
       notes.push(
-        `Aucun blanc cette semaine : l’examen est dans ${semainesLisibles(p.joursRestants ?? 0)}. Les blancs reviennent toutes les ${SEMAINES_ENTRE_BLANCS} semaines à partir de ${SEMAINES_AVANT_EXAMEN_INTENSIF} semaines de l’échéance, soit dans ${dans} semaine${dans > 1 ? 's' : ''} — d’ici là, le temps rapporte plus en cours et en séries.`,
+        `Aucun blanc cette semaine : l’examen est dans ${semainesLisibles(p.joursRestants ?? 0)}. Les blancs reviennent toutes les ${SEMAINES_ENTRE_BLANCS} semaines à partir de ${SEMAINES_AVANT_EXAMEN_INTENSIF} semaines de l’échéance, puis chaque semaine le dernier mois, soit dans ${dans} semaine${dans > 1 ? 's' : ''} — d’ici là, le temps rapporte plus en cours et en séries.`,
       )
     } else if (p.semainesDepuisDernierBlanc !== null) {
-      const reste = Math.max(1, Math.ceil(SEMAINES_ENTRE_BLANCS - p.semainesDepuisDernierBlanc))
+      const intervalle = intervalleBlancs(semainesRestantes)
+      const reste = Math.max(1, Math.ceil(intervalle - p.semainesDepuisDernierBlanc))
       notes.push(
-        `Aucun blanc cette semaine : le dernier date de moins de ${SEMAINES_ENTRE_BLANCS} semaines. Le prochain dans ${reste} semaine${reste > 1 ? 's' : ''}.`,
+        `Aucun blanc cette semaine : le dernier date de moins de ${intervalle} semaine${intervalle > 1 ? 's' : ''}. Le prochain dans ${reste} semaine${reste > 1 ? 's' : ''}.`,
       )
     }
+  }
+
+  if (seriesReportees > 0) {
+    notes.push(
+      `${seriesReportees} série${seriesReportees > 1 ? 's' : ''} non faite${seriesReportees > 1 ? 's' : ''} la semaine dernière ${seriesReportees > 1 ? 'sont reportées' : 'est reportée'} : elle${seriesReportees > 1 ? 's passent' : ' passe'} avant les nouvelles, dans la limite de la moitié des séries.`,
+    )
   }
 
   if (file.length > nbLecons) {
@@ -378,4 +449,75 @@ export function lundiDeLaSemaine(iso: string): string {
   const recul = jour === 0 ? 6 : jour - 1
   d.setUTCDate(d.getUTCDate() - recul)
   return d.toISOString().slice(0, 10)
+}
+
+/* ------------------------------------------------------- calendrier -- */
+
+export interface SemaineProjetee {
+  semaineDu: string
+  /** Semaines pleines restantes avant l'examen, au lundi de cette semaine. */
+  semainesRestantes: number
+  epreuve: 'blanc' | 'diagnostic' | null
+  /** Leçons jamais étudiées qu'il resterait à la fin de la semaine. */
+  leconsRestantes: number
+  /** L'examen tombe cette semaine. */
+  examen: boolean
+}
+
+export interface ParametresCalendrier {
+  semaineDu: string
+  joursRestants: number
+  budgetMinutes: number
+  leconsRestantes: number
+  semainesDepuisDernierBlanc: number | null
+  joursDepuisDerniereEpreuve: number | null
+}
+
+/**
+ * Le calendrier jusqu'à l'examen, en rejouant les règles du plan semaine
+ * après semaine : quand tombent les blancs, où s'intercalent les
+ * diagnostics, et à quel rythme le cours s'épuise. C'est une projection — elle
+ * suppose chaque semaine faite comme prévue — et l'écran le dit.
+ */
+export function projeterCalendrier(p: ParametresCalendrier): SemaineProjetee[] {
+  const semaines: SemaineProjetee[] = []
+  let depuisBlanc = p.semainesDepuisDernierBlanc
+  let depuisEpreuve = p.joursDepuisDerniereEpreuve
+  let lecons = p.leconsRestantes
+  const nbSemaines = Math.max(1, Math.ceil((p.joursRestants + 1) / 7))
+
+  for (let i = 0; i < nbSemaines; i++) {
+    const jours = p.joursRestants - i * 7
+    const semainesRestantes = jours / 7
+    const lundi = new Date(`${p.semaineDu}T00:00:00Z`)
+    lundi.setUTCDate(lundi.getUTCDate() + i * 7)
+    const examen = jours < 7
+
+    let epreuve: SemaineProjetee['epreuve'] = null
+    if (!examen) {
+      const blancDu =
+        depuisBlanc === null ||
+        (semainesRestantes <= SEMAINES_AVANT_EXAMEN_INTENSIF && depuisBlanc >= intervalleBlancs(semainesRestantes))
+      if (blancDu && p.budgetMinutes >= MINUTES_BLANC) epreuve = 'blanc'
+      else if (depuisEpreuve !== null && depuisEpreuve >= JOURS_ENTRE_DIAGNOSTICS) epreuve = 'diagnostic'
+    }
+
+    if (epreuve === 'blanc') depuisBlanc = 0
+    if (epreuve) depuisEpreuve = 0
+    const leconsSemaine = Math.floor((p.budgetMinutes * plafondCours(semainesRestantes)) / MINUTES_PAR_LECON)
+    lecons = Math.max(0, lecons - (examen ? 0 : leconsSemaine))
+
+    semaines.push({
+      semaineDu: lundi.toISOString().slice(0, 10),
+      semainesRestantes: Math.max(0, Math.round(semainesRestantes)),
+      epreuve,
+      leconsRestantes: lecons,
+      examen,
+    })
+
+    if (depuisBlanc !== null) depuisBlanc += 1
+    if (depuisEpreuve !== null) depuisEpreuve += 7
+  }
+
+  return semaines
 }

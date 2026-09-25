@@ -12,6 +12,7 @@ export async function POST(request: Request) {
       itemId?: number
       reponse?: string | null
       aSaute?: boolean
+      nonTraitee?: boolean
       tempsMs?: number
       confiance?: number
       /** Temps de lecture du texte support, porté par la 1ʳᵉ question du groupe. */
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       itemId: Number(body.itemId),
       reponse: body.reponse ?? null,
       aSaute: Boolean(body.aSaute),
+      nonTraitee: Boolean(body.nonTraitee),
       tempsMs: Number(body.tempsMs),
       confiance,
       tempsPreparationMs:

@@ -6,6 +6,7 @@ import { libelleSection } from './planification'
 import type { QuestionPdf } from '@/core/import/pdf'
 import { ErreurRequete } from '@/core/erreurs'
 import { normaliserMultiplication, normaliserMultiplicationSi } from '@/core/import/typographie'
+import { alerteRepartition } from '@/core/import/permutation'
 
 /**
  * Atelier de contenu : relecture, détection d'items suspects, doublons.
@@ -384,7 +385,9 @@ export function validerItem(id: number, correction?: CorrectionItem): void {
     )
   }
 
-  d.prepare(`UPDATE item SET statut = 'valide' WHERE id = ?`).run(id)
+  // Validée après relecture = vérifiée : ses anciennes réponses ne la
+  // renvoient pas aussitôt dans « Questions à vérifier ».
+  d.prepare(`UPDATE item SET statut = 'valide', verifie_le = datetime('now') WHERE id = ?`).run(id)
 }
 
 export function corrigerItem(id: number, c: CorrectionItem): void {
@@ -470,6 +473,8 @@ export interface EtatAtelier {
   parSource: Record<string, number>
   total: number
   sansSkill: number
+  /** Sous-tests où une lettre porte trop de bonnes réponses (voir alerteRepartition). */
+  alertesRepartition: Array<{ section: string; libelle: string; lettre: string; part: number; n: number }>
 }
 
 export function etatAtelier(): EtatAtelier {
@@ -484,7 +489,20 @@ export function etatAtelier(): EtatAtelier {
     n: number
   }>
 
+  const bonnesParSection = new Map<string, string[]>()
+  for (const r of d
+    .prepare(`SELECT section, bonne_reponse AS b FROM item WHERE exam_id = 'tagemage' AND statut = 'valide'`)
+    .all() as Array<{ section: string; b: string }>) {
+    if (!bonnesParSection.has(r.section)) bonnesParSection.set(r.section, [])
+    bonnesParSection.get(r.section)!.push(r.b)
+  }
+  const alertesRepartition = [...bonnesParSection.entries()].flatMap(([section, bonnes]) => {
+    const a = alerteRepartition(bonnes)
+    return a ? [{ section, libelle: libelleSection(section), ...a }] : []
+  })
+
   return {
+    alertesRepartition,
     parStatut: Object.fromEntries(statuts.map((s) => [s.statut, s.n])),
     parSource: Object.fromEntries(sources.map((s) => [s.source, s.n])),
     total: statuts.reduce((acc, s) => acc + s.n, 0),
@@ -492,4 +510,95 @@ export function etatAtelier(): EtatAtelier {
       d.prepare(`SELECT COUNT(*) AS n FROM item WHERE skill_id IS NULL`).get() as { n: number }
     ).n,
   }
+}
+import { signauxDeDoute } from '@/core/stats/doutes'
+
+/* ----------------------------------------------- questions à vérifier -- */
+
+export interface QuestionAVerifier {
+  id: number
+  section: string
+  sectionLibelle: string
+  enonce: string
+  options: string[]
+  bonneReponse: string
+  typeItem: string
+  n: number
+  justes: number
+  raisons: string[]
+}
+
+/**
+ * Les questions que tes propres réponses rendent douteuses (voir
+ * core/stats/doutes.ts). Les plus chargées en signaux d'abord. Une question
+ * relue et déclarée juste (`verifie_le`) ne revient que si une réponse
+ * postérieure redonne un signal.
+ */
+export function questionsAVerifier(limite = 20): QuestionAVerifier[] {
+  const d = db()
+  const lignes = d
+    .prepare(
+      `SELECT i.id, i.section, i.enonce, i.options, i.bonne_reponse, i.type_item,
+              SUM(CASE WHEN a.a_saute = 0 THEN 1 ELSE 0 END)                             AS n,
+              SUM(CASE WHEN a.a_saute = 0 AND a.est_correct = 1 THEN 1 ELSE 0 END)       AS justes,
+              SUM(CASE WHEN a.a_saute = 0 AND a.est_correct = 0 AND a.confiance = 4 THEN 1 ELSE 0 END)
+                                                                                       AS erreursCertaines,
+              (SELECT f.reponse_donnee || ':' || COUNT(*) FROM attempt f
+                WHERE f.item_id = i.id AND f.a_saute = 0 AND f.est_correct = 0
+                  AND f.reponse_donnee IS NOT NULL
+                GROUP BY f.reponse_donnee ORDER BY COUNT(*) DESC LIMIT 1)              AS fausse
+         FROM item i
+         JOIN attempt a ON a.item_id = i.id
+        WHERE i.exam_id = 'tagemage' AND i.statut = 'valide'
+        GROUP BY i.id
+       HAVING i.verifie_le IS NULL OR MAX(a.created_at) > i.verifie_le`,
+    )
+    .all() as Array<{
+    id: number
+    section: string
+    enonce: string
+    options: string | null
+    bonne_reponse: string
+    type_item: string
+    n: number
+    justes: number
+    erreursCertaines: number
+    fausse: string | null
+  }>
+
+  return lignes
+    .map((l) => {
+      const [lettre, fois] = l.fausse ? l.fausse.split(':') : [null, null]
+      const raisons = signauxDeDoute({
+        n: l.n,
+        justes: l.justes,
+        erreursCertaines: l.erreursCertaines,
+        fausseRepetee: lettre ? { lettre, fois: Number(fois) } : null,
+      }).map((s) => s.raison)
+      return {
+        id: l.id,
+        section: l.section,
+        sectionLibelle: libelleSection(l.section),
+        enonce: l.enonce,
+        options: l.options ? (JSON.parse(l.options) as string[]) : [],
+        bonneReponse: l.bonne_reponse,
+        typeItem: l.type_item,
+        n: l.n,
+        justes: l.justes,
+        raisons,
+      }
+    })
+    .filter((q) => q.raisons.length > 0)
+    .sort((a, b) => b.raisons.length - a.raisons.length || a.id - b.id)
+    .slice(0, limite)
+}
+
+/** « Le corrigé est juste » : la question sort de la liste jusqu'au prochain signal. */
+export function marquerVerifiee(id: number): void {
+  db().prepare(`UPDATE item SET verifie_le = datetime('now') WHERE id = ?`).run(id)
+}
+
+/** Envoie la question en relecture : elle quitte les séries jusqu'à sa validation. */
+export function envoyerEnRelecture(id: number): void {
+  db().prepare(`UPDATE item SET statut = 'suspect' WHERE id = ?`).run(id)
 }

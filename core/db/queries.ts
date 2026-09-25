@@ -9,6 +9,8 @@ import type { ItemParse } from '@/core/import/parse'
 import { ErreurRequete } from '@/core/erreurs'
 import { tempsBorne, verifierSessionOuverte } from './garde'
 import { normaliserMultiplication, normaliserMultiplicationSi } from '@/core/import/typographie'
+import { difficulteObservee, type DifficulteObservee } from '@/core/stats/difficulte'
+import { modeleEnonce } from '@/core/scheduler/tirage'
 
 let amorce = false
 
@@ -279,6 +281,14 @@ export function demarrerDrill(
    * questions jamais vues, qui écarteraient précisément ce qu'on veut revoir.
    */
   itemIds: number[] = [],
+  options: {
+    /**
+     * Mode revanche : des questions du même type que celle-ci, du même modèle
+     * d'énoncé d'abord — rejouer tout de suite ce qu'on vient de rater, avec
+     * d'autres nombres, fixe la démarche mieux que la relire.
+     */
+    modeleDe?: number
+  } = {},
 ): { sessionId: number; items: ItemDrill[] } {
   const d = db()
 
@@ -293,9 +303,11 @@ export function demarrerDrill(
   // de question — où l'on accepte une question sous son texte, faute de pouvoir
   // réunir cinq questions du même type sur le même passage.
   const cible =
-    itemIds.length === 0 && section === 'comprehension' && skillIds.length === 0
-      ? itemsComprehensionGroupes(taille)
-      : itemIds
+    options.modeleDe !== undefined
+      ? questionsDeRevanche(options.modeleDe, taille)
+      : itemIds.length === 0 && section === 'comprehension' && skillIds.length === 0
+        ? itemsComprehensionGroupes(taille)
+        : itemIds
 
   const impose = cible.length > 0
 
@@ -367,6 +379,12 @@ export interface EnregistrerTentative {
   itemId: number
   reponse: string | null
   aSaute: boolean
+  /**
+   * Vrai pour une question jamais atteinte avant la fin du chronomètre (mode
+   * sprint) : un blanc « non traité », qui dit un problème de rythme, pas un
+   * saut assumé.
+   */
+  nonTraitee?: boolean
   tempsMs: number
   confiance: number
   /**
@@ -405,8 +423,8 @@ export function enregistrerTentative(t: EnregistrerTentative): void {
     t.aSaute ? null : t.reponse,
     issue === 'juste' ? 1 : 0,
     t.aSaute ? 1 : 0,
-    // Dans le drill, tout saut est délibéré : il n'y a pas de couperet horaire.
-    t.aSaute ? 'saute' : null,
+    // Hors sprint, un saut est délibéré ; en sprint, le chronomètre peut couper.
+    t.aSaute ? (t.nonTraitee ? 'non_traite' : 'saute') : null,
     tempsBorne(t.tempsMs),
     t.tempsPreparationMs == null ? null : tempsBorne(t.tempsPreparationMs),
     t.confiance,
@@ -440,6 +458,44 @@ export interface Correction {
   figure: Figure | null
   /** Les cinq propositions dessinées, dans l'ordre de `options`. */
   optionsFigure: Case[] | null
+  /** Difficulté tirée de toutes tes réponses à cette question (voir core/stats/difficulte.ts). */
+  difficulte: DifficulteObservee | null
+}
+
+/**
+ * Difficulté observée de chaque question, à partir de TOUTES tes réponses
+ * (sauts comptés comme ratés, comme partout), rétrécie vers le taux de son
+ * type de question.
+ */
+export function difficultesDe(itemIds: number[]): Map<number, DifficulteObservee> {
+  if (itemIds.length === 0) return new Map()
+  const d = db()
+  const refs = new Map(
+    (
+      d
+        .prepare(
+          `SELECT i.skill_id AS skill, AVG(a.est_correct) AS taux
+             FROM attempt a JOIN item i ON i.id = a.item_id
+            WHERE i.skill_id IS NOT NULL
+            GROUP BY i.skill_id`,
+        )
+        .all() as Array<{ skill: string; taux: number }>
+    ).map((r) => [r.skill, r.taux]),
+  )
+  const lignes = d
+    .prepare(
+      `SELECT i.id, i.skill_id AS skill, COUNT(a.id) AS n, COALESCE(SUM(a.est_correct), 0) AS justes
+         FROM item i LEFT JOIN attempt a ON a.item_id = i.id
+        WHERE i.id IN (${itemIds.map(() => '?').join(',')})
+        GROUP BY i.id`,
+    )
+    .all(...itemIds) as Array<{ id: number; skill: string | null; n: number; justes: number }>
+  return new Map(
+    lignes.map((l) => [
+      l.id,
+      difficulteObservee(l.justes, l.n, l.skill ? (refs.get(l.skill) ?? null) : null),
+    ]),
+  )
 }
 
 /**
@@ -486,8 +542,10 @@ export function terminerDrill(sessionId: number): RecapSerie {
     )
     .all(sessionId) as Array<Record<string, unknown>>
 
+  const difficultes = difficultesDe(lignes.map((l) => l.item_id as number))
   const corrections: Correction[] = lignes.map((l) => ({
     itemId: l.item_id as number,
+    difficulte: difficultes.get(l.item_id as number) ?? null,
     enonce: l.enonce as string,
     typeItem: l.type_item as 'qcm' | 'conditions_minimales',
     options: l.options ? (JSON.parse(l.options as string) as string[]) : [],
@@ -570,4 +628,35 @@ export function insererItems(items: ItemParse[], opts: OptionsImport): number {
 
   tout(items)
   return items.length
+}
+
+/**
+ * Les questions d'une revanche : même type que la question ratée, jamais
+ * elle-même, celles du même modèle d'énoncé d'abord, puis les moins vues.
+ */
+export function questionsDeRevanche(itemId: number, taille: number): number[] {
+  const d = db()
+  const source = d.prepare(`SELECT skill_id, section, enonce FROM item WHERE id = ?`).get(itemId) as
+    | { skill_id: string | null; section: string; enonce: string }
+    | undefined
+  if (!source) throw new ErreurRequete(`Question ${itemId} introuvable.`, 404)
+
+  const candidates = d
+    .prepare(
+      `SELECT i.id, i.enonce, (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu
+         FROM item i
+        WHERE i.exam_id = 'tagemage' AND i.statut = 'valide' AND i.id <> ?
+          AND i.section = ? AND ${source.skill_id ? 'i.skill_id = ?' : 'i.skill_id IS NULL'}
+        ORDER BY vu ASC, RANDOM()`,
+    )
+    .all(itemId, source.section, ...(source.skill_id ? [source.skill_id] : [])) as Array<{
+    id: number
+    enonce: string
+    vu: number
+  }>
+
+  const modele = modeleEnonce(source.enonce)
+  const memeModele = candidates.filter((c) => modeleEnonce(c.enonce) === modele)
+  const autres = candidates.filter((c) => modeleEnonce(c.enonce) !== modele)
+  return [...memeModele, ...autres].slice(0, taille).map((c) => c.id)
 }

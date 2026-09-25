@@ -1,12 +1,18 @@
 import { lireCases, lireFigure } from '@/core/figures/lire'
 import type { Case, Figure } from '@/core/figures/types'
-import { db, diagnosticDe } from './queries'
-import { itemsComprehensionGroupes } from './selection'
+import { db, diagnosticDe, difficultesDe } from './queries'
+import type { DifficulteObservee } from '@/core/stats/difficulte'
+import { itemsComprehensionGroupes, texteLongComprehension } from './selection'
 import { tirageEquilibre, type Candidat } from '@/core/scheduler/tirage'
 import { aleaDepuis } from '@/core/generation/alea'
 import type { ItemDrill } from './queries'
-import { SECTIONS_PAR_ID } from '@/exams/tagemage'
-import { composerEpreuve, type Etape, type ModeEpreuve } from '@/exams/tagemage/epreuve'
+import { SECONDES_PAR_QUESTION, SECTIONS_PAR_ID } from '@/exams/tagemage'
+import {
+  composerEpreuve,
+  QUESTIONS_DIAGNOSTIC,
+  type Etape,
+  type ModeEpreuve,
+} from '@/exams/tagemage/epreuve'
 import { issueDe, pointsDe, resultatSerie, type Issue } from '@/core/scoring/tagemage'
 import {
   analyserFatigue,
@@ -41,6 +47,34 @@ export interface EpreuvePreparee {
  * qu'à `recapEpreuve`, une fois l'épreuve close.
  */
 export function demarrerEpreuve(mode: ModeEpreuve): EpreuvePreparee {
+  const { etapes, complete } = preparerEtapes(mode)
+
+  const info = db()
+    .prepare(
+      `INSERT INTO exam_session (exam_id, type, sections, conditions_reelles)
+       VALUES ('tagemage', ?, ?, ?)`,
+    )
+    .run(
+      mode === 'blanc' ? 'blanc' : 'diagnostic',
+      JSON.stringify(etapes.map((e) => e.section)),
+      complete ? 1 : 0,
+    )
+
+  return { sessionId: Number(info.lastInsertRowid), mode, etapes, complete }
+}
+
+/**
+ * Compose une épreuve SANS ouvrir de séance : pour l'épreuve sur papier, qui
+ * s'imprime un jour et se saisit parfois le lendemain. Une séance ouverte à
+ * l'impression serait vide pendant des heures, et rangée (supprimée) au bout
+ * de douze.
+ */
+export function composerEpreuvePapier(mode: ModeEpreuve): Omit<EpreuvePreparee, 'sessionId'> {
+  return { mode, ...preparerEtapes(mode) }
+}
+
+/** Le tirage des questions d'une épreuve, sous-test par sous-test. */
+function preparerEtapes(mode: ModeEpreuve): { etapes: EtapePreparee[]; complete: boolean } {
   const d = db()
   const modele = composerEpreuve(mode)
 
@@ -73,9 +107,19 @@ export function demarrerEpreuve(mode: ModeEpreuve): EpreuvePreparee {
       WHERE i.id = ?`,
   )
 
-  const etapes: EtapePreparee[] = modele.map((e) => {
-    const ids =
-      e.section === 'comprehension'
+  const etapes: EtapePreparee[] = modele.map((modeleEtape) => {
+    // Diagnostic : un texte long de sept questions, quand la banque en a un,
+    // met la compréhension au même volume que les autres sous-tests.
+    const long =
+      mode === 'diagnostic' && modeleEtape.section === 'comprehension'
+        ? texteLongComprehension(QUESTIONS_DIAGNOSTIC)
+        : null
+    const e = long
+      ? { ...modeleEtape, questions: long.length, secondes: long.length * SECONDES_PAR_QUESTION }
+      : modeleEtape
+    const ids = long
+      ? long
+      : e.section === 'comprehension'
         ? itemsComprehensionGroupes(e.questions)
         : tirageEquilibre(
             candidates.all(e.section) as Candidat[],
@@ -110,20 +154,76 @@ export function demarrerEpreuve(mode: ModeEpreuve): EpreuvePreparee {
     )
   }
 
-  const complete = etapes.every((e) => e.manquantes === 0)
+  return { etapes, complete: etapes.every((e) => e.manquantes === 0) }
+}
 
-  const info = d
-    .prepare(
-      `INSERT INTO exam_session (exam_id, type, sections, conditions_reelles)
-       VALUES ('tagemage', ?, ?, ?)`,
-    )
-    .run(
-      mode === 'blanc' ? 'blanc' : 'diagnostic',
-      JSON.stringify(etapes.map((e) => e.section)),
-      complete ? 1 : 0,
+export interface SaisiePapier {
+  section: string
+  itemIds: number[]
+  /** Une réponse par question, dans l'ordre de `itemIds` ; lettre null = case vide. */
+  reponses: Array<{ lettre: string | null; confiance: number | null }>
+  /** Temps passé sur le sous-test, en minutes, noté sur la feuille. */
+  minutes: number
+}
+
+/**
+ * Enregistre en une fois une épreuve passée sur papier.
+ *
+ * La séance naît à la saisie, complète : lots de chaque sous-test puis
+ * clôture, dans une seule transaction — une saisie à moitié enregistrée
+ * serait une épreuve interrompue.
+ *
+ * Le temps n'est connu que par sous-test (noté sur la feuille) : il est
+ * réparti à parts égales entre ses questions. C'est une approximation, et
+ * c'est la seule honnête sans chronomètre par question.
+ */
+export function enregistrerEpreuvePapier(mode: ModeEpreuve, saisie: SaisiePapier[]): number {
+  const d = db()
+  const attendues = composerEpreuve(mode)
+  if (saisie.length === 0) throw new ErreurRequete('Aucun sous-test saisi.')
+
+  let sessionId = 0
+  d.transaction(() => {
+    const complete =
+      saisie.length === attendues.length &&
+      attendues.every((e) => (saisie.find((s) => s.section === e.section)?.itemIds.length ?? 0) >= e.questions)
+    sessionId = Number(
+      d
+        .prepare(
+          `INSERT INTO exam_session (exam_id, type, sections, conditions_reelles)
+           VALUES ('tagemage', ?, ?, ?)`,
+        )
+        .run(mode === 'blanc' ? 'blanc' : 'diagnostic', JSON.stringify(saisie.map((s) => s.section)), complete ? 1 : 0)
+        .lastInsertRowid,
     )
 
-  return { sessionId: Number(info.lastInsertRowid), mode, etapes, complete }
+    for (const s of saisie) {
+      if (s.reponses.length !== s.itemIds.length) {
+        throw new ErreurRequete(`Sous-test ${s.section} : ${s.itemIds.length} questions, ${s.reponses.length} réponses.`)
+      }
+      const parQuestion = Math.max(0, (Number(s.minutes) || 0) * 60_000) / Math.max(1, s.itemIds.length)
+      enregistrerLot(
+        sessionId,
+        s.itemIds.map((itemId, i) => {
+          const r = s.reponses[i]
+          const lettre = r.lettre && /^[A-E]$/.test(r.lettre) ? r.lettre : null
+          return {
+            itemId,
+            reponse: lettre,
+            aSaute: lettre === null,
+            // Sur papier, une case vide ne dit pas si c'était un choix ou le
+            // temps : on la compte non traitée, le cas le plus fréquent.
+            motifBlanc: lettre === null ? ('non_traite' as const) : null,
+            tempsMs: parQuestion,
+            confiance: lettre === null ? 1 : Math.min(4, Math.max(1, Math.round(Number(r.confiance) || 3))),
+          }
+        }),
+      )
+    }
+    terminerEpreuve(sessionId)
+  })()
+
+  return sessionId
 }
 
 export interface TentativeLot {
@@ -261,6 +361,8 @@ export interface CorrectionEpreuve {
   figure: Figure | null
   /** Les cinq propositions dessinées, dans l'ordre de `options`. */
   optionsFigure: Case[] | null
+  /** Difficulté tirée de toutes tes réponses à cette question. */
+  difficulte: DifficulteObservee | null
 }
 
 export interface RecapEpreuve {
@@ -324,8 +426,10 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
     )
     .all(sessionId) as Array<Record<string, unknown>>
 
+  const difficultes = difficultesDe(lignes.map((l) => l.item_id as number))
   const corrections: CorrectionEpreuve[] = lignes.map((l) => ({
     itemId: l.item_id as number,
+    difficulte: difficultes.get(l.item_id as number) ?? null,
     section: l.section as string,
     enonce: l.enonce as string,
     typeItem: l.type_item as 'qcm' | 'conditions_minimales',

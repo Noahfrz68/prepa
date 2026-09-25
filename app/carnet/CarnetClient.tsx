@@ -6,9 +6,23 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { poster, lire } from '@/app/_composants/reseau'
 import { OPTIONS_CONDITIONS_MINIMALES } from '@/exams/tagemage'
 import type { EntreeCarnet, OrdreCarnet, ResumeCarnet } from '@/core/db/carnet'
+import { CAUSES, LIBELLE_CAUSE, REMEDE_CAUSE, type CauseErreur } from '@/core/stats/causes'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
 const PAR_TRANCHE = 10
+
+interface Filtres {
+  section: string
+  type: string
+  ordre: OrdreCarnet
+  comprises: boolean
+  cause: string
+  /** Seulement les reprises espacées dues aujourd'hui. */
+  dues: boolean
+}
+
+const jourCourt = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
 
 /**
  * Le carnet d'erreurs.
@@ -31,13 +45,15 @@ export default function CarnetClient({
   const [type, setType] = useState<string>('')
   const [ordre, setOrdre] = useState<OrdreCarnet>('priorite')
   const [comprises, setComprises] = useState(false)
+  const [cause, setCause] = useState<string>('')
+  const [dues, setDues] = useState(false)
   const [chargement, setChargement] = useState(false)
   // Deux cents questions d'un bloc ne se lisent pas : on en montre dix, les
   // plus prioritaires, et le reste à la demande.
   const [visibles, setVisibles] = useState(PAR_TRANCHE)
 
   const recharger = useCallback(
-    async (f: { section: string; type: string; ordre: OrdreCarnet; comprises: boolean }) => {
+    async (f: Filtres) => {
       setChargement(true)
       try {
         const p = new URLSearchParams()
@@ -45,6 +61,8 @@ export default function CarnetClient({
         if (f.type) p.set('type', f.type)
         if (f.ordre !== 'priorite') p.set('ordre', f.ordre)
         if (f.comprises) p.set('comprises', '1')
+        if (f.cause) p.set('cause', f.cause)
+        if (f.dues) p.set('dues', '1')
         const data = await lire<{ entrees: EntreeCarnet[]; resume: ResumeCarnet }>(
           `/api/carnet?${p}`,
         )
@@ -58,16 +76,16 @@ export default function CarnetClient({
     [],
   )
 
-  const changerFiltre = (
-    changements: Partial<{ section: string; type: string; ordre: OrdreCarnet; comprises: boolean }>,
-  ) => {
-    const f = { section, type, ordre, comprises, ...changements }
+  const changerFiltre = (changements: Partial<Filtres>) => {
+    const f: Filtres = { section, type, ordre, comprises, cause, dues, ...changements }
     // Un type appartient à un sous-test : changer de sous-test l'efface.
     if (changements.section !== undefined && changements.type === undefined) f.type = ''
     setSection(f.section)
     setType(f.type)
     setOrdre(f.ordre)
     setComprises(f.comprises)
+    setCause(f.cause)
+    setDues(f.dues)
     void recharger(f)
   }
 
@@ -147,6 +165,42 @@ export default function CarnetClient({
             {comprises ? 'Masquer les comprises' : 'Montrer les comprises'}
           </Filtre>
         </div>
+
+        {/* Reprise espacée : ce qui est dû aujourd'hui, en un clic. */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-bord pt-3">
+          <Filtre actif={dues} onClick={() => changerFiltre({ dues: !dues })}>
+            À rejouer aujourd’hui{' '}
+            <span className="chiffres text-doux">{resume.aRejouerAujourdhui}</span>
+          </Filtre>
+          <span className="text-xs text-doux">
+            Chaque erreur revient à J+1, puis J+3, puis J+7 ; réussie trois fois de suite, elle est
+            consolidée.
+          </span>
+        </div>
+
+        {resume.parCause.length > 0 && (
+          <div className="mt-4 border-t border-bord pt-3">
+            <p className="mb-2 text-xs uppercase tracking-widest text-doux">
+              Tes erreurs, par cause déclarée
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {resume.parCause.map((c) => (
+                <Filtre
+                  key={c.cause}
+                  actif={cause === c.cause}
+                  onClick={() => changerFiltre({ cause: cause === c.cause ? '' : c.cause })}
+                >
+                  {c.libelle} <span className="chiffres text-doux">{c.n}</span>
+                </Filtre>
+              ))}
+            </div>
+            {/* La cause qui domine dit quoi travailler : c'est la raison de les déclarer. */}
+            <p className="mt-2 text-xs leading-relaxed text-doux">
+              Cause la plus fréquente : {resume.parCause[0].libelle.toLowerCase()} — le remède est
+              de {REMEDE_CAUSE[resume.parCause[0].cause]}.
+            </p>
+          </div>
+        )}
 
         {typesAffiches.length > 0 && (
           <div className="mt-4 border-t border-bord pt-3">
@@ -272,6 +326,18 @@ function Entree({
     }
   }, [note, e.note, e.itemId])
 
+  const [cause, setCause] = useState<CauseErreur | null>(e.cause)
+  const choisirCause = async (c: CauseErreur | null) => {
+    const avant = cause
+    setCause(c)
+    try {
+      await poster('/api/carnet', { action: 'cause', itemId: e.itemId, cause: c })
+    } catch {
+      // Sans enregistrement, le choix affiché ne doit pas mentir.
+      setCause(avant)
+    }
+  }
+
   const basculerCompris = async () => {
     const compris = !e.comprisLe
     try {
@@ -313,6 +379,14 @@ function Entree({
         )}
         {e.reussieDepuis && <span className="text-juste">réussie depuis</span>}
         {e.comprisLe && <span className="text-juste">comprise</span>}
+        {!e.comprisLe &&
+          (e.reprise.consolidee ? (
+            <span className="text-juste">consolidée : réussie trois fois de suite</span>
+          ) : e.aRejouer ? (
+            <span className="text-accent">à rejouer aujourd’hui</span>
+          ) : e.reprise.dueLe ? (
+            <span>prochaine reprise le {jourCourt(e.reprise.dueLe)}</span>
+          ) : null)}
       </div>
 
       <EnonceRappel
@@ -391,6 +465,20 @@ function Entree({
           placeholder="Ce que j’ai mal lu, la règle que j’ai oubliée…"
           className="mt-1.5 w-full resize-y rounded-lg border border-bord bg-fond px-3 py-2 text-sm outline-none placeholder:text-blanc focus:border-accent"
         />
+        {/* La cause, en un clic : c'est elle qui se compte, la note se lit. */}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {CAUSES.map((c) => (
+            <button
+              key={c}
+              onClick={() => void choisirCause(cause === c ? null : c)}
+              className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                cause === c ? 'border-accent text-accent' : 'border-bord text-doux hover:text-texte'
+              }`}
+            >
+              {LIBELLE_CAUSE[c]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">

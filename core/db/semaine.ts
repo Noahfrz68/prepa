@@ -10,6 +10,8 @@ import { SECTIONS } from '@/exams/tagemage'
 import {
   composerSemaine,
   lundiDeLaSemaine,
+  projeterCalendrier,
+  type SemaineProjetee,
   type BesoinSection,
   type LeconAPlanifier,
   type SemaineComposee,
@@ -272,6 +274,13 @@ function parametres(semaineDu: string) {
     ? (Date.now() - new Date(`${dernierBlanc.d.replace(' ', 'T')}Z`).getTime()) / (7 * 86_400_000)
     : null
 
+  // `derniere` est le début de la dernière épreuve close, en UTC.
+  const joursDepuisDerniereEpreuve = epreuves.derniere
+    ? Math.floor(
+        (Date.now() - new Date(`${epreuves.derniere.replace(' ', 'T')}Z`).getTime()) / 86_400_000,
+      )
+    : null
+
   const totalBanque = parSection.reduce((a, s) => a + s.questions, 0)
 
   return {
@@ -281,10 +290,28 @@ function parametres(semaineDu: string) {
     lecons,
     sections,
     semainesDepuisDernierBlanc,
+    joursDepuisDerniereEpreuve,
+    reports: seriesNonFaites(semaineDu),
     aDejaPasseUneEpreuve: epreuves.n > 0,
     // Un blanc demande 90 questions réparties sur les six sous-tests.
     banqueSuffisantePourBlanc: totalBanque >= 90 && sections.every((s) => s.questionsEnBanque >= 15),
   }
+}
+
+/**
+ * Séries prévues la semaine précédente et non faites, lues avec la même
+ * mesure que le plan (séries closes dans le sous-test). Une tâche cochée à la
+ * main compte comme faite.
+ */
+function seriesNonFaites(semaineDu: string): Array<{ section: string; series: number }> {
+  const precedente = new Date(`${semaineDu}T00:00:00Z`)
+  precedente.setUTCDate(precedente.getUTCDate() - 7)
+  const plan = lire(precedente.toISOString().slice(0, 10))
+  if (!plan) return []
+  return plan.taches
+    .filter((t) => t.type === 'entrainement' && t.section && !t.fait)
+    .map((t) => ({ section: t.section as string, series: Math.max(0, t.mesure.sur - t.mesure.faits) }))
+    .filter((r) => r.series > 0)
 }
 
 function ecrire(plan: SemaineComposee): void {
@@ -457,3 +484,48 @@ export function historiqueSemaines(limite = 8): Array<{
 }
 
 export { libelleSection }
+
+/** Au-delà de ce nombre de jours sans rien faire, l'accueil le rappelle. */
+export const JOURS_AVANT_RAPPEL = 2
+
+/**
+ * Jours pleins depuis la dernière activité mesurée : une réponse, ou une
+ * leçon marquée étudiée. Null si rien n'a jamais été fait.
+ */
+export function joursSansActivite(): number | null {
+  const r = db()
+    .prepare(
+      `SELECT MAX(d) AS derniere FROM (
+         SELECT MAX(created_at) AS d FROM attempt
+         UNION ALL
+         SELECT MAX(le) AS d FROM lecon_session
+       )`,
+    )
+    .get() as { derniere: string | null }
+  if (!r.derniere) return null
+  const derniere = new Date(`${r.derniere.replace(' ', 'T')}Z`)
+  const jourDerniere = new Date(derniere.toLocaleDateString('sv-SE'))
+  const aujourdhui = new Date(new Date().toLocaleDateString('sv-SE'))
+  return Math.round((aujourdhui.getTime() - jourDerniere.getTime()) / 86_400_000)
+}
+
+/**
+ * Le calendrier projeté jusqu'à l'examen, à partir de l'état réel : temps
+ * disponible, leçons jamais étudiées, dernières épreuves. Null sans date.
+ */
+export function calendrierJusquExamen(aujourdhui = aujourdhuiIso()): SemaineProjetee[] | null {
+  const semaineDu = lundiDeLaSemaine(aujourdhui)
+  const p = parametres(semaineDu)
+  if (p.joursRestants === null || p.joursRestants < 0) return null
+  return projeterCalendrier({
+    semaineDu,
+    joursRestants: p.joursRestants + Math.round(
+      (new Date(`${aujourdhui}T00:00:00Z`).getTime() - new Date(`${semaineDu}T00:00:00Z`).getTime()) /
+        86_400_000,
+    ),
+    budgetMinutes: p.budgetMinutes,
+    leconsRestantes: p.lecons.filter((l) => l.jamaisEtudiee).length,
+    semainesDepuisDernierBlanc: p.semainesDepuisDernierBlanc,
+    joursDepuisDerniereEpreuve: p.joursDepuisDerniereEpreuve,
+  })
+}

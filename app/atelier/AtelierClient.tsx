@@ -3,8 +3,22 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { poster } from '@/app/_composants/reseau'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
+
+/** Voir `questionsAVerifier` dans core/db/contenu.ts. */
+interface QuestionAVerifier {
+  id: number
+  sectionLibelle: string
+  enonce: string
+  options: string[]
+  bonneReponse: string
+  typeItem: string
+  n: number
+  justes: number
+  raisons: string[]
+}
 
 interface ItemARelire {
   id: number
@@ -44,6 +58,7 @@ interface EtatAtelier {
   parSource: Record<string, number>
   total: number
   sansSkill: number
+  alertesRepartition: Array<{ section: string; libelle: string; lettre: string; part: number; n: number }>
 }
 
 const OPTIONS_CM = [
@@ -59,17 +74,38 @@ const CIBLE_DEFAUT = 200
 
 export default function AtelierClient({
   fileInitiale,
+  aVerifierInitiales,
   etat,
   doublons,
   generationInitiale,
 }: {
   fileInitiale: FileRelecture
+  aVerifierInitiales: QuestionAVerifier[]
   etat: EtatAtelier
   doublons: Array<{ enonce: string; sectionLibelle: string; ids: number[] }>
   generationInitiale: EtatGeneration[]
 }) {
   const router = useRouter()
   const [file, setFile] = useState(fileInitiale)
+  const [aVerifier, setAVerifier] = useState(aVerifierInitiales)
+  const [verification, setVerification] = useState<number | null>(null)
+
+  /** « Le corrigé est juste » ou « En relecture » : la liste et la file suivent. */
+  const trancher = async (id: number, action: 'verifiee' | 'relecture') => {
+    setVerification(id)
+    try {
+      const data = await poster<{ aVerifier: QuestionAVerifier[]; file: FileRelecture }>(
+        '/api/atelier',
+        { action, id },
+      )
+      setAVerifier(data.aVerifier)
+      setFile(data.file)
+    } catch (e) {
+      setErreur((e as Error).message)
+    } finally {
+      setVerification(null)
+    }
+  }
   const [generation, setGeneration] = useState(generationInitiale)
   const [cible, setCible] = useState(CIBLE_DEFAUT)
   const [enCours, setEnCours] = useState<string | null>(null)
@@ -286,7 +322,7 @@ export default function AtelierClient({
       setFile(data.file)
       setMessage(
         data.suspects.length === 0
-          ? 'Aucun item aberrant. Il en faut au moins 5 tentatives pour juger.'
+          ? 'Aucun item aberrant parmi ceux qui comptent 5 réponses ou plus. Les signaux lisibles dès la première réponse sont dans « Questions à vérifier », plus bas.'
           : `${data.suspects.length} item(s) marqué(s) suspects : ${data.suspects[0].raison}`,
       )
       router.refresh()
@@ -373,6 +409,19 @@ export default function AtelierClient({
             </span>
           )}
         </div>
+
+        {etat.alertesRepartition.map((a) => (
+          <p
+            key={a.section}
+            className="mt-3 rounded-lg border border-faux px-4 py-2.5 text-sm leading-relaxed text-faux"
+          >
+            {a.libelle} : la bonne réponse est {a.lettre} dans{' '}
+            <span className="chiffres">{Math.round(a.part * 100)} %</span> des {a.n} questions (au-delà
+            de 35 %). Cocher {a.lettre} par défaut y rapporte plus que le hasard, et fausse la mesure.
+            Les imports de compréhension sont rééquilibrés d’eux-mêmes : regarde les questions
+            collées ou saisies à la main dans ce sous-test.
+          </p>
+        ))}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
@@ -528,6 +577,66 @@ export default function AtelierClient({
           ne sont pas des questions d’annale. La compréhension de textes, elle, ne se fabrique pas —
           il lui faut de vrais textes, et donc un import.
         </p>
+      </section>
+
+      {/* Questions que tes réponses rendent douteuses */}
+      <section>
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-sm uppercase tracking-widest text-doux">Questions à vérifier</h2>
+          <span className="chiffres text-sm text-doux">{aVerifier.length}</span>
+        </div>
+        <p className="mb-3 text-xs leading-relaxed text-doux">
+          Repérées dans tes réponses : une erreur alors que tu te disais certain, la même mauvaise
+          lettre donnée deux fois, ou aucune réussite en trois essais. Ce sont des invitations à
+          relire le corrigé, pas des verdicts — la question reste en service tant que tu ne
+          l’envoies pas en relecture.
+        </p>
+
+        {aVerifier.length === 0 ? (
+          <p className="rounded-xl border border-bord bg-carte px-5 py-4 text-sm text-doux">
+            Rien de douteux dans tes réponses pour l’instant.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {aVerifier.map((q) => {
+              const opts = q.typeItem === 'conditions_minimales' ? OPTIONS_CM : q.options
+              const iBonne = LETTRES.indexOf(q.bonneReponse as (typeof LETTRES)[number])
+              return (
+                <li key={q.id} className="rounded-xl border border-bord bg-carte px-5 py-4 text-sm">
+                  <p className="text-xs text-doux">
+                    {q.sectionLibelle} · #{q.id} · réussie {q.justes} fois sur {q.n}
+                  </p>
+                  <p className="mt-1">{q.enonce.length > 220 ? `${q.enonce.slice(0, 220)}…` : q.enonce}</p>
+                  <p className="mt-1 text-xs text-doux">
+                    Corrigé actuel : <span className="text-juste">{q.bonneReponse}</span>
+                    {opts[iBonne] ? ` — ${opts[iBonne]}` : ''}
+                  </p>
+                  <ul className="mt-2 space-y-0.5 text-xs text-blanc">
+                    {q.raisons.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => void trancher(q.id, 'verifiee')}
+                      disabled={verification !== null}
+                      className="rounded-lg border border-bord px-3 py-1.5 text-xs text-doux transition hover:border-juste hover:text-juste disabled:opacity-40"
+                    >
+                      Le corrigé est juste
+                    </button>
+                    <button
+                      onClick={() => void trancher(q.id, 'relecture')}
+                      disabled={verification !== null}
+                      className="rounded-lg border border-bord px-3 py-1.5 text-xs text-doux transition hover:border-faux hover:text-texte disabled:opacity-40"
+                    >
+                      Envoyer en relecture
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </section>
 
       {/* File de relecture */}

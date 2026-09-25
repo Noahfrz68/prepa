@@ -1,7 +1,11 @@
 import Link from 'next/link'
-import { etatSectionsTageMage } from '@/core/db/queries'
+import { etatExamens, etatSectionsTageMage } from '@/core/db/queries'
+import { historiqueScores } from '@/core/db/arbitrage'
+import CourbeScore from '@/app/_composants/CourbeScore'
 import { historiqueEpreuves } from '@/core/db/epreuve'
+import { texteLongComprehension } from '@/core/db/selection'
 import { SECONDES_PAR_QUESTION } from '@/exams/tagemage'
+import { SEUIL_FIABILITE } from '@/core/stats/calculs'
 import {
   QUESTIONS_DIAGNOSTIC,
   QUESTIONS_DIAGNOSTIC_COMPREHENSION,
@@ -10,6 +14,9 @@ import {
 } from '@/exams/tagemage/epreuve'
 
 export const dynamic = 'force-dynamic'
+
+/** En dessous, le taux d'un sous-test est affiché avec ⚠ (même seuil que la calibration). */
+const ECHANTILLON_FIABLE = SEUIL_FIABILITE
 
 /**
  * « 21 septembre », ou « 21 septembre 2025 » hors de l'année en cours.
@@ -30,8 +37,20 @@ export default function HubTageMage() {
   const sections = etatSectionsTageMage()
   const total = sections.reduce((acc, s) => acc + s.nbItems, 0)
   const historique = historiqueEpreuves(5)
+  const courbe = historiqueScores('tagemage', 20)
+  const cible = etatExamens().find((e) => e.examId === 'tagemage')?.scoreCible ?? null
   const dureeBlanc = dureeTotaleMinutes(composerEpreuve('blanc'))
-  const dureeDiagnostic = dureeTotaleMinutes(composerEpreuve('diagnostic'))
+  // Un texte long de sept questions validé remplace le texte de cinq : la
+  // carte annonce ce que le diagnostic servira vraiment.
+  const questionsComprehension =
+    texteLongComprehension(QUESTIONS_DIAGNOSTIC) !== null
+      ? QUESTIONS_DIAGNOSTIC
+      : QUESTIONS_DIAGNOSTIC_COMPREHENSION
+  const dureeDiagnostic =
+    dureeTotaleMinutes(composerEpreuve('diagnostic')) +
+    Math.round(
+      ((questionsComprehension - QUESTIONS_DIAGNOSTIC_COMPREHENSION) * SECONDES_PAR_QUESTION) / 60,
+    )
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-14">
@@ -89,7 +108,11 @@ export default function HubTageMage() {
             <Epreuve
               href="/tagemage/epreuve?mode=diagnostic"
               titre="Diagnostic"
-              detail={`6 sous-tests · ${QUESTIONS_DIAGNOSTIC} questions, ${QUESTIONS_DIAGNOSTIC_COMPREHENSION} en compréhension · ${dureeDiagnostic} min`}
+              detail={`6 sous-tests · ${QUESTIONS_DIAGNOSTIC} questions${
+                questionsComprehension === QUESTIONS_DIAGNOSTIC
+                  ? ' (un texte long en compréhension)'
+                  : `, ${QUESTIONS_DIAGNOSTIC_COMPREHENSION} en compréhension`
+              } · ${dureeDiagnostic} min`}
               texte="Score estimé avec intervalle, cartographie des faiblesses et trois leviers. Même cadence que l’épreuve réelle."
             />
             <Epreuve
@@ -99,6 +122,34 @@ export default function HubTageMage() {
               texte="Conditions réelles, enchaînées, sans retour arrière entre sous-tests. C’est le seul format qui mesure la fatigue."
             />
           </div>
+          <p className="mt-2 text-xs text-doux">
+            Au crayon, comme le jour J :{' '}
+            <Link href="/tagemage/papier?mode=diagnostic" className="text-accent hover:underline">
+              diagnostic sur papier
+            </Link>{' '}
+            ·{' '}
+            <Link href="/tagemage/papier?mode=blanc" className="text-accent hover:underline">
+              blanc sur papier
+            </Link>
+            {' '}— sujet imprimé, feuille de réponses saisie ensuite.
+          </p>
+
+          {courbe.length >= 2 && (
+            <div className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4">
+              <p className="text-sm font-medium">Ton score dans le temps</p>
+              <p className="mb-3 mt-0.5 text-xs text-doux">
+                Chaque épreuve avec son intervalle à 95 %. Tant que deux intervalles se
+                chevauchent largement, l’écart entre leurs scores peut n’être que du bruit.
+              </p>
+              {/* Deux dessins, un par largeur d'écran : le texte garde sa taille. */}
+              <div className="sm:hidden">
+                <CourbeScore points={courbe} cible={cible} largeurDessin={290} hauteur={170} />
+              </div>
+              <div className="hidden sm:block">
+                <CourbeScore points={courbe} cible={cible} />
+              </div>
+            </div>
+          )}
 
           {historique.length > 0 && (
             <ul className="mt-4 space-y-1.5">
@@ -132,7 +183,12 @@ export default function HubTageMage() {
         </section>
       )}
 
-      <h2 className="mb-3 text-sm uppercase tracking-widest text-doux">Entraînement ciblé</h2>
+      <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Entraînement ciblé</h2>
+      <p className="mb-3 text-xs text-doux">
+        Réussite = bonnes réponses sur questions servies, sauts compris — la même définition
+        partout dans l’application. ⚠ = moins de {ECHANTILLON_FIABLE} réponses : le taux est
+        indicatif.
+      </p>
       <div className="space-y-3">
         {sections.map((s) => (
           <div
@@ -154,6 +210,14 @@ export default function HubTageMage() {
               {s.tauxReussite !== null ? (
                 <span className={s.tauxReussite >= 0.6 ? 'text-juste' : 'text-faux'}>
                   {Math.round(s.tauxReussite * 100)} %
+                  {s.nbTentatives < ECHANTILLON_FIABLE && (
+                    <span
+                      className="ml-1 text-xs text-blanc"
+                      title={`${s.nbTentatives} réponses seulement`}
+                    >
+                      ⚠
+                    </span>
+                  )}
                 </span>
               ) : (
                 <span className="text-doux">—</span>
@@ -161,12 +225,25 @@ export default function HubTageMage() {
             </div>
 
             {s.nbItems > 0 ? (
-              <Link
-                href={`/tagemage/drill?section=${s.id}`}
-                className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-fond transition hover:opacity-90"
-              >
-                S’entraîner
-              </Link>
+              <span className="flex items-center gap-2">
+                {/* Sprint : 15 questions sous un seul chronomètre de 20 minutes,
+                    comme un sous-test. La compréhension se joue par textes. */}
+                {s.id !== 'comprehension' && s.nbItems >= 15 && (
+                  <Link
+                    href={`/tagemage/drill?section=${s.id}&taille=15&sprint=1`}
+                    className="rounded-lg border border-bord px-3 py-2 text-sm text-doux transition hover:border-accent hover:text-texte"
+                    title="15 questions, 20 minutes d’un seul bloc, comme à l’épreuve"
+                  >
+                    Sprint 20 min
+                  </Link>
+                )}
+                <Link
+                  href={`/tagemage/drill?section=${s.id}`}
+                  className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-fond transition hover:opacity-90"
+                >
+                  S’entraîner
+                </Link>
+              </span>
             ) : (
               <Link
                 href={`/atelier/import?section=${s.id}`}
