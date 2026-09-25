@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+:root {
+  --fond: #0f1115;
+  --fond-carte: #171a21;
+  --fond-carte-clair: #1e222b;
+  --bord: #2a2f3a;
+  --texte: #e6e8ec;
+  --texte-doux: #9aa1ad;
+  --accent: #6ea8fe;
+  --juste: #4ade80;
+  --faux: #f87171;
+  --blanc-reponse: #fbbf24;
+}
+
+@theme inline {
+  --color-fond: var(--fond);
+  --color-carte: var(--fond-carte);
+  --color-carte-clair: var(--fond-carte-clair);
+  --color-bord: var(--bord);
+  --color-texte: var(--texte);
+  --color-doux: var(--texte-doux);
+  --color-accent: var(--accent);
+  --color-juste: var(--juste);
+  --color-faux: var(--faux);
+  --color-blanc: var(--blanc-reponse);
+}
+
+html,
+body {
+  background: var(--fond);
+  color: var(--texte);
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Touche clavier, utilisée partout : le drill se pilote sans souris. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--bord);
+  border-bottom-width: 2px;
+  border-radius: 0.35rem;
+  background: var(--fond-carte-clair);
+  color: var(--texte-doux);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chiffres {
+  font-variant-numeric: tabular-nums;
+}
