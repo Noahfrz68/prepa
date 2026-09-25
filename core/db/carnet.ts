@@ -57,19 +57,31 @@ export interface EntreeCarnet {
   annale: boolean
 }
 
+export type OrdreCarnet = 'priorite' | 'recentes'
+
 export interface FiltreCarnet {
   section?: string
+  /** Un seul type de question : ce qui revient le plus se travaille d'un bloc. */
+  skillId?: string
+  /**
+   * 'priorite' (par défaut) : d'abord ce qui n'a pas été réussi depuis, puis ce
+   * qui a été raté le plus souvent, puis le plus récent. 'recentes' : la plus
+   * récemment ratée en tête.
+   */
+  ordre?: OrdreCarnet
   /** Par défaut les questions comprises sont masquées : le carnet est une pile à vider. */
   inclureComprises?: boolean
   limite?: number
 }
 
 /**
- * Les questions ratées, la plus récemment ratée en tête.
+ * Les questions ratées, dans l'ordre demandé.
  *
- * L'ordre n'est pas le nombre d'échecs mais la fraîcheur : une erreur d'hier se
- * corrige encore, une erreur d'il y a six semaines a déjà été recouverte par
- * autre chose. Le nombre d'échecs est affiché, pas utilisé pour trier.
+ * Par défaut, la priorité : 216 questions présentées de la plus récente à la
+ * plus ancienne ne disaient pas par où commencer. Une question pas encore
+ * réussie depuis passe devant une question rattrapée ; à égalité, celle qui
+ * résiste le plus (échecs + sauts) ; puis la fraîcheur, parce qu'une erreur
+ * d'hier se corrige encore. L'ordre « récentes » reste disponible.
  */
 export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
   const conditions = [`i.exam_id = 'tagemage'`]
@@ -78,6 +90,10 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
   if (f.section) {
     conditions.push('i.section = ?')
     params.push(f.section)
+  }
+  if (f.skillId) {
+    conditions.push('i.skill_id = ?')
+    params.push(f.skillId)
   }
   if (!f.inclureComprises) conditions.push('c.compris_le IS NULL')
 
@@ -104,7 +120,11 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
         WHERE ${conditions.join(' AND ')}
         GROUP BY i.id
        HAVING echecs + sauts > 0
-        ORDER BY dernier_echec DESC, i.id DESC
+        ORDER BY ${
+          f.ordre === 'recentes'
+            ? 'dernier_echec DESC, i.id DESC'
+            : 'dernier_juste ASC, (echecs + sauts) DESC, dernier_echec DESC, i.id DESC'
+        }
         LIMIT ?`,
     )
     .all(...params, f.limite ?? 200) as Array<Record<string, unknown>>
@@ -145,6 +165,8 @@ export interface ResumeCarnet {
   aTravailler: number
   comprises: number
   parSection: Array<{ section: string; libelle: string; n: number }>
+  /** Les types de question qui reviennent le plus dans ce qui reste à revoir. */
+  parType: Array<{ skillId: string; libelle: string; section: string; n: number }>
 }
 
 /** De quoi afficher un compteur sans charger tout le carnet. */
@@ -173,9 +195,25 @@ export function resumeCarnet(): ResumeCarnet {
     parSection.set(l.section, (parSection.get(l.section) ?? 0) + l.n)
   }
 
+  const parType = db()
+    .prepare(
+      `SELECT i.skill_id AS skillId, k.libelle, i.section, COUNT(DISTINCT i.id) AS n
+         FROM item i
+         JOIN attempt a          ON a.item_id = i.id
+         JOIN skill k            ON k.id = i.skill_id
+         LEFT JOIN carnet_note c ON c.item_id = i.id
+        WHERE i.exam_id = 'tagemage' AND (a.est_correct = 0 OR a.a_saute = 1)
+          AND c.compris_le IS NULL
+        GROUP BY i.skill_id
+        ORDER BY n DESC
+        LIMIT 8`,
+    )
+    .all() as ResumeCarnet['parType']
+
   return {
     aTravailler,
     comprises,
+    parType,
     parSection: [...parSection.entries()]
       .map(([section, n]) => ({
         section,
@@ -235,7 +273,11 @@ export function marquerCompris(itemId: number, compris: boolean): void {
  * lecture du carnet, où la fraîcheur prime, une série de rattrapage doit
  * attaquer ce qui résiste.
  */
-export function itemsARejouer(section: string | null, taille: number): number[] {
+export function itemsARejouer(
+  section: string | null,
+  taille: number,
+  skillId: string | null = null,
+): number[] {
   const lignes = db()
     .prepare(
       `SELECT i.id,
@@ -246,12 +288,15 @@ export function itemsARejouer(section: string | null, taille: number): number[] 
         WHERE i.exam_id = 'tagemage' AND i.statut = 'valide'
           AND c.compris_le IS NULL
           ${section ? 'AND i.section = ?' : ''}
+          ${skillId ? 'AND i.skill_id = ?' : ''}
         GROUP BY i.id
        HAVING ratés > 0
         ORDER BY ratés DESC, RANDOM()
         LIMIT ?`,
     )
-    .all(...(section ? [section] : []), taille) as Array<{ id: number }>
+    .all(...(section ? [section] : []), ...(skillId ? [skillId] : []), taille) as Array<{
+    id: number
+  }>
 
   return lignes.map((l) => l.id)
 }

@@ -120,15 +120,20 @@ export default function ImportClient({
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <Link href="/" className="text-sm text-doux hover:text-texte">
-        ← Accueil
+      <Link href="/atelier" className="text-sm text-doux hover:text-texte">
+        ← Mes questions
       </Link>
 
       <header className="mt-6 mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Atelier d’import</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Coller des questions</h1>
         <p className="mt-1 text-sm text-doux">
-          Colle un bloc de questions, ou ouvre un fichier depuis ton disque. Rien n’est
-          téléchargé depuis Internet.
+          Colle un bloc de questions ou un CSV, ou ouvre un fichier texte depuis ton disque. Rien
+          n’est téléchargé depuis Internet. Pour une annale en PDF ou une série de compréhension,
+          passe par{' '}
+          <Link href="/atelier" className="text-accent hover:underline">
+            Mes questions
+          </Link>
+          .
         </p>
         <div className="mt-4 flex rounded-lg border border-bord p-1">
           {[
@@ -137,7 +142,7 @@ export default function ImportClient({
           ].map((e) => (
             <a
               key={e.id}
-              href={`/import?exam=${e.id}`}
+              href={`/atelier/import?exam=${e.id}`}
               className={`rounded px-3 py-1.5 text-sm transition ${
                 examId === e.id ? 'bg-carte-clair text-texte' : 'text-doux hover:text-texte'
               }`}

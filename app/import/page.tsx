@@ -1,34 +1,20 @@
-import ImportClient from './ImportClient'
-import { SECTIONS, skillsTageMage } from '@/exams/tagemage'
-import { PARTS, skillsToeic } from '@/exams/toeic'
+import { redirect } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
-
-export default async function PageImport({
+/**
+ * L'import par texte collé ou CSV vit désormais dans l'atelier
+ * (`/atelier/import`) : deux écrans d'import séparés, chacun sans lien clair
+ * vers l'autre, laissaient chercher où ajouter des questions. Cette route
+ * garde les anciens liens valides, paramètres compris.
+ */
+export default async function AncienImport({
   searchParams,
 }: {
-  searchParams: Promise<{ exam?: string; section?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { exam, section } = await searchParams
-  const examId = exam === 'toeic_lr' ? 'toeic_lr' : 'tagemage'
-
-  const sections =
-    examId === 'toeic_lr'
-      ? PARTS.map((p) => ({ id: p.id, libelle: `Part ${p.numero} — ${p.libelle}` }))
-      : SECTIONS.map((s) => ({ id: s.id, libelle: `${s.numero}. ${s.libelle}` }))
-
-  const skills = (examId === 'toeic_lr' ? skillsToeic() : skillsTageMage()).map((s) => ({
-    id: s.id,
-    section: s.section,
-    libelle: s.libelle,
-  }))
-
-  return (
-    <ImportClient
-      examId={examId}
-      sections={sections}
-      skills={skills}
-      sectionInitiale={section}
-    />
-  )
+  const p = new URLSearchParams()
+  for (const [k, v] of Object.entries(await searchParams)) {
+    if (typeof v === 'string') p.set(k, v)
+  }
+  const q = p.toString()
+  redirect(`/atelier/import${q ? `?${q}` : ''}`)
 }

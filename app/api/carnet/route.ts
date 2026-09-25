@@ -12,9 +12,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url)
   const section = url.searchParams.get('section') ?? undefined
   const inclureComprises = url.searchParams.get('comprises') === '1'
+  const skillId = url.searchParams.get('type') || undefined
+  const ordre = url.searchParams.get('ordre') === 'recentes' ? 'recentes' : 'priorite'
 
   return NextResponse.json({
-    entrees: entreesCarnet({ section: section || undefined, inclureComprises }),
+    entrees: entreesCarnet({ section: section || undefined, skillId, ordre, inclureComprises }),
     resume: resumeCarnet(),
   })
 }

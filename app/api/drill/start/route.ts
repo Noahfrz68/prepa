@@ -27,7 +27,11 @@ export async function POST(request: Request) {
 
     // Le carnet impose ses questions : `section` sert alors de filtre, et
     // « toutes » signifie qu'on rejoue les erreurs de tous les sous-tests.
-    const imposes = carnet ? itemsARejouer(section === 'toutes' ? null : section, n) : []
+    // Un seul type demandé (filtre du carnet) : on ne rejoue que celui-là.
+    const typeCarnet = Array.isArray(skills) && skills.length === 1 ? skills[0] : null
+    const imposes = carnet
+      ? itemsARejouer(section === 'toutes' ? null : section, n, typeCarnet)
+      : []
     if (carnet && imposes.length === 0) {
       return NextResponse.json(
         { erreur: 'Rien à rejouer : aucune erreur en attente pour ce filtre.' },

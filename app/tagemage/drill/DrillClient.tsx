@@ -353,8 +353,8 @@ export default function DrillClient({
     return (
       <Coquille section={titre}>
         <p className="text-faux">{erreur}</p>
-        <Link href="/import" className="mt-4 inline-block text-sm text-accent hover:underline">
-          Ouvrir l’atelier d’import →
+        <Link href="/atelier" className="mt-4 inline-block text-sm text-accent hover:underline">
+          Ouvrir l’atelier →
         </Link>
       </Coquille>
     )

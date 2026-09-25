@@ -11,6 +11,21 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * « 21 septembre », ou « 21 septembre 2025 » hors de l'année en cours.
+ * SQLite écrit l'heure en UTC sans le dire : on la lit comme telle, puis on
+ * l'affiche à l'heure locale — une épreuve passée à 1 h du matin reste du jour.
+ */
+function jourLisible(sqliteUtc: string): string {
+  const d = new Date(`${sqliteUtc.replace(' ', 'T')}Z`)
+  if (Number.isNaN(d.getTime())) return sqliteUtc.slice(0, 10)
+  return d.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' as const } : {}),
+  })
+}
+
 export default function HubTageMage() {
   const sections = etatSectionsTageMage()
   const total = sections.reduce((acc, s) => acc + s.nbItems, 0)
@@ -29,7 +44,7 @@ export default function HubTageMage() {
           <h1 className="text-2xl font-semibold tracking-tight">TAGE MAGE</h1>
           <p className="mt-1 text-sm text-doux">
             Barème +4 / 0 / 0 · {SECONDES_PAR_QUESTION} s par question · une erreur ne coûte
-            rien, une case vide si.
+            rien : ne laisse jamais une case vide, une croix au hasard vaut 0,8 point en moyenne.
           </p>
         </div>
         <div className="flex gap-3">
@@ -59,8 +74,8 @@ export default function HubTageMage() {
           <p className="font-medium">La banque est vide.</p>
           <p className="mt-1 text-doux">
             Colle un bloc de questions ou un CSV pour commencer.{' '}
-            <Link href="/import" className="text-accent hover:underline">
-              Ouvrir l’atelier d’import →
+            <Link href="/atelier" className="text-accent hover:underline">
+              Ouvrir l’atelier →
             </Link>
           </p>
         </div>
@@ -96,11 +111,16 @@ export default function HubTageMage() {
                     <span className="flex-1">
                       {h.type === 'blanc' ? 'Blanc complet' : 'Diagnostic'}
                       {!h.conditionsReelles && (
-                        <span className="ml-2 text-xs text-blanc">format réduit</span>
+                        <span
+                          className="ml-2 text-xs text-blanc"
+                          title="La banque manquait de questions pour au moins un sous-test"
+                        >
+                          banque incomplète
+                        </span>
                       )}
                     </span>
                     <span className="chiffres text-doux">{h.n} questions</span>
-                    <span className="chiffres text-doux">{h.debut.slice(0, 10)}</span>
+                    <span className="text-doux">{jourLisible(h.debut)}</span>
                     <span className="chiffres w-20 text-right font-medium">
                       {h.scoreEchelle ?? '—'} / 600
                     </span>
@@ -149,7 +169,7 @@ export default function HubTageMage() {
               </Link>
             ) : (
               <Link
-                href={`/import?section=${s.id}`}
+                href={`/atelier/import?section=${s.id}`}
                 className="rounded-lg border border-bord px-3.5 py-2 text-sm text-doux transition hover:text-texte"
               >
                 Importer

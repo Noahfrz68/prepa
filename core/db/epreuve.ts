@@ -97,7 +97,10 @@ export function demarrerEpreuve(mode: ModeEpreuve): EpreuvePreparee {
       optionsFigure: lireCases(l.options_figure),
     }))
 
-    return { ...e, items, manquantes: e.questions - items.length }
+    // Borné à zéro : un sous-test servi avec PLUS de questions que prévu (textes
+    // entiers en compréhension) n'en manque d'aucune — le négatif déclarait
+    // l'épreuve incomplète à tort (voir migration 018).
+    return { ...e, items, manquantes: Math.max(0, e.questions - items.length) }
   })
 
   const total = etapes.reduce((acc, e) => acc + e.items.length, 0)

@@ -41,7 +41,7 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
       <header className="mt-6 mb-8">
         <p className="text-sm uppercase tracking-widest text-doux">
           {LIBELLE_MODE[recap.mode]}
-          {!recap.conditionsReelles && ' · format réduit'}
+          {!recap.conditionsReelles && ' · banque incomplète'}
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           Score estimé{' '}

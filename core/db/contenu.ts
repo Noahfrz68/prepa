@@ -5,6 +5,7 @@ import { db } from './queries'
 import { libelleSection } from './planification'
 import type { QuestionPdf } from '@/core/import/pdf'
 import { ErreurRequete } from '@/core/erreurs'
+import { normaliserMultiplication, normaliserMultiplicationSi } from '@/core/import/typographie'
 
 /**
  * Atelier de contenu : relecture, détection d'items suspects, doublons.
@@ -53,7 +54,17 @@ export function insererDepuisPdf(
   let doublons = 0
 
   const tout = d.transaction((liste: QuestionPdf[]) => {
-    for (const q of liste) {
+    for (const brute of liste) {
+      // Typographie normalisée AVANT le contrôle de doublon : c'est la forme
+      // stockée qu'il faut comparer, sinon réimporter la même annale doublerait.
+      const q = {
+        ...brute,
+        enonce: normaliserMultiplication(brute.enonce),
+        info1: normaliserMultiplicationSi(brute.info1),
+        info2: normaliserMultiplicationSi(brute.info2),
+        options: brute.options.map(normaliserMultiplication),
+        explication: normaliserMultiplicationSi(brute.explication),
+      }
       if (existe.get(examId, q.section, q.enonce)) {
         doublons++
         continue

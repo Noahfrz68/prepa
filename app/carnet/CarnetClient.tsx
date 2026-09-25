@@ -5,9 +5,10 @@ import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { poster, lire } from '@/app/_composants/reseau'
 import { OPTIONS_CONDITIONS_MINIMALES } from '@/exams/tagemage'
-import type { EntreeCarnet, ResumeCarnet } from '@/core/db/carnet'
+import type { EntreeCarnet, OrdreCarnet, ResumeCarnet } from '@/core/db/carnet'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
+const PAR_TRANCHE = 10
 
 /**
  * Le carnet d'erreurs.
@@ -27,21 +28,29 @@ export default function CarnetClient({
   const [entrees, setEntrees] = useState(entreesInitiales)
   const [resume, setResume] = useState(resumeInitial)
   const [section, setSection] = useState<string>('')
+  const [type, setType] = useState<string>('')
+  const [ordre, setOrdre] = useState<OrdreCarnet>('priorite')
   const [comprises, setComprises] = useState(false)
   const [chargement, setChargement] = useState(false)
+  // Deux cents questions d'un bloc ne se lisent pas : on en montre dix, les
+  // plus prioritaires, et le reste à la demande.
+  const [visibles, setVisibles] = useState(PAR_TRANCHE)
 
   const recharger = useCallback(
-    async (s: string, avecComprises: boolean) => {
+    async (f: { section: string; type: string; ordre: OrdreCarnet; comprises: boolean }) => {
       setChargement(true)
       try {
         const p = new URLSearchParams()
-        if (s) p.set('section', s)
-        if (avecComprises) p.set('comprises', '1')
+        if (f.section) p.set('section', f.section)
+        if (f.type) p.set('type', f.type)
+        if (f.ordre !== 'priorite') p.set('ordre', f.ordre)
+        if (f.comprises) p.set('comprises', '1')
         const data = await lire<{ entrees: EntreeCarnet[]; resume: ResumeCarnet }>(
           `/api/carnet?${p}`,
         )
         setEntrees(data.entrees)
         setResume(data.resume)
+        setVisibles(PAR_TRANCHE)
       } finally {
         setChargement(false)
       }
@@ -49,11 +58,24 @@ export default function CarnetClient({
     [],
   )
 
-  const changerFiltre = (s: string, avecComprises: boolean) => {
-    setSection(s)
-    setComprises(avecComprises)
-    void recharger(s, avecComprises)
+  const changerFiltre = (
+    changements: Partial<{ section: string; type: string; ordre: OrdreCarnet; comprises: boolean }>,
+  ) => {
+    const f = { section, type, ordre, comprises, ...changements }
+    // Un type appartient à un sous-test : changer de sous-test l'efface.
+    if (changements.section !== undefined && changements.type === undefined) f.type = ''
+    setSection(f.section)
+    setType(f.type)
+    setOrdre(f.ordre)
+    setComprises(f.comprises)
+    void recharger(f)
   }
+
+  const typesAffiches = resume.parType.filter((t) => !section || t.section === section)
+  const lienRejouer =
+    `/tagemage/drill?section=${section || 'toutes'}&carnet=1` +
+    `&taille=${Math.min(15, type ? (resume.parType.find((t) => t.skillId === type)?.n ?? 15) : resume.aTravailler)}` +
+    (type ? `&skills=${type}` : '')
 
   /** Retire l'entrée de la liste sans recharger : le geste doit être immédiat. */
   const apresCompris = (itemId: number, compris: boolean, nouveauResume: ResumeCarnet) => {
@@ -100,30 +122,64 @@ export default function CarnetClient({
 
           {resume.aTravailler > 0 && (
             <Link
-              href={`/tagemage/drill?section=${section || 'toutes'}&carnet=1&taille=${Math.min(15, resume.aTravailler)}`}
+              href={lienRejouer}
               className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-fond hover:opacity-90"
             >
-              Rejouer mes erreurs
+              Rejouer {type ? 'ce type' : 'mes erreurs'}
             </Link>
           )}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <Filtre actif={section === ''} onClick={() => changerFiltre('', comprises)}>
+          <Filtre actif={section === ''} onClick={() => changerFiltre({ section: '' })}>
             Tous les sous-tests
           </Filtre>
           {resume.parSection.map((s) => (
             <Filtre
               key={s.section}
               actif={section === s.section}
-              onClick={() => changerFiltre(s.section, comprises)}
+              onClick={() => changerFiltre({ section: s.section })}
             >
               {s.libelle} <span className="chiffres text-doux">{s.n}</span>
             </Filtre>
           ))}
-          <Filtre actif={comprises} onClick={() => changerFiltre(section, !comprises)}>
+          <Filtre actif={comprises} onClick={() => changerFiltre({ comprises: !comprises })}>
             {comprises ? 'Masquer les comprises' : 'Montrer les comprises'}
           </Filtre>
+        </div>
+
+        {typesAffiches.length > 0 && (
+          <div className="mt-4 border-t border-bord pt-3">
+            <p className="mb-2 text-xs uppercase tracking-widest text-doux">
+              Les types qui reviennent le plus
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {typesAffiches.map((t) => (
+                <Filtre
+                  key={t.skillId}
+                  actif={type === t.skillId}
+                  onClick={() => changerFiltre({ type: type === t.skillId ? '' : t.skillId })}
+                >
+                  {t.libelle} <span className="chiffres text-doux">{t.n}</span>
+                </Filtre>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-bord pt-3 text-xs text-doux">
+          <span className="mr-1">Ordre :</span>
+          <Filtre actif={ordre === 'priorite'} onClick={() => changerFiltre({ ordre: 'priorite' })}>
+            Priorité
+          </Filtre>
+          <Filtre actif={ordre === 'recentes'} onClick={() => changerFiltre({ ordre: 'recentes' })}>
+            Plus récentes
+          </Filtre>
+          {ordre === 'priorite' && (
+            <span className="ml-1">
+              pas encore réussies depuis, puis les plus souvent ratées, puis les plus récentes
+            </span>
+          )}
         </div>
       </section>
 
@@ -135,11 +191,27 @@ export default function CarnetClient({
         </p>
       )}
 
+      {!chargement && entrees.length > 0 && ordre === 'priorite' && (
+        <h2 className="mb-3 text-sm uppercase tracking-widest text-doux">
+          À revoir en priorité
+        </h2>
+      )}
+
       <ol className="space-y-3">
-        {entrees.map((e) => (
+        {entrees.slice(0, visibles).map((e) => (
           <Entree key={e.itemId} e={e} onCompris={apresCompris} />
         ))}
       </ol>
+
+      {entrees.length > visibles && (
+        <button
+          onClick={() => setVisibles((v) => v + 20)}
+          className="mt-4 w-full rounded-lg border border-bord px-4 py-2.5 text-sm text-doux transition hover:text-texte"
+        >
+          Afficher {Math.min(20, entrees.length - visibles)} de plus ·{' '}
+          <span className="chiffres">{entrees.length - visibles}</span> restantes
+        </button>
+      )}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { itemsComprehensionGroupes } from './selection'
 import type { ItemParse } from '@/core/import/parse'
 import { ErreurRequete } from '@/core/erreurs'
 import { tempsBorne, verifierSessionOuverte } from './garde'
+import { normaliserMultiplication, normaliserMultiplicationSi } from '@/core/import/typographie'
 
 let amorce = false
 
@@ -551,14 +552,17 @@ export function insererItems(items: ItemParse[], opts: OptionsImport): number {
         section: opts.section,
         skill_id: opts.skillId ?? null,
         type_item: it.typeItem,
-        enonce: it.enonce,
+        enonce: normaliserMultiplication(it.enonce),
         contexte_texte: it.contexteTexte ?? null,
-        info_1: it.info1 ?? null,
-        info_2: it.info2 ?? null,
-        options: it.typeItem === 'conditions_minimales' ? null : JSON.stringify(it.options),
+        info_1: normaliserMultiplicationSi(it.info1) ?? null,
+        info_2: normaliserMultiplicationSi(it.info2) ?? null,
+        options:
+          it.typeItem === 'conditions_minimales'
+            ? null
+            : JSON.stringify(it.options.map(normaliserMultiplication)),
         bonne_reponse: it.bonneReponse,
         difficulte: it.difficulte ?? null,
-        explication: it.explication ?? null,
+        explication: normaliserMultiplicationSi(it.explication) ?? null,
         source: opts.source,
       })
     }

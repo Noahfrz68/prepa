@@ -422,8 +422,8 @@ export default function AtelierClient({
             Repérer les questions douteuses
           </button>
 
-          <Link href="/import" className="text-sm text-doux hover:text-texte">
-            Coller du texte →
+          <Link href="/atelier/import" className="text-sm text-doux hover:text-texte">
+            Coller du texte ou un CSV →
           </Link>
         </div>
 
@@ -479,8 +479,19 @@ export default function AtelierClient({
                       style={{ width: `${Math.min(100, (total / Math.max(1, cible)) * 100)}%` }}
                     />
                   </div>
-                  <span className="chiffres w-16 text-right text-sm text-doux">
-                    {total} / {cible}
+                  {/* « 400 / 200 » se lisait comme une erreur de compte : au-delà
+                      de l'objectif, on dit le dépassement. */}
+                  <span className="chiffres min-w-16 text-right text-sm text-doux">
+                    {total > cible ? (
+                      <>
+                        {total}{' '}
+                        <span className="text-xs text-juste">objectif {cible} dépassé</span>
+                      </>
+                    ) : (
+                      <>
+                        {total} / {cible}
+                      </>
+                    )}
                   </span>
                 </div>
 
@@ -490,7 +501,7 @@ export default function AtelierClient({
                     disabled={enCours !== null || atteint}
                     className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-fond transition hover:opacity-90 disabled:opacity-40"
                   >
-                    {enCours === g.section ? 'En cours…' : atteint ? 'Complet' : 'Compléter'}
+                    {enCours === g.section ? 'En cours…' : atteint ? 'Objectif atteint' : 'Compléter'}
                   </button>
                   {g.engendrees > 0 && (
                     <button
