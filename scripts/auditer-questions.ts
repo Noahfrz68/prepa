@@ -25,6 +25,7 @@ interface Item {
   id: number
   section: string
   source: string
+  statut: string
   type_item: string
   enonce: string
   contexte_texte: string | null
@@ -39,7 +40,7 @@ const db = new Database(path.join(process.cwd(), 'data', 'app.db'), { readonly: 
 db.pragma('busy_timeout = 5000')
 const items = db
   .prepare(
-    `SELECT id, section, source, type_item, enonce, contexte_texte, options,
+    `SELECT id, section, source, statut, type_item, enonce, contexte_texte, options,
             bonne_reponse, explication_reference, media_id, figure
        FROM item WHERE exam_id = 'tagemage'`,
   )
@@ -126,6 +127,67 @@ for (const it of items) {
   }
 
   if (!it.explication_reference?.trim()) noter('sans-correction', it, '')
+
+  // Une phrase qui commence par une minuscule : « …d'un tiers. la limitation… ».
+  // Une abréviation (« cf. ») ou une variable (« x³ ») ne comptent pas.
+  for (const t of [e, ...opts]) {
+    const m = [...t.matchAll(/(\S+)[.!?]\s+([a-zàâäéèêëîïôöûùüç]\S*)/g)].find(
+      ([, avant, apres]) => !/^(cf|etc|ex|env|p)$/i.test(avant) && !/^[a-z](?![a-zàâäéèêëîïôöûùüç])/.test(apres),
+    )
+    if (m) {
+      noter('minuscule-apres-point', it, `« …${m[0].slice(0, 50)}… »`)
+      break
+    }
+  }
+
+  // Point décimal anglais (« 2.5 cm ») dans l'énoncé, les propositions ou la
+  // démarche. En expression, un nombre cité peut faire partie de la phrase
+  // jugée : on n'y regarde que la démarche.
+  const aVerifier = it.section === 'expression' ? [it.explication_reference ?? ''] : [e, ...opts, it.explication_reference ?? '']
+  const decimal = aVerifier.map((t) => t.match(/\b\d+\.\d+\b/)).find(Boolean)
+  if (decimal) noter('point-decimal', it, `« ${decimal[0]} »`)
+
+  // Une proposition seule à porter des décimales (ou seule à ne pas en porter)
+  // se désigne par sa forme, sans calcul.
+  if (opts.length === 5 && opts.every((o) => (o.match(/\d[\d   ]*(?:,\d+)?/g) ?? []).length === 1)) {
+    const decimales = opts.map((o) => /\d,\d/.test(o))
+    const n = decimales.filter(Boolean).length
+    if (n === 1 || n === 4) noter('format-unique', it, opts.join(' · '))
+  }
+}
+
+/* ---------------------------------------- textes et types trop minces -- */
+
+// Un texte de compréhension se sert par cinq questions : en dessous, il n'est
+// jamais tiré en série normale, et ses questions dorment.
+const parTexte = new Map<string, Item[]>()
+for (const it of items) {
+  if (it.section !== 'comprehension' || it.statut !== 'valide' || !it.contexte_texte) continue
+  if (!parTexte.has(it.contexte_texte)) parTexte.set(it.contexte_texte, [])
+  parTexte.get(it.contexte_texte)!.push(it)
+}
+for (const [texte, liste] of parTexte) {
+  if (liste.length < 5) {
+    noter('texte-incomplet', liste[0], `${liste.length} question(s) valide(s) sur « ${texte.slice(0, 40)}… »`)
+  }
+}
+
+// Un type de question avec moins de cinq questions ne remplit pas une série
+// ciblée, et le plan ne le vise plus (QUESTIONS_MIN_CIBLAGE).
+const parType = db
+  .prepare(
+    `SELECT s.id, s.section,
+            (SELECT COUNT(*) FROM item i WHERE i.skill_id = s.id AND i.statut = 'valide') AS n
+       FROM skill s WHERE s.exam_id = 'tagemage'`,
+  )
+  .all() as Array<{ id: string; section: string; n: number }>
+for (const t of parType) {
+  if (t.n < 5) {
+    defauts.set('type-peu-fourni', [
+      ...(defauts.get('type-peu-fourni') ?? []),
+      { id: 0, section: t.section, detail: `${t.id.split('.').pop()} : ${t.n} question(s) valide(s)` },
+    ])
+  }
 }
 
 /* ------------------------------------------- répartition des réponses -- */

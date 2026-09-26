@@ -11,6 +11,12 @@
  * On répartit donc les questions entre les sous-compétences, au prorata de
  * leur poids à l'examen, et on n'accepte jamais deux fois le même modèle
  * d'énoncé dans une épreuve tant qu'il reste autre chose à servir.
+ *
+ * Le même tirage sert désormais les séries d'entraînement : elles pouvaient
+ * enchaîner neuf fois le même problème d'urne avec d'autres nombres. Et la
+ * fraîcheur se juge au MODÈLE, pas seulement à la question : une question
+ * jamais vue d'un modèle vu vingt fois n'apprend plus grand-chose, et sa
+ * réussite mesure la familiarité plus que la méthode.
  */
 
 import type { Alea } from '@/core/generation/alea'
@@ -21,6 +27,16 @@ export interface Candidat {
   enonce: string
   /** Nombre de fois où la question a déjà été servie. */
   vu: number
+  /** Question tirée d'une annale réelle. */
+  annale?: boolean
+}
+
+export interface OptionsTirage {
+  /**
+   * Épreuves : les annales jamais vues passent devant. Ce sont les seules
+   * questions qui mesurent le niveau à l'épreuve réelle sans familiarité.
+   */
+  prioriteAnnales?: boolean
 }
 
 /**
@@ -83,11 +99,24 @@ export function tirageEquilibre(
   n: number,
   poidsCompetences: Map<string, number>,
   alea: Alea,
+  options: OptionsTirage = {},
 ): Candidat[] {
   if (n <= 0 || candidats.length === 0) return []
 
-  // Les moins vues d'abord, le hasard départage.
-  const melanges = alea.melanger(candidats).sort((a, b) => a.vu - b.vu)
+  // Exposition de chaque modèle : toutes ses variantes confondues.
+  const vuModele = new Map<string, number>()
+  for (const c of candidats) {
+    const k = `${c.skillId ?? '∅'}|${modeleEnonce(c.enonce)}`
+    vuModele.set(k, (vuModele.get(k) ?? 0) + c.vu)
+  }
+  const expo = (c: Candidat) => vuModele.get(`${c.skillId ?? '∅'}|${modeleEnonce(c.enonce)}`) ?? 0
+  const inedite = (c: Candidat) => (options.prioriteAnnales && c.annale && c.vu === 0 ? 0 : 1)
+
+  // Annales inédites d'abord (épreuves), puis les modèles les moins vus, puis
+  // les questions les moins vues ; le hasard départage.
+  const melanges = alea
+    .melanger(candidats)
+    .sort((a, b) => inedite(a) - inedite(b) || expo(a) - expo(b) || a.vu - b.vu)
 
   const parSkill = new Map<string, Candidat[]>()
   for (const c of melanges) {

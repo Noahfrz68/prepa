@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { reponseErreur } from '@/app/api/erreurs'
-import { abandonnerSession, ajouterTempsCorrection, etatSession } from '@/core/db/sessions'
+import { abandonnerSession, ajouterCoupure, ajouterTempsCorrection, etatSession } from '@/core/db/sessions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,9 +14,9 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: Request) {
   try {
     const { action, sessionId, ms } = (await request.json()) as {
-      action?: 'etat' | 'abandonner' | 'correction'
+      action?: 'etat' | 'abandonner' | 'correction' | 'coupure'
       sessionId?: number
-      /** Temps de lecture des corrections (action « correction »). */
+      /** Temps de lecture des corrections (« correction ») ou durée d'une coupure (« coupure »). */
       ms?: number
     }
     const id = Number(sessionId)
@@ -27,6 +27,10 @@ export async function POST(request: Request) {
     if (action === 'etat') return NextResponse.json(etatSession(id))
     if (action === 'correction') {
       ajouterTempsCorrection(id, Number(ms))
+      return NextResponse.json({ ok: true })
+    }
+    if (action === 'coupure') {
+      ajouterCoupure(id, Number(ms))
       return NextResponse.json({ ok: true })
     }
     if (action === 'abandonner') {

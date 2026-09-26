@@ -5,7 +5,6 @@ import {
   TACHES_PAR_TYPE,
   compterMots,
   type NoteCritere,
-  type TypeTacheWriting,
 } from '@/exams/toeic/writing'
 import {
   enregistrerNotation,

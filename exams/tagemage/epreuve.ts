@@ -59,6 +59,14 @@ export function composerEpreuve(mode: ModeEpreuve): Etape[] {
   })
 }
 
+/**
+ * Coupure tolérée pendant une épreuve (onglet fermé par erreur, page
+ * rechargée). Au-delà, le chronomètre est resté gelé assez longtemps pour
+ * qu'on ait pu réfléchir hors du temps : l'épreuve n'est plus en conditions
+ * réelles.
+ */
+export const COUPURE_TOLEREE_MS = 5 * 60 * 1000
+
 export function dureeTotaleMinutes(etapes: Etape[]): number {
   return Math.round(etapes.reduce((acc, e) => acc + e.secondes, 0) / 60)
 }

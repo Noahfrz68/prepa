@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { notFound } from 'next/navigation'
 import { recapEpreuve, type CorrectionEpreuve } from '@/core/db/epreuve'
-import { LIBELLE_MODE } from '@/exams/tagemage/epreuve'
+import { reussiteParOrigine } from '@/core/db/arbitrage'
+import { COUPURE_TOLEREE_MS, LIBELLE_MODE } from '@/exams/tagemage/epreuve'
+import { descriptionComposition } from '@/core/stats/nature'
 import { MINIMUM_ESTIMATION, CIBLE_REUSSITE_LEVIER } from '@/core/stats/diagnostic'
 import { REPERES } from '@/core/scoring/tagemage'
 import { SECTIONS_PAR_ID } from '@/exams/tagemage'
@@ -27,6 +29,7 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
   }
 
   const { scoreEstime: s, fatigue, totaux, ecart } = recap
+  const origines = recap.nature === 'generees' ? reussiteParOrigine() : null
 
   // Une épreuve abandonnée en route n'a pas de score : extrapoler 38 questions
   // prises dans les premiers sous-tests à l'épreuve entière donnait 568 sur
@@ -44,7 +47,10 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
       <header className="mt-6 mb-8">
         <p className="text-sm uppercase tracking-widest text-doux">
           {LIBELLE_MODE[recap.mode]}
-          {!recap.conditionsReelles && ' · banque incomplète'}
+          {recap.papier && ' · sur papier'}
+          {recap.coupureMs > COUPURE_TOLEREE_MS
+            ? ` · reprise après ${Math.round(recap.coupureMs / 60000)} min de coupure, hors conditions réelles`
+            : !recap.conditionsReelles && ' · banque incomplète'}
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           Score estimé{' '}
@@ -56,6 +62,18 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
           <span className="chiffres text-texte">{s.haut}</span>. Extrapolé depuis {totaux.n}{' '}
           question{totaux.n > 1 ? 's' : ''}.
           {!s.fiable && ` En dessous de ${MINIMUM_ESTIMATION} questions, cet intervalle est trop large pour décider quoi que ce soit.`}
+        </p>
+        <p className="mt-2 text-sm text-doux">
+          Composition : {descriptionComposition(recap.partAnnales)}.
+          {recap.nature === 'generees' && ' Ce score ne se compare qu’aux autres épreuves de questions générées.'}
+          {recap.nature === 'generees' && origines && origines.autres > origines.annales + 0.05 && (
+            <>
+              {' '}Sur ton historique, tu réussis{' '}
+              <span className="chiffres text-texte">{Math.round(origines.autres * 100)} %</span> des questions
+              générées contre <span className="chiffres text-texte">{Math.round(origines.annales * 100)} %</span>{' '}
+              des annales : il surestime probablement ton niveau à l’épreuve réelle.
+            </>
+          )}
         </p>
         <p className="mt-2 text-xs text-doux">
           Repères : moyenne nationale {REPERES.moyenneNationale[0]}–{REPERES.moyenneNationale[1]} ·

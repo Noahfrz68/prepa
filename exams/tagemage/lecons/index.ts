@@ -97,7 +97,46 @@ export const PARCOURS: EtapeParcours[] = [
     ],
   },
   {
-    titre: '4. Le reste du calcul, et l’argumentation',
+    titre: '4. Les conditions minimales, famille par famille',
+    pourquoi:
+      'Le format A–E est acquis, le socle de calcul aussi : reste à reconnaître, dans chaque ' +
+      'famille, ce qui suffit sans rien calculer. Ce n’est pas une finition — c’est le cœur du ' +
+      'sous-test 4, et il réutilise ce qu’on vient d’apprendre en calcul.',
+    duree: 'une semaine',
+    skillIds: [
+      'tm.conditions_minimales.cm_pourcentages_et_variations',
+      'tm.conditions_minimales.cm_proportionnalite_et_ratios',
+      'tm.conditions_minimales.cm_equations_et_systemes',
+      'tm.conditions_minimales.cm_arithmetique_et_divisibilite',
+      'tm.conditions_minimales.cm_geometrie',
+      'tm.conditions_minimales.cm_statistiques_et_probabilites',
+    ],
+  },
+  {
+    titre: '5. Le verbal, qui se construit lentement',
+    pourquoi:
+      'La compréhension et l’expression dépendent d’une langue qui ne s’acquiert pas en quinze ' +
+      'jours. On les travaille en fond dès le début, un peu chaque jour, sans en attendre le ' +
+      'saut que produisent les sous-tests méthodiques.',
+    duree: 'en continu, du premier au dernier jour',
+    skillIds: [
+      'tm.comprehension.idee_principale',
+      'tm.comprehension.detail_explicite',
+      'tm.comprehension.inference',
+      'tm.comprehension.structure_argumentative',
+      'tm.comprehension.ton_et_intention_de_l_auteur',
+      'tm.comprehension.vocabulaire_en_contexte',
+      'tm.expression.orthographe',
+      'tm.expression.grammaire_et_conjugaison',
+      'tm.expression.synonymes_et_antonymes',
+      'tm.expression.connecteurs_logiques',
+      'tm.expression.correction_syntaxique',
+      'tm.expression.reformulation',
+      'tm.expression.coherence_et_registre',
+    ],
+  },
+  {
+    titre: '6. Le reste du calcul, et l’argumentation',
     pourquoi:
       'Familles moins fréquentes mais qui tombent, et les quatre types d’argumentation, qui ' +
       'suivent tous la même démarche une fois qu’on sait nommer la faille d’un raisonnement.',
@@ -116,38 +155,13 @@ export const PARCOURS: EtapeParcours[] = [
     ],
   },
   {
-    titre: '5. Le verbal, qui se construit lentement',
+    titre: '7. La logique figurée',
     pourquoi:
-      'La compréhension et l’expression dépendent d’une langue qui ne s’acquiert pas en quinze ' +
-      'jours. On les travaille en fond dès le début, un peu chaque jour, sans en attendre le ' +
-      'saut que produisent les sous-tests méthodiques.',
-    duree: 'en continu, du premier au dernier jour',
+      'Mêmes gestes que la logique en lettres et en nombres — convertir, décomposer en ' +
+      'attributs, valider sur tous les éléments —, appliqués à des figures. Une fois la ' +
+      'procédure acquise à l’étape 2, ces huit familles se prennent en une semaine.',
+    duree: 'une semaine',
     skillIds: [
-      'tm.comprehension.idee_principale',
-      'tm.comprehension.detail_explicite',
-      'tm.comprehension.inference',
-      'tm.expression.orthographe',
-      'tm.expression.grammaire_et_conjugaison',
-      'tm.expression.synonymes_et_antonymes',
-      'tm.expression.connecteurs_logiques',
-    ],
-  },
-  {
-    titre: '6. Les finitions',
-    pourquoi:
-      'Types plus rares, ou plus fins. À garder pour le moment où le reste tient : les traiter ' +
-      'trop tôt coûte du temps qui rapporterait davantage ailleurs.',
-    duree: 'la dernière semaine',
-    skillIds: [
-      'tm.calcul.probabilites',
-      'tm.calcul.denombrement',
-      'tm.calcul.suites_et_progressions',
-      'tm.conditions_minimales.cm_equations_et_systemes',
-      'tm.conditions_minimales.cm_pourcentages_et_variations',
-      'tm.conditions_minimales.cm_proportionnalite_et_ratios',
-      'tm.conditions_minimales.cm_geometrie',
-      'tm.conditions_minimales.cm_arithmetique_et_divisibilite',
-      'tm.conditions_minimales.cm_statistiques_et_probabilites',
       'tm.logique.operations_codees',
       'tm.logique.matrices_de_figures',
       'tm.logique.suites_de_figures',
@@ -156,14 +170,21 @@ export const PARCOURS: EtapeParcours[] = [
       'tm.logique.analogies_de_figures',
       'tm.logique.dominos',
       'tm.logique.cartes',
+    ],
+  },
+  {
+    titre: '8. Les finitions',
+    pourquoi:
+      'Les types vraiment rares. À garder pour le moment où le reste tient : les traiter ' +
+      'trop tôt coûte du temps qui rapporterait davantage ailleurs. Cinq leçons, pas vingt-cinq ' +
+      'à caser dans la semaine de l’examen.',
+    duree: 'les deux dernières semaines',
+    skillIds: [
+      'tm.calcul.probabilites',
+      'tm.calcul.denombrement',
+      'tm.calcul.suites_et_progressions',
       'tm.raisonnement.raisonnement_par_analogie',
       'tm.raisonnement.resoudre_un_paradoxe',
-      'tm.comprehension.ton_et_intention_de_l_auteur',
-      'tm.comprehension.structure_argumentative',
-      'tm.comprehension.vocabulaire_en_contexte',
-      'tm.expression.correction_syntaxique',
-      'tm.expression.reformulation',
-      'tm.expression.coherence_et_registre',
     ],
   },
 ]

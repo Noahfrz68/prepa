@@ -12,13 +12,9 @@ import { resumeCarnet } from '@/core/db/carnet'
 import type { ScoreHistorique } from '@/core/db/arbitrage'
 import PremierPas, { type Etape } from './PremierPas'
 import Progression from './Progression'
+import { duree as heures } from '@/app/_composants/nombres'
 
 export const dynamic = 'force-dynamic'
-
-const heures = (min: number) =>
-  min >= 60
-    ? `${Math.floor(min / 60)} h${min % 60 ? String(min % 60).padStart(2, '0') : ''}`
-    : `${min} min`
 
 export default function Accueil() {
   // Les séances quittées en route depuis plus de 12 h sont rangées avant tout
@@ -103,6 +99,12 @@ export default function Accueil() {
               <span className="text-doux">
                 <span className="chiffres text-texte">{heures(plan.minutesFaites)}</span>{' '}
                 faites
+                {plan.minutesDeclarees > 0 && (
+                  <>
+                    {' '}+ <span className="chiffres text-texte">{heures(plan.minutesDeclarees)}</span>{' '}
+                    déclarées
+                  </>
+                )}
               </span>
               <span className="text-doux">
                 <span className="chiffres text-texte">
@@ -124,11 +126,17 @@ export default function Accueil() {
             )}
 
             <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3 text-sm">
+              {/* La prochaine séance est déjà le « À faire maintenant » du haut de page :
+                  la répéter ici l'affichait deux fois de suite. */}
               {prochaine ? (
-                <Link href={prochaine.href} className="text-accent hover:underline">
-                  → {prochaine.libelle}
-                  <span className="ml-2 text-xs text-doux">{prochaine.detail}</span>
-                </Link>
+                etape?.href === prochaine.href ? (
+                  <span />
+                ) : (
+                  <Link href={prochaine.href} className="text-accent hover:underline">
+                    → {prochaine.libelle}
+                    <span className="ml-2 text-xs text-doux">{prochaine.detail}</span>
+                  </Link>
+                )
               ) : (
                 <span className="text-doux">Tout le plan de la semaine est fait.</span>
               )}

@@ -6,7 +6,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { poster, lire } from '@/app/_composants/reseau'
 import { OPTIONS_CONDITIONS_MINIMALES } from '@/exams/tagemage'
 import type { EntreeCarnet, OrdreCarnet, ResumeCarnet } from '@/core/db/carnet'
-import { CAUSES, LIBELLE_CAUSE, REMEDE_CAUSE, type CauseErreur } from '@/core/stats/causes'
+import { PLAFOND_REPRISES_JOUR } from '@/core/scheduler/reprise'
+import { causesDe, LIBELLE_CAUSE, REMEDE_CAUSE, type CauseErreur } from '@/core/stats/causes'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
 const PAR_TRANCHE = 10
@@ -174,7 +175,15 @@ export default function CarnetClient({
           </Filtre>
           <span className="text-xs text-doux">
             Chaque erreur revient à J+1, puis J+3, puis J+7 ; réussie trois fois de suite, elle est
-            consolidée.
+            consolidée. {PLAFOND_REPRISES_JOUR} reprises par jour au plus
+            {resume.enAttente > 0 && (
+              <>
+                {' '}: <span className="chiffres text-texte">{resume.enAttente}</span> autre
+                {resume.enAttente > 1 ? 's attendent leur' : ' attend son'} tour, les plus prioritaires
+                d’abord
+              </>
+            )}
+            .
           </span>
         </div>
 
@@ -384,6 +393,8 @@ function Entree({
             <span className="text-juste">consolidée : réussie trois fois de suite</span>
           ) : e.aRejouer ? (
             <span className="text-accent">à rejouer aujourd’hui</span>
+          ) : e.enAttente ? (
+            <span>reprise due, en attente de son tour</span>
           ) : e.reprise.dueLe ? (
             <span>prochaine reprise le {jourCourt(e.reprise.dueLe)}</span>
           ) : null)}
@@ -465,9 +476,11 @@ function Entree({
           placeholder="Ce que j’ai mal lu, la règle que j’ai oubliée…"
           className="mt-1.5 w-full resize-y rounded-lg border border-bord bg-fond px-3 py-2 text-sm outline-none placeholder:text-blanc focus:border-accent"
         />
-        {/* La cause, en un clic : c'est elle qui se compte, la note se lit. */}
+        {/* La cause, en un clic : c'est elle qui se compte, la note se lit. Seules
+            les causes qui ont un sens dans ce sous-test sont proposées ; une cause
+            déclarée avant ce tri reste affichée, pour pouvoir la retirer. */}
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {CAUSES.map((c) => (
+          {[...causesDe(e.section), ...(cause && !causesDe(e.section).includes(cause) ? [cause] : [])].map((c) => (
             <button
               key={c}
               onClick={() => void choisirCause(cause === c ? null : c)}

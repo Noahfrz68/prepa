@@ -37,6 +37,22 @@ export interface ReponseGroupe {
  *    l'ordre qu'on veut : le temps échoit donc à la question qu'on vient de
  *    trancher, ce qui est exactement ce qu'on veut mesurer.
  */
+/**
+ * Temps écoulé depuis le dernier jalon, et pose du suivant. Hors du composant :
+ * elle lit l'horloge, et ne doit être appelée que depuis un gestionnaire
+ * d'événement, jamais pendant le rendu.
+ */
+function jalonnerDepuis(
+  finLecture: { current: number | null },
+  dernierJalon: { current: number },
+): number {
+  const t = Date.now()
+  if (finLecture.current === null) finLecture.current = t
+  const ecoule = t - dernierJalon.current
+  dernierJalon.current = t
+  return ecoule
+}
+
 export default function GroupeComprehension({
   texte,
   items,
@@ -55,18 +71,16 @@ export default function GroupeComprehension({
   const [etats, setEtats] = useState<Record<number, Etat>>({})
   const [envoi, setEnvoi] = useState(false)
 
-  const debut = useRef(Date.now())
+  const debut = useRef(0)
   const finLecture = useRef<number | null>(null)
-  const dernierJalon = useRef(Date.now())
+  const dernierJalon = useRef(0)
 
-  // Chaque texte repart à zéro : sans cela, le second groupe hériterait des
-  // compteurs du premier.
+  // Chaque texte repart à zéro : le parent remonte le composant à chaque
+  // texte (key), l'horloge démarre donc à l'affichage du passage.
   useEffect(() => {
     debut.current = Date.now()
-    finLecture.current = null
-    dernierJalon.current = Date.now()
-    setEtats({})
-  }, [numero])
+    dernierJalon.current = debut.current
+  }, [])
 
   /**
    * Temps écoulé depuis le dernier jalon, et pose du suivant.
@@ -77,22 +91,17 @@ export default function GroupeComprehension({
    * elle en a pris deux cents. `temps_preparation_ms` garde la part de lecture
    * à côté, pour qui veut la retrancher ; le total, lui, reste vrai.
    */
-  const jalonner = () => {
-    const t = Date.now()
-    if (finLecture.current === null) finLecture.current = t
-    const ecoule = t - dernierJalon.current
-    dernierJalon.current = t
-    return ecoule
-  }
+  const jalonner = () => jalonnerDepuis(finLecture, dernierJalon)
 
   const repondre = (itemId: number, lettre: string) => {
     // Changer d'avis avant de déclarer sa confiance ne consomme pas de temps
     // une seconde fois : on ne jalonne qu'au premier choix.
-    setEtats((e) => {
-      const deja = e[itemId]
-      const tempsMs = deja?.reponse != null ? deja.tempsMs : jalonner()
-      return { ...e, [itemId]: { reponse: lettre, confiance: null, aSaute: false, tempsMs } }
-    })
+    // Le chronomètre se lit ICI, dans le gestionnaire du clic : dans la
+    // fonction passée à setEtats, que React peut exécuter deux fois, il
+    // jalonnait deux fois et le second appel ne comptait presque rien.
+    const deja = etats[itemId]
+    const tempsMs = deja?.reponse != null ? deja.tempsMs : jalonner()
+    setEtats((e) => ({ ...e, [itemId]: { reponse: lettre, confiance: null, aSaute: false, tempsMs } }))
   }
 
   const declarerConfiance = (itemId: number, niveau: number) => {
@@ -100,10 +109,8 @@ export default function GroupeComprehension({
   }
 
   const sauter = (itemId: number) => {
-    setEtats((e) => ({
-      ...e,
-      [itemId]: { reponse: null, confiance: 1, aSaute: true, tempsMs: jalonner() },
-    }))
+    const tempsMs = jalonner()
+    setEtats((e) => ({ ...e, [itemId]: { reponse: null, confiance: 1, aSaute: true, tempsMs } }))
   }
 
   const reprendre = (itemId: number) => {

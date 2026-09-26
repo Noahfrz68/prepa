@@ -108,7 +108,16 @@ export default function DrillClient({
   /** Un envoi qui n'est pas passé, et de quoi le rejouer sans rien perdre. */
   const [enPanne, setEnPanne] = useState<EtatPanne | null>(null)
 
-  const debutItem = useRef<number>(Date.now())
+  const debutItem = useRef<number>(0)
+  /**
+   * Les versions courantes des envois, pour le bouton « Réessayer » : il
+   * rappelle l'envoi tel qu'il est au moment du clic, pas une copie figée au
+   * moment de la panne.
+   */
+  const validerGroupeCourant = useRef<(reponses: ReponseGroupe[]) => Promise<void>>(async () => {})
+  const envoyerCourant = useRef<
+    (payload: { reponse: string | null; aSaute: boolean; tempsMs: number; confiance: number }) => Promise<void>
+  >(async () => {})
   /** Début de la série : sert au rythme cumulé et au chronomètre du sprint. */
   const debutSerie = useRef<number>(0)
   const sprintClos = useRef(false)
@@ -124,12 +133,13 @@ export default function DrillClient({
    * dessous, comme à l'épreuve. On regroupe les items servis par leur texte
    * support — la sélection les a déjà rendus dans cet ordre.
    *
-   * L'exception assumée est le travail ciblé : carnet d'erreurs ou révision
-   * d'un seul type de question. On y accepte une question sous son texte,
-   * faute de pouvoir réunir cinq questions du même type sur le même passage.
+   * Même une série ciblée sur des types de questions arrive en textes entiers
+   * (core/db/selection.ts, textesPourTypes). Seuls le carnet d'erreurs et la
+   * revanche servent une question sous son texte : ils rejouent des questions
+   * précises, qu'aucun passage ne réunit par cinq.
    */
   const groupes = useMemo(() => {
-    if (section !== 'comprehension' || carnet || skills.length > 0) return null
+    if (section !== 'comprehension' || carnet || revanche) return null
     const parTexte: Array<{ texte: string; items: ItemDrill[] }> = []
     for (const it of items) {
       if (!it.contexteTexte) return null
@@ -138,8 +148,7 @@ export default function DrillClient({
       else parTexte.push({ texte: it.contexteTexte, items: [it] })
     }
     return parTexte.length > 0 ? parTexte : null
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, section, carnet, skills.join(',')])
+  }, [items, section, carnet, revanche])
 
   const [indexGroupe, setIndexGroupe] = useState(0)
 
@@ -166,7 +175,7 @@ export default function DrillClient({
         // Cinq réponses d'un coup : les perdre coûterait le texte entier.
         setEnPanne({
           message: (e as Error).message,
-          rejouer: () => void validerGroupe(reponses),
+          rejouer: () => void validerGroupeCourant.current(reponses),
         })
         setPhase('question')
       } finally {
@@ -175,6 +184,9 @@ export default function DrillClient({
     },
     [groupes, indexGroupe, sessionId],
   )
+  useEffect(() => {
+    validerGroupeCourant.current = validerGroupe
+  }, [validerGroupe])
 
   /* ------------------------------------------------------- démarrage -- */
 
@@ -277,7 +289,7 @@ export default function DrillClient({
           setPhase('recap')
         }
       } catch (e) {
-        setEnPanne({ message: (e as Error).message, rejouer: () => void envoyer(payload) })
+        setEnPanne({ message: (e as Error).message, rejouer: () => void envoyerCourant.current(payload) })
         // On revient à l'écran de la question : rester sur « chargement »
         // donnerait un écran vide sans moyen d'agir.
         setPhase(payload.aSaute ? 'question' : 'confiance')
@@ -287,6 +299,9 @@ export default function DrillClient({
     },
     [index, item, items.length, sessionId],
   )
+  useEffect(() => {
+    envoyerCourant.current = envoyer
+  }, [envoyer])
 
   const repondre = useCallback(
     (lettre: string) => {

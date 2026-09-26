@@ -91,7 +91,9 @@ Deux formats, lancés depuis le hub TAGE MAGE, avec le même moteur.
 - **Diagnostic** — 7 questions par sous-test à la cadence réelle (80 s par question). En
   compréhension, un texte long de 7 questions quand la banque en a un de validé, sinon un
   texte entier de 5 (40 questions en tout). Les questions sont réparties entre les types de chaque
-  sous-test au prorata de leur poids à l'examen, sans servir deux fois le même modèle.
+  sous-test au prorata de leur fréquence dans les annales importées (lissée : un type absent
+  d'une annale garde sa chance), sans servir deux fois le même modèle. Les questions d'annales
+  jamais vues passent en premier.
   Assez court pour être passé souvent, assez représentatif pour être extrapolé.
 - **Blanc complet** — 90 questions, 6 × 20 minutes enchaînées, sans pause ni retour arrière
   entre sous-tests. C'est le seul format qui mesure l'endurance.
@@ -360,6 +362,23 @@ transcription. Livrer une note sur ces critères serait livrer un chiffre invent
 
 - **Courbe du score** sur l'accueil et le hub, chaque épreuve avec son intervalle à 95 % et la
   cible en pointillé. Seules les épreuves terminées y figurent.
+- **Nature d'une épreuve** — une épreuve mesurée au moins pour moitié sur des annales réelles
+  (étiquette `annale`, posée automatiquement à l'import PDF) ne se compare qu'aux épreuves de
+  même nature, et inversement : écart à la précédente, ligne de la courbe (points pleins sur
+  annales, creux sinon) et pente de progression. Les questions générées sont nettement mieux
+  réussies que les annales ; mélanger les deux faisait lire un progrès là où la banque avait
+  changé. Le bilan affiche la composition et, le cas échéant, l'écart de réussite mesuré.
+- **Réserve d'annales** — une question d'annale jamais vue ne sert pas à l'entraînement : séries,
+  revanches et textes de compréhension la laissent aux épreuves, qui la servent en premier. Le hub
+  affiche la réserve par sous-test et dit quand un diagnostic peut être entièrement sur annales.
+- **Réussite à froid** — dans la stratégie, la réussite à la première rencontre d'un scénario (un
+  texte en compréhension), à côté de la réussite une fois le scénario vu plusieurs fois. C'est la
+  première qui prédit l'épreuve ; un écart de plus de 15 points signale une réussite d'habitude.
+- **Ce qui n'est pas mesuré ne compte pas comme mesuré** — une confiance laissée vide sur une
+  feuille papier est enregistrée comme non déclarée et exclue de la calibration ; le temps d'une
+  épreuve papier, déclaré par sous-test, compte dans le volume de travail mais dans aucune
+  statistique de temps ; une épreuve reprise après plus de 5 minutes de coupure (chronomètre
+  arrêté) perd son statut de conditions réelles.
 - **Difficulté observée** de chaque question, tirée des réponses réelles avec un a priori
   bayésien (une question vue deux fois ne passe pas pour « très difficile ») ; affichée comme
   fiable à partir de 5 réponses.
@@ -395,6 +414,14 @@ transcription. Livrer une note sur ces critères serait livrer un chiffre invent
 - **Épreuve sur papier** — `/tagemage/papier` compose un blanc ou un diagnostic à imprimer avec
   sa feuille de réponses, sans ouvrir de séance ; la saisie se fait ensuite, le jour même ou
   le lendemain. Le sujet et la saisie en cours sont gardés dans le navigateur.
+- **Banque enrichie** — cinq modèles de calcul de plus (probabilités, disque, volumes, suites
+  géométriques), 24 argumentaires de raisonnement de plus (129 distincts), et un générateur de
+  paradoxes : « résoudre un paradoxe » avait zéro question.
+- **Séries variées** — les séries passent par le même tirage que les épreuves : les modèles les
+  moins vus d'abord, et en calcul comme en raisonnement, pas plus de deux questions d'un même
+  modèle par série (le reste vient du sous-test). Une série de compréhension ciblée sur des types
+  de questions sert des textes entiers, ceux qui portent le plus de questions de ces types. Le
+  plan ne vise plus un type qui compte moins de 5 questions en banque.
 - **Fiches imprimables** — une par sous-test, depuis `/tagemage/cours`.
 
 **Interface**
@@ -413,7 +440,8 @@ comme tout import.
 
 ## Raccourcis clavier du drill
 
-`?` affiche, sur n'importe quelle page, les raccourcis qui y sont actifs.
+`?` (ou le petit bouton en bas à droite) affiche, sur n'importe quelle page, les raccourcis qui y
+sont actifs.
 
 | Touche | Action |
 |---|---|
@@ -502,6 +530,10 @@ base jetable désignée par `PREPA_DB`. La vraie base n'est jamais ouverte par l
   faite par l'application elle-même ; les 14 plus récentes sont conservées. Les copies
   nommées autrement ne sont jamais supprimées. Pour restaurer : arrêter l'application,
   remplacer `data/app.db` par la copie, supprimer `app.db-wal` et `app.db-shm`.
+- **Copie hors de ce disque** — `PREPA_SAUVEGARDES_EXTERNES` dans `.env.local` (un dossier
+  OneDrive, une clé USB) : chaque sauvegarde quotidienne y est recopiée, les 14 dernières
+  gardées. Désactivé par défaut. Les Réglages listent les sauvegardes et rangent, après
+  confirmation, les copies nommées « avant-… » de plus de 7 jours.
 - **Exporter** — `/reglages` télécharge la base entière (`.db`, restaurable telle quelle) ou
   un JSON lisible table par table (sans les images).
 - **Séances abandonnées** — une séance non close après 12 heures est rangée : supprimée si

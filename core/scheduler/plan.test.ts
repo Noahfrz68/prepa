@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   ECART_TOLERE,
-  MINUTES_BLANC,
   MINUTES_PAR_SEANCE,
   SKILLS_PAR_SEANCE,
   ajusterBudget,

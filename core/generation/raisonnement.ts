@@ -18,10 +18,11 @@
  * d'une annale, où le texte fait souvent six à huit lignes de prose.
  */
 
-import { capitale, type Alea } from './alea'
+import { capitale, capitaliserPhrases, type Alea } from './alea'
 import { qcmTexte } from './qcm'
 import type { Famille, QuestionGeneree } from './types'
 import { FAILLES, SCENARIOS } from './corpus-raisonnement'
+import { paradoxe } from './paradoxes'
 
 const S = 'raisonnement' as const
 
@@ -265,7 +266,7 @@ function argument(a: Alea, genre: Genre): QuestionGeneree {
   if (!faille) throw new Error(`Faille inconnue : ${scenario.faille}`)
 
   const c = scenario.contexte
-  const texte = capitale(scenario.texte(c))
+  const texte = capitaliserPhrases(scenario.texte(c))
 
   // Les leurres sont les remèdes des AUTRES failles : chacun est une phrase
   // sensée, applicable à un argument voisin, et fausse pour celui-ci. Un leurre
@@ -346,4 +347,6 @@ export const FAMILLES_RAISONNEMENT: Famille[] = [
   familleArgument('renforcer', 'renforce'),
   familleArgument('hypothèse implicite', 'presuppose'),
   familleArgument('sophisme', 'sophisme'),
+  // Le seul type qui n'avait aucune question (paradoxes.ts).
+  paradoxe,
 ]

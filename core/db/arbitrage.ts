@@ -17,6 +17,7 @@ import {
   type EntreeExamen,
 } from '@/core/scheduler/arbitrage'
 import { estimerScoreParSousTest } from '@/core/stats/diagnostic'
+import { natureDe, type NatureEpreuve } from '@/core/stats/nature'
 
 const LIBELLES: Record<string, string> = { tagemage: 'TAGE MAGE', toeic_lr: 'TOEIC' }
 export const ECHELLE_MAX: Record<string, number> = { tagemage: 600, toeic_lr: 990 }
@@ -53,6 +54,41 @@ export function scoreEstime(examId: string): number | null {
   return l?.score ?? null
 }
 
+/**
+ * Part des questions d'une épreuve tirées d'annales réelles (étiquette
+ * « annale »), entre 0 et 1. Sert à ne comparer que des épreuves de même
+ * nature (voir core/stats/nature.ts).
+ */
+export function partAnnales(sessionId: number): number {
+  const l = db()
+    .prepare(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(i.tags = 'annale'), 0) AS annales
+         FROM attempt a JOIN item i ON i.id = a.item_id
+        WHERE a.session_id = ?`,
+    )
+    .get(sessionId) as { n: number; annales: number }
+  return l.n === 0 ? 0 : l.annales / l.n
+}
+
+/**
+ * Réussite sur tout l'historique, selon l'origine des questions : annales
+ * réelles ou non. L'écart dit de combien une épreuve de questions générées
+ * surestime le niveau mesuré sur annales. Null tant qu'une des deux origines
+ * compte moins de 30 réponses.
+ */
+export function reussiteParOrigine(examId = 'tagemage'): { annales: number; autres: number } | null {
+  const l = db()
+    .prepare(
+      `SELECT SUM(i.tags = 'annale') AS nA, SUM(CASE WHEN i.tags = 'annale' THEN a.est_correct ELSE 0 END) AS jA,
+              SUM(i.tags IS NOT 'annale') AS nG, SUM(CASE WHEN i.tags IS NOT 'annale' THEN a.est_correct ELSE 0 END) AS jG
+         FROM attempt a JOIN item i ON i.id = a.item_id
+        WHERE i.exam_id = ?`,
+    )
+    .get(examId) as { nA: number | null; jA: number | null; nG: number | null; jG: number | null }
+  if (!l.nA || !l.nG || l.nA < 30 || l.nG < 30) return null
+  return { annales: (l.jA ?? 0) / l.nA, autres: (l.jG ?? 0) / l.nG }
+}
+
 /** Une épreuve close, telle qu'elle apparaît dans l'historique de l'accueil. */
 export interface ScoreHistorique {
   sessionId: number
@@ -64,6 +100,9 @@ export interface ScoreHistorique {
   haut: number | null
   /** Questions répondues dans l'épreuve. */
   n: number
+  /** Part de questions d'annales, et la nature qui en découle. */
+  partAnnales: number
+  nature: NatureEpreuve
 }
 
 /**
@@ -89,7 +128,7 @@ export function historiqueScores(examId: string, combien = 6): ScoreHistorique[]
           AND score_echelle IS NOT NULL
         ORDER BY debut DESC, id DESC LIMIT ?`,
     )
-    .all(examId, combien) as Array<Omit<ScoreHistorique, 'bas' | 'haut' | 'n'>>
+    .all(examId, combien) as Array<Omit<ScoreHistorique, 'bas' | 'haut' | 'n' | 'partAnnales' | 'nature'>>
 
   // L'intervalle de chaque épreuve, recalculé comme au bilan : un score sans
   // sa marge d'erreur fait lire comme un progrès ce qui n'est que du bruit
@@ -102,7 +141,8 @@ export function historiqueScores(examId: string, combien = 6): ScoreHistorique[]
   )
 
   return lignes.reverse().map((l) => {
-    if (examId !== 'tagemage') return { ...l, bas: null, haut: null, n: 0 }
+    if (examId !== 'tagemage') return { ...l, bas: null, haut: null, n: 0, partAnnales: 0, nature: 'generees' as const }
+    const part = partAnnales(l.sessionId)
     const sections = parSection.all(l.sessionId) as Array<{ n: number; justes: number; blanches: number }>
     const s = estimerScoreParSousTest(
       sections.map((x) => ({
@@ -112,7 +152,14 @@ export function historiqueScores(examId: string, combien = 6): ScoreHistorique[]
         fausses: x.n - x.justes - x.blanches,
       })),
     )
-    return { ...l, bas: s.bas, haut: s.haut, n: sections.reduce((a, x) => a + x.n, 0) }
+    return {
+      ...l,
+      bas: s.bas,
+      haut: s.haut,
+      n: sections.reduce((a, x) => a + x.n, 0),
+      partAnnales: part,
+      nature: natureDe(part),
+    }
   })
 }
 
@@ -128,16 +175,23 @@ function penteObservee(examId: string, aujourdhui: string): number | null {
     .toISOString()
     .slice(0, 10)
 
-  const scores = (
+  const toutes = (
     d
       .prepare(
-        `SELECT score_echelle AS score, date(debut, 'localtime') AS jour FROM exam_session
+        `SELECT id, score_echelle AS score, date(debut, 'localtime') AS jour FROM exam_session
           WHERE exam_id = ? AND type IN ('blanc','diagnostic') AND fin IS NOT NULL
             AND score_echelle IS NOT NULL AND date(debut, 'localtime') >= date(?)
           ORDER BY debut`,
       )
-      .all(examId, depuis) as Array<{ score: number; jour: string }>
+      .all(examId, depuis) as Array<{ id: number; score: number; jour: string }>
   ).filter((s) => typeof s.score === 'number')
+
+  // Une pente ne se mesure qu'entre épreuves de même nature : de l'annale aux
+  // questions générées, l'écart mêle progrès et changement de banque. On garde
+  // la nature de la plus récente, puisque c'est elle que l'écran affiche.
+  const natures = new Map(toutes.map((s) => [s.id, examId === 'tagemage' ? natureDe(partAnnales(s.id)) : 'annales']))
+  const derniere = toutes.length > 0 ? natures.get(toutes[toutes.length - 1].id) : null
+  const scores = toutes.filter((s) => natures.get(s.id) === derniere)
 
   if (scores.length < 2) return null
 

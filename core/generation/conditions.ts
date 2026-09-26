@@ -218,7 +218,7 @@ function moulePourcentage(a: Alea): Moule {
     inutile2: `Le prix initial dépasse ${euros(a.entier(10, Math.max(20, Math.floor(initial / 2))))}.`,
     carS1: `une remise exprimée en euros ET son taux donnent le prix : ` +
       `${euros(economie)} représentent ${remise} % du prix initial, donc celui-ci vaut ` +
-      `${euros(economie)} ÷ ${remise / 100} = ${euros(initial)}`,
+      `${euros(economie)} ÷ ${nombre(remise / 100, 2)} = ${euros(initial)}`,
     carS2: `le prix soldé et le taux se remontent par division : ` +
       `${euros(solde)} ÷ ${nombre(1 - remise / 100, 2)} = ${euros(initial)}`,
     manqueP1: `un taux est une proportion, pas un montant : ${remise} % s'applique aussi bien à 40 € qu'à 4 000 €`,

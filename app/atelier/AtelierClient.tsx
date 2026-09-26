@@ -119,10 +119,17 @@ export default function AtelierClient({
   const item = file.items[0] ?? null
   const options = item?.typeItem === 'conditions_minimales' ? OPTIONS_CM : (item?.options ?? [])
 
-  useEffect(() => {
+  // Nouvelle question en tête de file : la saisie repart de sa réponse
+  // enregistrée. Ajusté pendant le rendu, à la comparaison, plutôt que dans un
+  // effet qui rendait d'abord l'ancienne valeur puis la corrigeait.
+  const cleItem = `${item?.id ?? ''}|${item?.bonneReponse ?? ''}`
+  // Null au départ : le premier rendu s'ajuste aussi, comme le faisait l'effet.
+  const [itemSuivi, setItemSuivi] = useState<string | null>(null)
+  if (itemSuivi !== cleItem) {
+    setItemSuivi(cleItem)
     setReponse(item?.bonneReponse ?? '')
     setErreur('')
-  }, [item?.id, item?.bonneReponse])
+  }
 
   const agir = useCallback(
     async (action: 'valider' | 'supprimer', corps: Record<string, unknown> = {}) => {

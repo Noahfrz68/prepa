@@ -88,7 +88,6 @@ export default function ListeningClient({ part, groupes }: { part: string; group
     return () => {
       annule = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [part, groupes])
 
   function demarrerGroupe(g: Groupe) {

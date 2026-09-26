@@ -39,6 +39,8 @@ export interface GroupeTexte {
 export function groupesComprehension(
   nbQuestions: number,
   examId = 'tagemage',
+  /** Épreuves : les textes d'annales jamais lus passent devant. */
+  prioriteAnnales = false,
 ): GroupeTexte[] {
   const d = db()
   const nbTextes = Math.ceil(nbQuestions / QUESTIONS_PAR_TEXTE)
@@ -47,16 +49,19 @@ export function groupesComprehension(
     .prepare(
       `SELECT i.contexte_texte AS texte,
               COUNT(*) AS questions,
-              SUM((SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id)) AS vues
+              SUM((SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id)) AS vues,
+              MAX(i.tags IS 'annale') AS annale
          FROM item i
         WHERE i.exam_id = ? AND i.section = 'comprehension' AND i.statut = 'valide'
           AND i.contexte_texte IS NOT NULL AND i.contexte_texte <> ''
         GROUP BY i.contexte_texte
        HAVING questions >= ?
-        ORDER BY vues ASC, RANDOM()
+           -- Hors épreuve, un texte d'annale jamais lu reste en réserve.
+           AND (? OR NOT (annale = 1 AND vues = 0))
+        ORDER BY (? AND annale = 1 AND vues = 0) DESC, vues ASC, RANDOM()
         LIMIT ?`,
     )
-    .all(examId, QUESTIONS_PAR_TEXTE, nbTextes) as Array<{ texte: string; questions: number }>
+    .all(examId, QUESTIONS_PAR_TEXTE, prioriteAnnales ? 1 : 0, prioriteAnnales ? 1 : 0, nbTextes) as Array<{ texte: string; questions: number }>
 
   const questionsDuTexte = d.prepare(
     `SELECT i.id
@@ -115,6 +120,96 @@ export function texteLongComprehension(nbQuestions: number, examId = 'tagemage')
 }
 
 /** Les identifiants à plat, dans l'ordre des groupes — texte par texte. */
-export function itemsComprehensionGroupes(nbQuestions: number, examId = 'tagemage'): number[] {
-  return groupesComprehension(nbQuestions, examId).flatMap((g) => g.itemIds)
+export function itemsComprehensionGroupes(
+  nbQuestions: number,
+  examId = 'tagemage',
+  prioriteAnnales = false,
+): number[] {
+  return groupesComprehension(nbQuestions, examId, prioriteAnnales).flatMap((g) => g.itemIds)
+}
+
+/**
+ * Textes ENTIERS qui portent le plus de questions des types visés.
+ *
+ * Le plan nomme des types de questions dus à la révision ; servir ces seuls
+ * types revenait à servir une question par texte — jusqu'à quinze passages à
+ * lire pour quinze questions, exactement le défaut que le tirage par textes
+ * avait corrigé. On garde donc les textes entiers, et on choisit ceux où les
+ * types visés sont les plus présents : on travaille ce qui est dû sans
+ * renoncer au format de l'épreuve. Aucun texte ne porte les types visés : on
+ * retombe sur le tirage ordinaire.
+ */
+export function textesPourTypes(
+  skillIds: string[],
+  nbQuestions: number,
+  examId = 'tagemage',
+): number[] {
+  if (skillIds.length === 0) return itemsComprehensionGroupes(nbQuestions, examId)
+  const d = db()
+  const nbTextes = Math.ceil(nbQuestions / QUESTIONS_PAR_TEXTE)
+  const marques = skillIds.map(() => '?').join(',')
+
+  const textes = d
+    .prepare(
+      `SELECT i.contexte_texte AS texte,
+              COUNT(*) AS questions,
+              SUM(i.skill_id IN (${marques})) AS visees,
+              SUM((SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id)) AS vues
+         FROM item i
+        WHERE i.exam_id = ? AND i.section = 'comprehension' AND i.statut = 'valide'
+          AND i.contexte_texte IS NOT NULL AND i.contexte_texte <> ''
+        GROUP BY i.contexte_texte
+       HAVING questions >= ? AND visees > 0
+           AND NOT (MAX(i.tags IS 'annale') = 1 AND vues = 0)
+        ORDER BY visees DESC, vues ASC, RANDOM()
+        LIMIT ?`,
+    )
+    .all(...skillIds, examId, QUESTIONS_PAR_TEXTE, nbTextes) as Array<{ texte: string }>
+
+  if (textes.length === 0) return itemsComprehensionGroupes(nbQuestions, examId)
+
+  // Dans chaque texte, les questions visées d'abord, puis les moins vues.
+  const questionsDuTexte = d.prepare(
+    `SELECT i.id
+       FROM item i
+      WHERE i.exam_id = ? AND i.section = 'comprehension' AND i.statut = 'valide'
+        AND i.contexte_texte = ?
+      ORDER BY i.skill_id IN (${marques}) DESC,
+               (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) ASC, RANDOM()
+      LIMIT ?`,
+  )
+  return textes.flatMap((t) =>
+    (questionsDuTexte.all(examId, t.texte, ...skillIds, QUESTIONS_PAR_TEXTE) as Array<{ id: number }>).map(
+      (l) => l.id,
+    ),
+  )
+}
+
+/**
+ * La réserve d'épreuve : questions d'annales valides jamais vues, par
+ * sous-test (textes entiers en compréhension, comptés en questions). C'est ce
+ * qui permet une épreuve entièrement « sur annales », donc comparable.
+ */
+export function reserveAnnales(examId = 'tagemage'): Map<string, number> {
+  const lignes = db()
+    .prepare(
+      `SELECT i.section, COUNT(*) AS n
+         FROM item i
+        WHERE i.exam_id = ? AND i.statut = 'valide' AND i.tags = 'annale'
+          AND NOT EXISTS (SELECT 1 FROM attempt a WHERE a.item_id = i.id)
+        GROUP BY i.section`,
+    )
+    .all(examId) as Array<{ section: string; n: number }>
+  return new Map(lignes.map((l) => [l.section, l.n]))
+}
+
+/** Questions qui attendent une relecture humaine avant d'être servies. */
+export function questionsEnAttente(examId = 'tagemage'): { aRelire: number; suspectes: number } {
+  const l = db()
+    .prepare(
+      `SELECT COALESCE(SUM(statut = 'a_relire'), 0) AS aRelire, COALESCE(SUM(statut = 'suspect'), 0) AS suspectes
+         FROM item WHERE exam_id = ?`,
+    )
+    .get(examId) as { aRelire: number; suspectes: number }
+  return l
 }

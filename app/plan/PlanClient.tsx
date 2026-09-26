@@ -5,13 +5,9 @@ import { useState } from 'react'
 import { poster } from '@/app/_composants/reseau'
 import type { PlanHebdomadaire, TacheEnregistree } from '@/core/db/semaine'
 import { lienTache } from './liens'
-
-const heures = (min: number) => {
-  const h = Math.floor(min / 60)
-  const m = Math.round(min % 60)
-  if (h === 0) return `${m} min`
-  return m === 0 ? `${h} h` : `${h} h${String(m).padStart(2, '0')}`
-}
+import { duree as heures } from '@/app/_composants/nombres'
+import { desequilibre } from '@/core/scheduler/semaine'
+import { SECTIONS_PAR_ID } from '@/exams/tagemage'
 
 const LIBELLE_TYPE: Record<TacheEnregistree['type'], string> = {
   cours: 'Cours',
@@ -81,13 +77,21 @@ export default function PlanClient({ initial }: { initial: PlanHebdomadaire }) {
             <span className="text-doux">planifiées sur {heures(plan.budgetMinutes)} disponibles</span>
           </p>
           <p className="text-sm text-doux">
-            <span className="chiffres text-texte">{heures(plan.minutesFaites)}</span> faites ·{' '}
-            {faites.length} / {plan.taches.length} tâches
+            <span className="chiffres text-texte">{heures(plan.minutesFaites)}</span> faites
+            {plan.minutesDeclarees > 0 && (
+              <>
+                {' '}+ <span className="chiffres text-texte">{heures(plan.minutesDeclarees)}</span> déclarées
+              </>
+            )}{' '}
+            · {faites.length} / {plan.taches.length} tâches
           </p>
         </div>
         <p className="mt-1 text-xs text-doux">
           Le « fait » se lit dans tes séances : séries closes, leçons marquées étudiées,
-          épreuves terminées. Temps réellement passé cette semaine :{' '}
+          épreuves terminées.
+          {plan.minutesDeclarees > 0 &&
+            ' Ce qui est coché « fait hors de l’app » sans trace dans tes séances est compté à part, comme déclaré.'}{' '}
+          Temps réellement passé cette semaine :{' '}
           <span className="chiffres text-texte">{heures(plan.minutesMesurees)}</span>.
         </p>
 
@@ -150,6 +154,9 @@ export default function PlanClient({ initial }: { initial: PlanHebdomadaire }) {
         </section>
       )}
 
+      {/* ------------------------------------------- déséquilibre -- */}
+      <AlerteDesequilibre plan={plan} />
+
       {/* ------------------------------------------------- à faire -- */}
       {restantes.length > 0 && (
         <section className="mb-8">
@@ -175,9 +182,13 @@ export default function PlanClient({ initial }: { initial: PlanHebdomadaire }) {
 
       {plan.notes.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-sm uppercase tracking-widest text-doux">
+          <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">
             Pourquoi ce plan dit ça
           </h2>
+          <p className="mb-3 text-xs text-doux">
+            Écrit le lundi, avec la semaine : ces raisons ne bougent plus. Pour ce qui vient après,
+            le calendrier « Jusqu’à l’examen » ci-dessous est recalculé à chaque visite.
+          </p>
           <div className="space-y-2">
             {plan.notes.map((n, i) => (
               <p
@@ -260,7 +271,7 @@ function Ligne({
           className="mt-1 text-xs text-doux"
           title="Bonnes réponses sur questions servies, sauts compris"
         >
-          Réussite aujourd’hui :{' '}
+          Réussite actuelle sur ce sous-test :{' '}
           <span className="chiffres text-texte">{Math.round(t.tauxActuel * 100)} %</span>
         </p>
       )}
@@ -290,5 +301,34 @@ function Ligne({
         )}
       </div>
     </li>
+  )
+}
+
+const libelleSection = (id: string) => SECTIONS_PAR_ID.get(id as never)?.libelle ?? id
+const pct = (t: number | null) => (t === null ? '' : ` (${Math.round(t * 100)} %)`)
+
+/** Surentraînement d'un sous-test fort pendant qu'un plus faible attend. */
+function AlerteDesequilibre({ plan }: { plan: PlanHebdomadaire }) {
+  const d = desequilibre(plan.taches)
+  if (!d) return null
+  const { surplus, retards } = d
+  return (
+    <section className="mb-8 rounded-xl border border-blanc/40 bg-carte px-5 py-4 text-sm leading-relaxed">
+      <p className="font-medium text-blanc">Entraînement déséquilibré</p>
+      <p className="mt-1 text-doux">
+        <span className="chiffres text-texte">{surplus.faites}</span> séries de {libelleSection(surplus.section)}
+        {pct(surplus.taux)} pour <span className="chiffres text-texte">{surplus.prevues}</span> prévue
+        {surplus.prevues > 1 ? 's' : ''}, alors que{' '}
+        {retards.map((r, i) => (
+          <span key={r.section}>
+            {i > 0 && (i === retards.length - 1 ? ' et ' : ', ')}
+            {libelleSection(r.section)}
+            {pct(r.taux)} en est à <span className="chiffres text-texte">{r.faites}</span> sur {r.prevues}
+          </span>
+        ))}
+        . Une série de plus là où tu réussis déjà rapporte moins qu’une série là où tu perds des points :
+        termine d’abord ce qui est en retard.
+      </p>
+    </section>
   )
 }

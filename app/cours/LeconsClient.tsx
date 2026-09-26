@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { poster } from '@/app/_composants/reseau'
 
 export interface LeconAffichable {
@@ -38,24 +38,31 @@ export interface LeconAffichable {
  * travailler » qui n'affiche que ce que les mesures désignent. Et d'où l'ancre
  * par sous-compétence : une correction ratée y renvoie directement.
  */
+const lireAncre = () => window.location.hash.slice(1)
+function abonnerAncre(prevenir: () => void) {
+  window.addEventListener('hashchange', prevenir)
+  return () => window.removeEventListener('hashchange', prevenir)
+}
+
 export default function LeconsClient({ lecons }: { lecons: LeconAffichable[] }) {
-  const [ouverte, setOuverte] = useState<string | null>(null)
+  // L'ancre de l'adresse (« #tm.calcul.… ») désigne la leçon à ouvrir en
+  // arrivant d'une correction. Lue comme un état externe ; le choix de
+  // l'utilisateur, dès qu'il y en a un, prend le dessus.
+  const ancre = useSyncExternalStore(abonnerAncre, lireAncre, () => '')
+  const [choix, setChoix] = useState<string | null | undefined>(undefined)
+  const ancreValide = lecons.some((l) => l.skillId === ancre) ? ancre : null
+  const ouverte = choix !== undefined ? choix : ancreValide
+  const setOuverte = setChoix
   const [recherche, setRecherche] = useState('')
   const [seulementFaibles, setSeulementFaibles] = useState(false)
 
   // Arriver depuis une correction doit ouvrir la leçon, pas seulement la
   // faire défiler sous les yeux repliée.
   useEffect(() => {
-    const cible = window.location.hash.slice(1)
-    if (!cible) return
-    if (lecons.some((l) => l.skillId === cible)) {
-      setOuverte(cible)
-      // Après la peinture, sinon la carte n'a pas encore sa hauteur dépliée.
-      requestAnimationFrame(() =>
-        document.getElementById(cible)?.scrollIntoView({ block: 'start' }),
-      )
-    }
-  }, [lecons])
+    if (!ancreValide) return
+    // Après la peinture, sinon la carte n'a pas encore sa hauteur dépliée.
+    requestAnimationFrame(() => document.getElementById(ancreValide)?.scrollIntoView({ block: 'start' }))
+  }, [ancreValide])
 
   const nbFaibles = lecons.filter((l) => l.aTravailler).length
 
@@ -388,7 +395,11 @@ function Etudiee({ lecon }: { lecon: LeconAffichable }) {
   const [etudiee, setEtudiee] = useState(lecon.etudieeLe !== null)
   const [occupe, setOccupe] = useState(false)
   const [echec, setEchec] = useState(false)
-  const ouverture = useRef(Date.now())
+  // Heure d'ouverture de la leçon, posée au montage (pas pendant le rendu).
+  const ouverture = useRef(0)
+  useEffect(() => {
+    ouverture.current = Date.now()
+  }, [])
 
   const basculer = async () => {
     setOccupe(true)

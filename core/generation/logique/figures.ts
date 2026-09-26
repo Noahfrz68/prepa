@@ -24,7 +24,6 @@ import {
   qcmFigure,
   rang,
   sommeChiffres,
-  texte,
   tournerCoin,
   type CoinFigure,
 } from './outils'
@@ -45,12 +44,6 @@ const NOM_COIN: Record<CoinFigure, string> = {
 
 type Quartier = 'h' | 'g' | 'd' | 'b'
 const QUARTIERS: Quartier[] = ['h', 'g', 'd', 'b']
-const NOM_QUARTIER: Record<Quartier, string> = {
-  h: 'en haut',
-  g: 'à gauche',
-  d: 'à droite',
-  b: 'en bas',
-}
 
 interface RegleCase {
   /** Comment on la dit, une fois trouvée. */

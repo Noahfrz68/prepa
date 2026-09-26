@@ -471,6 +471,19 @@ export interface ParametresCalendrier {
   leconsRestantes: number
   semainesDepuisDernierBlanc: number | null
   joursDepuisDerniereEpreuve: number | null
+  /**
+   * La semaine en cours telle que le plan FIGÉ la prévoit : son épreuve, et les
+   * leçons jamais vues qui resteront une fois ses cours faits. Sans elle, le
+   * calendrier rejouait les règles du jour sur une semaine composée lundi avec
+   * d'autres, et contredisait le plan affiché juste au-dessus.
+   */
+  semaineEnCours?: { epreuve: SemaineProjetee['epreuve']; leconsRestantesFin: number }
+  /**
+   * Leçons nouvelles étudiées par semaine, mesurées. La projection suppose au
+   * plus ce rythme : le plan peut en prévoir vingt-sept, s'il en est étudié
+   * seize, c'est seize qui épuisent le cours.
+   */
+  leconsParSemaine?: number | null
 }
 
 /**
@@ -494,7 +507,9 @@ export function projeterCalendrier(p: ParametresCalendrier): SemaineProjetee[] {
     const examen = jours < 7
 
     let epreuve: SemaineProjetee['epreuve'] = null
-    if (!examen) {
+    if (i === 0 && p.semaineEnCours) {
+      epreuve = examen ? null : p.semaineEnCours.epreuve
+    } else if (!examen) {
       const blancDu =
         depuisBlanc === null ||
         (semainesRestantes <= SEMAINES_AVANT_EXAMEN_INTENSIF && depuisBlanc >= intervalleBlancs(semainesRestantes))
@@ -504,8 +519,13 @@ export function projeterCalendrier(p: ParametresCalendrier): SemaineProjetee[] {
 
     if (epreuve === 'blanc') depuisBlanc = 0
     if (epreuve) depuisEpreuve = 0
-    const leconsSemaine = Math.floor((p.budgetMinutes * plafondCours(semainesRestantes)) / MINUTES_PAR_LECON)
-    lecons = Math.max(0, lecons - (examen ? 0 : leconsSemaine))
+    const plafond = Math.floor((p.budgetMinutes * plafondCours(semainesRestantes)) / MINUTES_PAR_LECON)
+    const leconsSemaine =
+      p.leconsParSemaine != null && p.leconsParSemaine > 0 ? Math.min(plafond, Math.round(p.leconsParSemaine)) : plafond
+    lecons =
+      i === 0 && p.semaineEnCours
+        ? Math.max(0, p.semaineEnCours.leconsRestantesFin)
+        : Math.max(0, lecons - (examen ? 0 : leconsSemaine))
 
     semaines.push({
       semaineDu: lundi.toISOString().slice(0, 10),
@@ -520,4 +540,52 @@ export function projeterCalendrier(p: ParametresCalendrier): SemaineProjetee[] {
   }
 
   return semaines
+}
+
+/* ------------------------------------------------------- déséquilibre -- */
+
+/** Séries faites au-delà du prévu à partir desquelles on parle de surentraînement. */
+export const DEPASSEMENT_SIGNALE = 2
+
+export interface Desequilibre {
+  surplus: { section: string; faites: number; prevues: number; taux: number | null }
+  retards: Array<{ section: string; faites: number; prevues: number; taux: number | null }>
+}
+
+/**
+ * Un sous-test entraîné bien au-delà du plan pendant qu'un sous-test plus
+ * faible reste en retard. Le plan ne réagissait pas : neuf séries de calcul
+ * (79 %) pour une prévue, zéro sur deux en compréhension (62 %), et rien ne
+ * le disait. On ne signale que ce cas précis — un surplus sur un sous-test
+ * mieux réussi que ceux qu'on délaisse — : s'entraîner en plus sur sa
+ * faiblesse n'a rien à corriger.
+ */
+export function desequilibre(
+  taches: Array<{
+    type: TypeTache
+    section: string | null
+    mesure: { faits: number; sur: number }
+    fait: boolean
+    tauxActuel: number | null
+  }>,
+): Desequilibre | null {
+  const series = taches.filter((t) => t.type === 'entrainement' && t.section)
+  const surplus = series
+    .filter((t) => t.mesure.faits >= t.mesure.sur + DEPASSEMENT_SIGNALE)
+    .sort((a, b) => b.mesure.faits - b.mesure.sur - (a.mesure.faits - a.mesure.sur))[0]
+  if (!surplus) return null
+  const retards = series.filter(
+    (t) =>
+      !t.fait &&
+      t.mesure.faits < t.mesure.sur &&
+      (surplus.tauxActuel === null || t.tauxActuel === null || t.tauxActuel < surplus.tauxActuel),
+  )
+  if (retards.length === 0) return null
+  const vue = (t: (typeof series)[number]) => ({
+    section: t.section as string,
+    faites: t.mesure.faits,
+    prevues: t.mesure.sur,
+    taux: t.tauxActuel,
+  })
+  return { surplus: vue(surplus), retards: retards.map(vue) }
 }

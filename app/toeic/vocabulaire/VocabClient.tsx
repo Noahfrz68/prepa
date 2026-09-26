@@ -21,8 +21,12 @@ export default function VocabClient({
   const [index, setIndex] = useState(0)
   const [revele, setRevele] = useState(false)
   const [bilan, setBilan] = useState({ sues: 0, ratees: 0 })
-  const debut = useRef(Date.now())
+  // Heure d'affichage de la carte, posée au montage puis à chaque carte.
+  const debut = useRef(0)
   const enCours = useRef(false)
+  useEffect(() => {
+    debut.current = Date.now()
+  }, [])
 
   const carte = dues[index]
 

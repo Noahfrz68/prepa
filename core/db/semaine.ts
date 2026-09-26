@@ -51,8 +51,15 @@ export interface PlanHebdomadaire {
   semaineDu: string
   budgetMinutes: number
   minutesPlanifiees: number
-  /** Minutes des tâches faites, au prorata de ce qui est mesuré. */
+  /** Minutes des tâches faites, au prorata de ce que les séances mesurent. */
   minutesFaites: number
+  /**
+   * Minutes des tâches cochées « fait hors de l'app » au-delà de ce qui est
+   * mesuré. Déclarées, pas mesurées : on les montre à part. Une tâche « Cours —
+   * Logique » cochée sans aucune leçon marquée étudiée comptait entière dans
+   * le « fait », et le plan affichait 8 h 21 pour 7 h réellement passées.
+   */
+  minutesDeclarees: number
   /**
    * Temps réellement passé cette semaine : durée des séances et des épreuves
    * (plafonnée par question) et temps chronométré sur les leçons.
@@ -228,9 +235,12 @@ function parametres(semaineDu: string) {
       `SELECT k.id, k.section FROM skill_state s
          JOIN skill k ON k.id = s.skill_id
         WHERE k.exam_id = 'tagemage'
-          AND s.prochaine_revision IS NOT NULL AND s.prochaine_revision <= ?`,
+          AND s.prochaine_revision IS NOT NULL AND s.prochaine_revision <= ?
+          -- Un type qui n'a que deux questions en banque ne remplit pas une
+          -- série : le viser servait deux questions, ou les mêmes en boucle.
+          AND (SELECT COUNT(*) FROM item i WHERE i.skill_id = k.id AND i.statut = 'valide') >= ?`,
     )
-    .all(aujourdhuiIso()) as Array<{ id: string; section: string }>
+    .all(aujourdhuiIso(), QUESTIONS_MIN_CIBLAGE) as Array<{ id: string; section: string }>
 
   const etat = new Map(parSection.map((s) => [s.section, s]))
   const sections: BesoinSection[] = SECTIONS.map((s) => ({
@@ -409,12 +419,14 @@ function lire(semaineDu: string): PlanHebdomadaire | null {
     semaineDu,
     budgetMinutes: entete.budget_minutes ?? 0,
     minutesPlanifiees: entete.volume_prevu_min,
-    // Une tâche cochée compte entière ; sinon, au prorata de ce qui est mesuré
-    // (une série sur deux faite = la moitié de ses minutes).
+    // Au prorata de ce qui est mesuré (une série sur deux faite = la moitié
+    // de ses minutes) ; le reste d'une tâche cochée à la main est « déclaré ».
     minutesFaites: Math.round(
+      taches.reduce((a, t) => a + t.minutes * Math.min(1, t.mesure.faits / Math.max(1, t.mesure.sur)), 0),
+    ),
+    minutesDeclarees: Math.round(
       taches.reduce(
-        (a, t) =>
-          a + (t.faitLe ? t.minutes : t.minutes * Math.min(1, t.mesure.faits / Math.max(1, t.mesure.sur))),
+        (a, t) => a + (t.faitLe ? t.minutes * (1 - Math.min(1, t.mesure.faits / Math.max(1, t.mesure.sur))) : 0),
         0,
       ),
     ),
@@ -486,6 +498,9 @@ export function historiqueSemaines(limite = 8): Array<{
 export { libelleSection }
 
 /** Au-delà de ce nombre de jours sans rien faire, l'accueil le rappelle. */
+/** Questions valides qu'un type doit compter pour être visé par une série du plan. */
+export const QUESTIONS_MIN_CIBLAGE = 5
+
 export const JOURS_AVANT_RAPPEL = 2
 
 /**
@@ -513,11 +528,52 @@ export function joursSansActivite(): number | null {
  * Le calendrier projeté jusqu'à l'examen, à partir de l'état réel : temps
  * disponible, leçons jamais étudiées, dernières épreuves. Null sans date.
  */
+/**
+ * Leçons nouvelles étudiées par semaine, depuis la première : le rythme réel
+ * du cours. Null tant qu'aucune leçon n'a été étudiée.
+ */
+function rythmeDesLecons(): number | null {
+  const l = db()
+    .prepare(
+      `SELECT COUNT(*) AS n, MIN(etudiee_le) AS premiere FROM lecon_etude WHERE etudiee_le IS NOT NULL`,
+    )
+    .get() as { n: number; premiere: string | null }
+  if (!l.premiere || l.n === 0) return null
+  const jours = (Date.now() - new Date(`${l.premiere.slice(0, 10)}T00:00:00`).getTime()) / 86_400_000
+  // Une semaine au moins : trois leçons lues hier ne font pas vingt et une par semaine.
+  return l.n / Math.max(1, jours / 7)
+}
+
 export function calendrierJusquExamen(aujourdhui = aujourdhuiIso()): SemaineProjetee[] | null {
   const semaineDu = lundiDeLaSemaine(aujourdhui)
   const p = parametres(semaineDu)
   if (p.joursRestants === null || p.joursRestants < 0) return null
+
+  // La semaine en cours telle que le plan figé la prévoit.
+  const plan = lire(semaineDu)
+  const leconsJamaisVues = p.lecons.filter((l) => l.jamaisEtudiee).length
+  const semaineEnCours = plan
+    ? {
+        epreuve: plan.taches.some((t) => t.type === 'blanc')
+          ? ('blanc' as const)
+          : plan.taches.some((t) => t.type === 'diagnostic')
+            ? ('diagnostic' as const)
+            : null,
+        // Les leçons prévues cette semaine et pas encore étudiées sont
+        // supposées faites d'ici dimanche, comme le reste du plan.
+        leconsRestantesFin: Math.max(
+          0,
+          leconsJamaisVues -
+            plan.taches
+              .filter((t) => t.type === 'cours')
+              .reduce((a, t) => a + Math.max(0, t.mesure.sur - t.mesure.faits), 0),
+        ),
+      }
+    : undefined
+
   return projeterCalendrier({
+    semaineEnCours,
+    leconsParSemaine: rythmeDesLecons(),
     semaineDu,
     joursRestants: p.joursRestants + Math.round(
       (new Date(`${aujourdhui}T00:00:00Z`).getTime() - new Date(`${semaineDu}T00:00:00Z`).getTime()) /

@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import { db } from './queries'
+import { COUPURE_TOLEREE_MS } from '@/exams/tagemage/epreuve'
 
 /**
  * Cycle de vie des sessions : ce qui reste ouvert, ce qui est abandonné.
@@ -149,4 +150,21 @@ export function etatSession(sessionId: number, d: Database.Database = db()): Eta
     sectionsEnregistrees: sections,
     reprenable: s.fin === null && s.interrompue === 0 && s.recente === 1,
   }
+}
+
+/**
+ * Enregistre une coupure pendant une épreuve (onglet fermé, page rechargée),
+ * constatée à la reprise. Le chronomètre était gelé : au-delà de
+ * COUPURE_TOLEREE_MS cumulées, on a pu réfléchir hors du temps, et l'épreuve
+ * perd son statut de conditions réelles. Seule une épreuve encore ouverte
+ * est concernée ; une coupure est bornée au délai de reprise (12 h).
+ */
+export function ajouterCoupure(sessionId: number, ms: number, d: Database.Database = db()): void {
+  const borne = Math.max(0, Math.min(DELAI_ABANDON_HEURES * 3600_000, Math.round(Number(ms) || 0)))
+  d.prepare(
+    `UPDATE exam_session
+        SET coupure_ms = coupure_ms + @ms,
+            conditions_reelles = CASE WHEN coupure_ms + @ms > @tolere THEN 0 ELSE conditions_reelles END
+      WHERE id = @id AND fin IS NULL AND type IN ('blanc', 'diagnostic')`,
+  ).run({ ms: borne, tolere: COUPURE_TOLEREE_MS, id: sessionId })
 }

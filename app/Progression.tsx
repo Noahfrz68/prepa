@@ -1,5 +1,6 @@
 import type { ScoreHistorique } from '@/core/db/arbitrage'
 import CourbeScore from '@/app/_composants/CourbeScore'
+import { LIBELLE_NATURE } from '@/core/stats/nature'
 
 /**
  * La courbe des épreuves passées, en compact.
@@ -28,10 +29,14 @@ export default function Progression({
   if (historique.length < 2) return null
 
   const dernier = historique[historique.length - 1]
-  const precedent = historique[historique.length - 2]
-  const ecart = dernier.score - precedent.score
+  // La précédente de MÊME nature : une épreuve sur annales et une épreuve de
+  // questions générées ne mesurent pas la même chose (core/stats/nature.ts).
+  const precedent =
+    [...historique.slice(0, -1)].reverse().find((h) => h.nature === dernier.nature) ?? null
+  const ecart = precedent ? dernier.score - precedent.score : 0
   // Écart plus petit que la demi-largeur des deux intervalles : on le dit.
   const dansLaMarge =
+    precedent !== null &&
     dernier.bas !== null &&
     precedent.haut !== null &&
     dernier.bas <= precedent.haut &&
@@ -47,12 +52,17 @@ export default function Progression({
           {historique.length} dernières épreuves
         </span>
         <span className="text-xs text-doux">
-          {ecart === 0 ? (
+          {precedent === null ? (
+            <span title="L’écart mêlerait ta progression et le changement de banque.">
+              dernière épreuve {LIBELLE_NATURE[dernier.nature]} : pas de précédente comparable
+            </span>
+          ) : ecart === 0 ? (
             'stable'
           ) : (
             <span className={dansLaMarge ? 'text-doux' : ecart > 0 ? 'text-juste' : 'text-faux'}>
               {ecart > 0 ? '+' : '−'}
-              <span className="chiffres">{Math.abs(ecart)}</span> depuis la précédente
+              <span className="chiffres">{Math.abs(ecart)}</span> depuis la précédente{' '}
+              {LIBELLE_NATURE[dernier.nature]}
               {dansLaMarge && ' · dans la marge d’erreur'}
             </span>
           )}

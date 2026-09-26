@@ -47,8 +47,9 @@ export default function ReadingClient({ part, taille }: { part: string; taille: 
   const [reponses, setReponses] = useState<Reponse[]>([])
   const [ecoule, setEcoule] = useState(0)
 
-  const debutItem = useRef(Date.now())
-  const debutSerie = useRef(Date.now())
+  // Posés au démarrage de la série (pas pendant le rendu).
+  const debutItem = useRef(0)
+  const debutSerie = useRef(0)
   const envoiEnCours = useRef(false)
 
   const item = serie?.items[iItem]

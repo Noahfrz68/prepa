@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { syntheseStrategie } from '@/core/stats/queries'
+import { reussiteAFroidParSection, syntheseStrategie } from '@/core/stats/queries'
+import { RENCONTRES_HABITUDE, type ReussiteAFroid } from '@/core/stats/afroid'
 import {
   LIBELLE_NIVEAU,
   REUSSITE_ATTENDUE,
@@ -9,6 +10,7 @@ import {
 } from '@/core/stats/calculs'
 import { HASARD } from '@/core/scoring/tagemage'
 import { SECTIONS_PAR_ID } from '@/exams/tagemage'
+import { decimal } from '@/app/_composants/nombres'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +19,7 @@ const secondes = (ms: number) => `${Math.round(ms / 1000)} s`
 
 export default function PageStrategie() {
   const s = syntheseStrategie('tagemage')
+  const froid = reussiteAFroidParSection('tagemage')
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
@@ -42,6 +45,7 @@ export default function PageStrategie() {
           <RegleRemplissage s={s} />
           <PuitsDeTemps s={s} />
           <Leviers s={s} />
+          <AFroid lignes={froid} />
           <Competences s={s} />
         </div>
       )}
@@ -236,7 +240,7 @@ function RegleRemplissage({ s }: { s: ReturnType<typeof syntheseStrategie> }) {
               {r.blanches > 1 ? 's' : ''} sur {r.total} ({pourcent(r.tauxBlanches)}).
             </p>
             <p className="mt-2 text-sm text-faux">
-              Environ {r.coutEstime.toFixed(1)} point{r.coutEstime >= 2 ? 's' : ''} brut
+              Environ {decimal(r.coutEstime)} point{r.coutEstime >= 2 ? 's' : ''} brut
               {r.coutEstime >= 2 ? 's' : ''} jeté{r.coutEstime >= 2 ? 's' : ''} : une croix au
               hasard en rapporte 0,8 en moyenne, une case vide en rapporte 0.
             </p>
@@ -280,7 +284,7 @@ function PuitsDeTemps({ s }: { s: ReturnType<typeof syntheseStrategie> }) {
               <span className="flex-1 font-medium">{c.libelle}</span>
               <span className="chiffres text-faux">{pourcent(c.tauxReussite)}</span>
               <span className="chiffres text-blanc">
-                {secondes(c.tempsMedianMs)} · ×{c.ratioTemps.toFixed(1)} la médiane en{' '}
+                {secondes(c.tempsMedianMs)} · ×{decimal(c.ratioTemps)} la médiane en{' '}
                 {SECTIONS_PAR_ID.get(c.section as never)?.libelle.toLowerCase() ?? c.section}
               </span>
               <span className="chiffres text-doux">{c.n} tentatives</span>
@@ -394,6 +398,73 @@ function Competences({ s }: { s: ReturnType<typeof syntheseStrategie> }) {
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+/** Moins de réponses que ça : taux non affiché. */
+const MINIMUM_A_FROID = 10
+
+function AFroid({ lignes }: { lignes: ReussiteAFroid[] }) {
+  const ordre = new Map(SECTIONS_PAR_ID)
+  const triees = [...lignes].sort(
+    (a, b) => (ordre.get(a.section as never)?.numero ?? 0) - (ordre.get(b.section as never)?.numero ?? 0),
+  )
+  const taux = (c: { n: number; justes: number }) =>
+    c.n < MINIMUM_A_FROID ? '—' : `${Math.round((c.justes / c.n) * 100)} %`
+  return (
+    <section>
+      <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Réussite à froid</h2>
+      <p className="mb-3 text-sm leading-relaxed text-doux">
+        Le jour de l’épreuve, tout est nouveau. « À froid » : la première fois que tu rencontres un
+        scénario (un texte en compréhension). « Avec l’habitude » : à partir de la{' '}
+        {RENCONTRES_HABITUDE + 1}ᵉ rencontre du même scénario, avec d’autres nombres. L’écart mesure ce
+        que la familiarité ajoute — c’est la réussite à froid qui prédit l’épreuve. En expression et en
+        logique, la consigne est la même pour tout un type : la mesure n’y a pas de sens.
+      </p>
+      <div className="overflow-x-auto rounded-xl border border-bord bg-carte">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-bord text-left text-xs uppercase tracking-wider text-doux">
+              <th className="px-4 py-3 font-normal">Sous-test</th>
+              <th className="px-4 py-3 text-right font-normal">À froid</th>
+              <th className="px-4 py-3 text-right font-normal">Avec l’habitude</th>
+              <th className="px-4 py-3 text-right font-normal">Écart</th>
+            </tr>
+          </thead>
+          <tbody>
+            {triees.map((l) => {
+              const f = l.froid.n >= MINIMUM_A_FROID ? l.froid.justes / l.froid.n : null
+              const h = l.habitude.n >= MINIMUM_A_FROID ? l.habitude.justes / l.habitude.n : null
+              return (
+                <tr key={l.section} className="border-b border-bord last:border-0">
+                  <td className="px-4 py-2.5">{SECTIONS_PAR_ID.get(l.section as never)?.libelle ?? l.section}</td>
+                  <td className="chiffres px-4 py-2.5 text-right">
+                    {taux(l.froid)} <span className="text-xs text-doux">({l.froid.n})</span>
+                  </td>
+                  <td className="chiffres px-4 py-2.5 text-right text-doux">
+                    {taux(l.habitude)} <span className="text-xs">({l.habitude.n})</span>
+                  </td>
+                  <td className="chiffres px-4 py-2.5 text-right">
+                    {f !== null && h !== null ? (
+                      <span className={h - f > 0.15 ? 'text-blanc' : 'text-doux'}>
+                        {h - f >= 0 ? '+' : '−'}
+                        {Math.abs(Math.round((h - f) * 100))} pts
+                      </span>
+                    ) : (
+                      <span className="text-doux">—</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-doux">
+        Taux affiché à partir de {MINIMUM_A_FROID} réponses ; entre parenthèses, le nombre de réponses. Un
+        écart de plus de 15 points signale une réussite qui tient surtout à l’habitude du scénario.
+      </p>
     </section>
   )
 }

@@ -3,12 +3,14 @@ import type { Case, Figure } from '@/core/figures/types'
 import { db, diagnosticDe, difficultesDe } from './queries'
 import type { DifficulteObservee } from '@/core/stats/difficulte'
 import { itemsComprehensionGroupes, texteLongComprehension } from './selection'
+import { poidsDesTypes } from './poids'
 import { tirageEquilibre, type Candidat } from '@/core/scheduler/tirage'
 import { aleaDepuis } from '@/core/generation/alea'
 import type { ItemDrill } from './queries'
 import { SECONDES_PAR_QUESTION, SECTIONS_PAR_ID } from '@/exams/tagemage'
 import {
   composerEpreuve,
+  COUPURE_TOLEREE_MS,
   QUESTIONS_DIAGNOSTIC,
   type Etape,
   type ModeEpreuve,
@@ -23,6 +25,8 @@ import {
   type PointFatigue,
 } from '@/core/stats/diagnostic'
 import { ErreurRequete } from '@/core/erreurs'
+import { natureDe, type NatureEpreuve } from '@/core/stats/nature'
+import { partAnnales } from './arbitrage'
 import { tempsBorne, verifierSessionOuverte } from './garde'
 
 export interface EtapePreparee extends Etape {
@@ -81,18 +85,12 @@ function preparerEtapes(mode: ModeEpreuve): { etapes: EtapePreparee[]; complete:
   // Les candidates d'une section, sans les champs lourds : le tirage ne
   // regarde que la sous-compétence, le début de l'énoncé et la fraîcheur.
   const candidates = d.prepare(
-    `SELECT i.id, i.skill_id AS skillId, i.enonce,
+    `SELECT i.id, i.skill_id AS skillId, i.enonce, i.tags = 'annale' AS annale,
             (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu
        FROM item i
       WHERE i.exam_id = 'tagemage' AND i.section = ? AND i.statut = 'valide'`,
   )
-  const poids = new Map(
-    (
-      d
-        .prepare(`SELECT id, poids_examen AS poids FROM skill WHERE exam_id = 'tagemage'`)
-        .all() as Array<{ id: string; poids: number }>
-    ).map((s) => [s.id, s.poids]),
-  )
+  const poids = poidsDesTypes()
   const alea = aleaDepuis(Date.now())
 
   // La compréhension se tire par textes complets — trois textes de cinq
@@ -120,12 +118,18 @@ function preparerEtapes(mode: ModeEpreuve): { etapes: EtapePreparee[]; complete:
     const ids = long
       ? long
       : e.section === 'comprehension'
-        ? itemsComprehensionGroupes(e.questions)
+        ? itemsComprehensionGroupes(e.questions, 'tagemage', true)
         : tirageEquilibre(
-            candidates.all(e.section) as Candidat[],
+            (candidates.all(e.section) as Array<Omit<Candidat, 'annale'> & { annale: number }>).map((c) => ({
+              ...c,
+              annale: c.annale === 1,
+            })),
             e.questions,
             poids,
             alea,
+            // Les annales jamais vues d'abord : ce sont elles qui mesurent le
+            // niveau à l'épreuve réelle (core/stats/nature.ts).
+            { prioriteAnnales: true },
           ).map((c) => c.id)
     const lignes = ids.map((id) => parTextes.get(id) as Record<string, unknown>)
     const items: ItemDrill[] = lignes.map((l) => ({
@@ -174,8 +178,13 @@ export interface SaisiePapier {
  * serait une épreuve interrompue.
  *
  * Le temps n'est connu que par sous-test (noté sur la feuille) : il est
- * réparti à parts égales entre ses questions. C'est une approximation, et
- * c'est la seule honnête sans chronomètre par question.
+ * réparti à parts égales entre ses questions, pour que le volume de travail
+ * reste juste — mais marqué `temps_mesure = 0`, pour qu'aucune statistique
+ * de temps par question ne le prenne pour une mesure.
+ *
+ * Une confiance laissée vide sur la feuille n'est pas remplacée par « 3 » :
+ * la réponse est enregistrée avec `confiance_declaree = 0`, et la calibration
+ * l'ignore. Quatre-vingt-dix « assez sûr » fictifs la faussaient.
  */
 export function enregistrerEpreuvePapier(mode: ModeEpreuve, saisie: SaisiePapier[]): number {
   const d = db()
@@ -190,8 +199,8 @@ export function enregistrerEpreuvePapier(mode: ModeEpreuve, saisie: SaisiePapier
     sessionId = Number(
       d
         .prepare(
-          `INSERT INTO exam_session (exam_id, type, sections, conditions_reelles)
-           VALUES ('tagemage', ?, ?, ?)`,
+          `INSERT INTO exam_session (exam_id, type, sections, conditions_reelles, papier)
+           VALUES ('tagemage', ?, ?, ?, 1)`,
         )
         .run(mode === 'blanc' ? 'blanc' : 'diagnostic', JSON.stringify(saisie.map((s) => s.section)), complete ? 1 : 0)
         .lastInsertRowid,
@@ -207,6 +216,8 @@ export function enregistrerEpreuvePapier(mode: ModeEpreuve, saisie: SaisiePapier
         s.itemIds.map((itemId, i) => {
           const r = s.reponses[i]
           const lettre = r.lettre && /^[A-E]$/.test(r.lettre) ? r.lettre : null
+          const confiance = Number(r.confiance)
+          const declaree = lettre !== null && Number.isInteger(confiance) && confiance >= 1 && confiance <= 4
           return {
             itemId,
             reponse: lettre,
@@ -215,7 +226,10 @@ export function enregistrerEpreuvePapier(mode: ModeEpreuve, saisie: SaisiePapier
             // temps : on la compte non traitée, le cas le plus fréquent.
             motifBlanc: lettre === null ? ('non_traite' as const) : null,
             tempsMs: parQuestion,
-            confiance: lettre === null ? 1 : Math.min(4, Math.max(1, Math.round(Number(r.confiance) || 3))),
+            tempsMesure: false,
+            // La colonne exige une valeur ; `confianceDeclaree` dit qu'elle ne compte pas.
+            confiance: declaree ? confiance : 1,
+            confianceDeclaree: declaree,
           }
         }),
       )
@@ -234,6 +248,10 @@ export interface TentativeLot {
   motifBlanc: 'saute' | 'non_traite' | null
   tempsMs: number
   confiance: number
+  /** Faux pour une épreuve papier : temps déclaré en bloc, pas chronométré. Vrai par défaut. */
+  tempsMesure?: boolean
+  /** Faux quand personne n'a déclaré de confiance (feuille papier). Vrai par défaut. */
+  confianceDeclaree?: boolean
 }
 
 /**
@@ -255,8 +273,8 @@ export function enregistrerLot(sessionId: number, tentatives: TentativeLot[]): n
   const inserer = d.prepare(
     `INSERT INTO attempt
        (session_id, item_id, reponse_donnee, est_correct, a_saute, motif_blanc,
-        temps_ms, confiance, points_gagnes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        temps_ms, confiance, points_gagnes, temps_mesure, confiance_declaree)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      -- Un lot renvoyé après une panne est absorbé, pas doublé (migration 016).
      ON CONFLICT (session_id, item_id) DO NOTHING`,
   )
@@ -278,6 +296,8 @@ export function enregistrerLot(sessionId: number, tentatives: TentativeLot[]): n
         tempsBorne(t.tempsMs),
         Math.min(4, Math.max(1, Math.round(t.confiance))),
         pointsDe(issue),
+        t.tempsMesure === false ? 0 : 1,
+        t.confianceDeclaree === false ? 0 : 1,
       )
     }
   })
@@ -374,6 +394,13 @@ export interface RecapEpreuve {
   /** Sous-tests prévus, qu'ils aient été passés ou non. */
   sousTestsPrevus: number
   conditionsReelles: boolean
+  /** Passée sur papier : temps déclaré, pas mesuré question par question. */
+  papier: boolean
+  /** Temps cumulé des coupures pendant l'épreuve (onglet fermé, rechargement). */
+  coupureMs: number
+  /** Part de questions d'annales, et la nature qui en découle (core/stats/nature.ts). */
+  partAnnales: number
+  nature: NatureEpreuve
   debut: string
   scoreEstime: ReturnType<typeof estimerScoreParSousTest>
   ecart: ReturnType<typeof ecartACible> | null
@@ -390,7 +417,7 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
   const session = d
     .prepare(
       `SELECT id, type, sections, debut, fin, score_brut, score_echelle, conditions_reelles,
-              interrompue
+              interrompue, papier, coupure_ms
          FROM exam_session WHERE id = ?`,
     )
     .get(sessionId) as
@@ -404,6 +431,8 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
         score_brut: number | null
         score_echelle: number | null
         conditions_reelles: number
+        papier: number
+        coupure_ms: number
       }
     | undefined
 
@@ -503,14 +532,21 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
     .prepare(`SELECT score_cible FROM exam_goal WHERE exam_id = 'tagemage'`)
     .get() as { score_cible: number | null } | undefined
 
-  const precedent = d
-    .prepare(
-      `SELECT id AS sessionId, score_echelle AS score, debut
-         FROM exam_session
-        WHERE exam_id = 'tagemage' AND type = ? AND fin IS NOT NULL AND id < ?
-        ORDER BY id DESC LIMIT 1`,
-    )
-    .get(session.type, sessionId) as { sessionId: number; score: number; debut: string } | undefined
+  // La précédente du même format ET de même nature : comparer une épreuve sur
+  // annales à une épreuve de questions générées mêlerait progrès et banque.
+  const part = partAnnales(sessionId)
+  const nature = natureDe(part)
+  const precedent = (
+    d
+      .prepare(
+        `SELECT id AS sessionId, score_echelle AS score, debut
+           FROM exam_session
+          WHERE exam_id = 'tagemage' AND type = ? AND fin IS NOT NULL AND id < ?
+            AND score_echelle IS NOT NULL
+          ORDER BY id DESC`,
+      )
+      .all(session.type, sessionId) as Array<{ sessionId: number; score: number; debut: string }>
+  ).find((p) => natureDe(partAnnales(p.sessionId)) === nature)
 
   return {
     sessionId,
@@ -519,6 +555,10 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
     interrompue: session.interrompue === 1,
     sousTestsPrevus: ordre.length,
     conditionsReelles: Boolean(session.conditions_reelles),
+    papier: session.papier === 1,
+    coupureMs: session.coupure_ms,
+    partAnnales: part,
+    nature,
     debut: session.debut,
     scoreEstime,
     ecart: objectif?.score_cible ? ecartACible(scoreEstime.score, objectif.score_cible) : null,
@@ -545,13 +585,17 @@ export interface LigneHistorique {
   scoreEchelle: number | null
   conditionsReelles: boolean
   n: number
+  papier: boolean
+  /** Coupure au-delà de la tolérance : hors conditions réelles. */
+  horsDelai: boolean
+  nature: NatureEpreuve
 }
 
 export function historiqueEpreuves(limite = 10): LigneHistorique[] {
   return db()
     .prepare(
       `SELECT s.id AS sessionId, s.type, s.debut, s.score_echelle AS scoreEchelle,
-              s.conditions_reelles AS conditionsReelles,
+              s.conditions_reelles AS conditionsReelles, s.papier, s.coupure_ms AS coupureMs,
               (SELECT COUNT(*) FROM attempt a WHERE a.session_id = s.id) AS n
          FROM exam_session s
         WHERE s.exam_id = 'tagemage' AND s.type IN ('blanc', 'diagnostic') AND s.fin IS NOT NULL
@@ -560,7 +604,18 @@ export function historiqueEpreuves(limite = 10): LigneHistorique[] {
     )
     .all(limite)
     .map((r) => {
-      const l = r as Omit<LigneHistorique, 'conditionsReelles'> & { conditionsReelles: number }
-      return { ...l, conditionsReelles: Boolean(l.conditionsReelles) }
+      const l = r as Omit<LigneHistorique, 'conditionsReelles' | 'papier' | 'horsDelai' | 'nature'> & {
+        conditionsReelles: number
+        papier: number
+        coupureMs: number
+      }
+      const { coupureMs, ...reste } = l
+      return {
+        ...reste,
+        conditionsReelles: Boolean(l.conditionsReelles),
+        papier: l.papier === 1,
+        horsDelai: coupureMs > COUPURE_TOLEREE_MS,
+        nature: natureDe(partAnnales(l.sessionId)),
+      }
     })
 }

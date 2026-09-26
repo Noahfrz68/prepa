@@ -73,3 +73,40 @@ describe('tirageEquilibre', () => {
     expect(lourdesEnPremier).toBeGreaterThan(160)
   })
 })
+
+describe('tirageEquilibre — fraîcheur du modèle et annales', () => {
+  it('préfère une question d’un modèle jamais vu à une question neuve d’un modèle rebattu', () => {
+    // Même type : dix variantes vues d'un modèle d'urne, une question neuve de
+    // ce modèle, une question neuve d'un autre modèle.
+    const b: Candidat[] = [
+      ...Array.from({ length: 10 }, (_, i) => candidat(i, 'p', `Une urne contient ${i} boules rouges`, 3)),
+      candidat(50, 'p', 'Une urne contient 99 boules rouges', 0),
+      candidat(60, 'p', 'On lance deux dés équilibrés', 0),
+    ]
+    for (let graine = 1; graine <= 20; graine++) {
+      expect(tirageEquilibre(b, 1, new Map([['p', 1]]), aleaDepuis(graine))[0].id).toBe(60)
+    }
+  })
+
+  it('sert d’abord les annales jamais vues quand on le demande (épreuves)', () => {
+    const b: Candidat[] = [
+      candidat(1, 'p', 'Question générée neuve', 0),
+      { ...candidat(2, 'p', 'Question d’annale inédite', 0), annale: true },
+      { ...candidat(3, 'p', 'Question d’annale déjà vue', 1), annale: true },
+    ]
+    for (let graine = 1; graine <= 20; graine++) {
+      const t = tirageEquilibre(b, 1, new Map([['p', 1]]), aleaDepuis(graine), { prioriteAnnales: true })
+      expect(t[0].id).toBe(2)
+    }
+  })
+
+  it('ne privilégie pas les annales par défaut (séries)', () => {
+    const b: Candidat[] = [
+      candidat(1, 'p', 'Question générée neuve', 0),
+      { ...candidat(2, 'p', 'Question d’annale inédite', 0), annale: true },
+    ]
+    const vus = new Set<number>()
+    for (let graine = 1; graine <= 30; graine++) vus.add(tirageEquilibre(b, 1, new Map([['p', 1]]), aleaDepuis(graine))[0].id)
+    expect(vus).toEqual(new Set([1, 2]))
+  })
+})

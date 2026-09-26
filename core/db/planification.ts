@@ -60,14 +60,15 @@ export function reconstruireSkillState(examId = 'tagemage', aujourdhui = aujourd
       `SELECT i.skill_id     AS skillId,
               date(s.debut, 'localtime')  AS jour,
               a.est_correct  AS juste,
-              a.temps_ms     AS tempsMs
+              a.temps_ms     AS tempsMs,
+              a.temps_mesure AS tempsMesure
          FROM attempt a
          JOIN item i         ON i.id = a.item_id
          JOIN exam_session s ON s.id = a.session_id
         WHERE s.exam_id = ? AND a.a_saute = 0 AND i.skill_id IS NOT NULL
         ORDER BY i.skill_id, s.debut, a.id`,
     )
-    .all(examId) as Array<{ skillId: string; jour: string; juste: number; tempsMs: number }>
+    .all(examId) as Array<{ skillId: string; jour: string; juste: number; tempsMs: number; tempsMesure: number }>
 
   const dateExamen =
     (
@@ -84,7 +85,8 @@ export function reconstruireSkillState(examId = 'tagemage', aujourdhui = aujourd
     const c = cumul.get(t.skillId) ?? { n: 0, justes: 0, temps: [] }
     c.n++
     if (t.juste) c.justes++
-    c.temps.push(t.tempsMs)
+    // Un temps déclaré en bloc (épreuve papier) ne dit rien de cette question.
+    if (t.tempsMesure === 1) c.temps.push(t.tempsMs)
     cumul.set(t.skillId, c)
 
     if (!parSkill.has(t.skillId)) parSkill.set(t.skillId, [])

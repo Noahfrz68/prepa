@@ -36,6 +36,15 @@ export function etatReprise(derniereTentative: string, reussitesDepuisErreur: nu
   return { etape, dueLe: plusJours(derniereTentative, INTERVALLES_REPRISE[etape]), consolidee: false }
 }
 
+/**
+ * Reprises servies par jour, au plus. La reprise espacée est arrivée sur un
+ * carnet déjà rempli : toutes les erreurs antérieures sont devenues dues le
+ * même jour — 177 « à rejouer aujourd'hui », une file qu'on ne commence même
+ * pas. On en sert quinze par jour, les plus prioritaires ; les autres
+ * attendent, et l'arriéré se résorbe de lui-même.
+ */
+export const PLAFOND_REPRISES_JOUR = 15
+
 export function estDue(e: EtatReprise, aujourdhui: string): boolean {
   return e.dueLe !== null && e.dueLe <= aujourdhui
 }

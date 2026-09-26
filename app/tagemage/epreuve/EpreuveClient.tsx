@@ -9,7 +9,7 @@ import {
   OPTIONS_CONDITIONS_MINIMALES,
   RAPPEL_CONDITIONS_MINIMALES,
 } from '@/exams/tagemage'
-import { LIBELLE_MODE, type ModeEpreuve } from '@/exams/tagemage/epreuve'
+import { COUPURE_TOLEREE_MS, LIBELLE_MODE, type ModeEpreuve } from '@/exams/tagemage/epreuve'
 import { poster } from '@/app/_composants/reseau'
 import Panne, { type EtatPanne } from '@/app/_composants/Panne'
 
@@ -63,8 +63,11 @@ type Phase = 'chargement' | 'erreur' | 'reprise' | 'brief' | 'question' | 'confi
  * reste la seule vérité sur ce qui a été ENREGISTRÉ.
  *
  * Le chronomètre est gelé pendant la coupure : c'est un outil de secours
- * après un accident, pas un moyen de réfléchir hors délai. Au-delà du délai
- * d'abandon (12 h, voir core/db/sessions.ts), l'épreuve ne se reprend plus.
+ * après un accident, pas un moyen de réfléchir hors délai. La durée de la
+ * coupure est donc transmise à la reprise : au-delà de quelques minutes
+ * (COUPURE_TOLEREE_MS), l'épreuve n'est plus comptée en conditions réelles.
+ * Au-delà du délai d'abandon (12 h, voir core/db/sessions.ts), elle ne se
+ * reprend plus.
  */
 interface Sauvegarde {
   sessionId: number
@@ -127,7 +130,14 @@ interface EtatSessionServeur {
 }
 
 type Preparation =
-  | { type: 'reprise'; s: Sauvegarde; etapes: Etape[]; etat: EtatSessionServeur }
+  | {
+      type: 'reprise'
+      s: Sauvegarde
+      etapes: Etape[]
+      etat: EtatSessionServeur
+      /** Quand la reprise a été proposée : mesure la coupure hors du rendu. */
+      constateeLe: number
+    }
   | { type: 'nouvelle'; data: { sessionId: number; etapes: Etape[]; complete: boolean } }
 
 async function demarrer(mode: ModeEpreuve): Promise<Preparation> {
@@ -148,7 +158,7 @@ async function preparer(mode: ModeEpreuve): Promise<Preparation> {
       action: 'etat',
       sessionId: sauvegarde.s.sessionId,
     }).catch(() => null)
-    if (etat?.reprenable) return { type: 'reprise', ...sauvegarde, etat }
+    if (etat?.reprenable) return { type: 'reprise', ...sauvegarde, etat, constateeLe: Date.now() }
     effacerSauvegarde(mode)
   }
   return demarrer(mode)
@@ -181,7 +191,9 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
   /** Un lot qui n'est pas passé, et de quoi le rejouer sans perdre le sous-test. */
   const [enPanne, setEnPanne] = useState<EtatPanne | null>(null)
 
-  const debutItem = useRef(Date.now())
+  const debutItem = useRef(0)
+  /** La clôture courante, pour « Réessayer » : rappelée telle qu'elle est au clic. */
+  const cloturerCourant = useRef<() => Promise<void>>(async () => {})
   const finSection = useRef<number>(0)
   const cloture = useRef(false)
 
@@ -252,6 +264,13 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
     // cours est parti juste avant la coupure, on passe au suivant.
     let i = s.iEtape
     while (i < sauvees.length && etat.sectionsEnregistrees.includes(sauvees[i].section)) i++
+
+    // La sauvegarde est réécrite chaque seconde : son heure date la coupure.
+    await poster('/api/session', {
+      action: 'coupure',
+      sessionId: s.sessionId,
+      ms: Math.max(0, Date.now() - s.sauveeLe),
+    }).catch(() => undefined)
 
     setSessionId(s.sessionId)
     setEtapes(sauvees)
@@ -412,10 +431,13 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
       // On garde l'état intact et on rouvre la porte : `cloture` repasse à
       // false pour que la reprise puisse rejouer le même envoi.
       cloture.current = false
-      setEnPanne({ message: (e as Error).message, rejouer: () => void cloturerSection() })
+      setEnPanne({ message: (e as Error).message, rejouer: () => void cloturerCourant.current() })
       setPhase('question')
     }
   }, [capitaliserTemps, etape, etapes, iEtape, iItem, mode, router, sessionId])
+  useEffect(() => {
+    cloturerCourant.current = cloturerSection
+  }, [cloturerSection])
 
   /* ------------------------------------------------------ chronomètre -- */
 
@@ -626,7 +648,7 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
   if (phase === 'reprise' && aReprendre) {
     const { s, etapes: sauvees, etat } = aReprendre
     const faits = sauvees.filter((e) => etat.sectionsEnregistrees.includes(e.section)).length
-    const minutes = Math.round((Date.now() - s.sauveeLe) / 60000)
+    const minutes = Math.round((aReprendre.constateeLe - s.sauveeLe) / 60000)
     return (
       <main className="mx-auto max-w-xl px-6 py-20">
         <p className="text-sm uppercase tracking-widest text-doux">{LIBELLE_MODE[mode]}</p>
@@ -645,6 +667,13 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
             ` ; le sous-test en cours reprend avec ses réponses et ${Math.ceil(s.restantMs / 60000)} min restantes`}
           . Le chronomètre était arrêté pendant l’interruption.
         </p>
+        {minutes * 60000 > COUPURE_TOLEREE_MS && (
+          <p className="mt-3 rounded-lg border border-bord bg-carte px-4 py-3 text-sm leading-relaxed text-blanc">
+            Plus de {Math.round(COUPURE_TOLEREE_MS / 60000)} minutes de coupure : chronomètre arrêté, tu as pu
+            réfléchir hors du temps. L’épreuve gardera son score, mais ne comptera plus en conditions
+            réelles.
+          </p>
+        )}
         <button
           onClick={() => void reprendre()}
           className="mt-8 w-full rounded-lg bg-accent px-4 py-3 text-sm font-medium text-fond transition hover:opacity-90"

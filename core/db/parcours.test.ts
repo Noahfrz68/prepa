@@ -53,6 +53,7 @@ beforeAll(async () => {
     'epreuve/lot': (await import('@/app/api/epreuve/lot/route')).POST,
     'epreuve/finish': (await import('@/app/api/epreuve/finish/route')).POST,
     'epreuve/papier': (await import('@/app/api/epreuve/papier/route')).POST,
+    session: (await import('@/app/api/session/route')).POST,
   }
 
   const d = db()
@@ -262,5 +263,123 @@ describe('parcours : exporter ses données', () => {
     expect(json.tables.exam_session.length).toBeGreaterThan(0)
     expect('media' in json.tables).toBe(false)
     expect('_migration' in json.tables).toBe(false)
+  })
+})
+
+describe('parcours : ce qui n’a pas été mesuré ne compte pas comme mesuré', () => {
+  it('une épreuve papier est marquée ; ses temps et ses confiances vides ne sont pas des mesures', async () => {
+    const { db } = await import('./queries')
+    const compo = await appeler<{ etapes: Array<{ section: string; items: ItemServi[] }> }>('epreuve/papier', {
+      action: 'composer',
+      mode: 'diagnostic',
+    })
+    const enr = await appeler<{ sessionId: number }>('epreuve/papier', {
+      action: 'enregistrer',
+      mode: 'diagnostic',
+      sousTests: compo.data.etapes.map((e) => ({
+        section: e.section,
+        itemIds: e.items.map((i) => i.id),
+        // Première réponse avec sa confiance, les autres sans.
+        reponses: e.items.map((i, k) => ({ lettre: bonnes.get(i.id)!, confiance: k === 0 ? 4 : null })),
+        minutes: 9,
+      })),
+    })
+    expect(enr.statut).toBe(200)
+    const id = enr.data.sessionId
+
+    const session = db().prepare('SELECT papier FROM exam_session WHERE id = ?').get(id) as { papier: number }
+    expect(session.papier).toBe(1)
+    const t = db()
+      .prepare(
+        `SELECT COUNT(*) AS n, SUM(temps_mesure) AS mesures, SUM(confiance_declaree) AS declarees
+           FROM attempt WHERE session_id = ?`,
+      )
+      .get(id) as { n: number; mesures: number; declarees: number }
+    expect(t.mesures).toBe(0)
+    expect(t.declarees).toBe(compo.data.etapes.length)
+
+    const { recapEpreuve } = await import('./epreuve')
+    expect(recapEpreuve(id).papier).toBe(true)
+  })
+
+  it('une coupure de plus de cinq minutes retire les conditions réelles, pas une courte', async () => {
+    const { db } = await import('./queries')
+    const lire = (id: number) =>
+      db().prepare('SELECT conditions_reelles AS c, coupure_ms AS ms FROM exam_session WHERE id = ?').get(id) as {
+        c: number
+        ms: number
+      }
+
+    const courte = (await appeler<{ sessionId: number }>('epreuve/start', { mode: 'diagnostic' })).data.sessionId
+    expect((await appeler('session', { action: 'coupure', sessionId: courte, ms: 60_000 })).statut).toBe(200)
+    expect(lire(courte)).toEqual({ c: 1, ms: 60_000 })
+
+    const longue = (await appeler<{ sessionId: number }>('epreuve/start', { mode: 'diagnostic' })).data.sessionId
+    await appeler('session', { action: 'coupure', sessionId: longue, ms: 4 * 60_000 })
+    expect(lire(longue).c).toBe(1)
+    // Les coupures se cumulent : 4 + 2 min dépassent la tolérance.
+    await appeler('session', { action: 'coupure', sessionId: longue, ms: 2 * 60_000 })
+    expect(lire(longue)).toEqual({ c: 0, ms: 6 * 60_000 })
+  })
+})
+
+describe('parcours : une série de compréhension ciblée', () => {
+  it('sert des textes entiers, pas une question par texte', async () => {
+    const { db } = await import('./queries')
+    const skill = (db().prepare("SELECT skill_id AS s FROM item WHERE section = 'comprehension' LIMIT 1").get() as { s: string }).s
+    const { data } = await appeler<{ items: Array<{ contexteTexte: string }> }>('drill/start', {
+      section: 'comprehension',
+      taille: 10,
+      skills: [skill],
+    })
+    expect(data.items).toHaveLength(10)
+    expect(new Set(data.items.map((i) => i.contexteTexte)).size).toBe(2)
+  })
+})
+
+describe('parcours : réserve d’annales', () => {
+  it('une série ne sert pas une annale jamais vue ; une épreuve la sert en premier', async () => {
+    const { db } = await import('./queries')
+    // Trois annales de logique jamais vues, et quelques questions neuves ordinaires.
+    const skill = (db().prepare("SELECT skill_id AS s FROM item WHERE section = 'logique' LIMIT 1").get() as { s: string }).s
+    const inserer = db().prepare(
+      `INSERT INTO item (exam_id, section, skill_id, type_item, enonce, options, bonne_reponse, explication_reference, source, statut, tags)
+       VALUES ('tagemage', 'logique', ?, 'qcm', ?, '["A","B","C","D","E"]', 'A', 'Démarche.', ?, 'valide', ?)`,
+    )
+    const inedites = [1, 2, 3].map((k) =>
+      Number(inserer.run(skill, `Annale de logique inédite ${k}`, 'importe', 'annale').lastInsertRowid),
+    )
+    const neuves = [1, 2, 3].map((k) =>
+      Number(inserer.run(skill, `Question de logique neuve ${k}`, 'saisi', null).lastInsertRowid),
+    )
+
+    const serie = await appeler<{ items: ItemServi[] }>('drill/start', { section: 'logique', taille: 10 })
+    expect(serie.data.items.some((i) => inedites.includes(i.id))).toBe(false)
+    // Les questions neuves ordinaires, elles, restent tirables (et passent devant).
+    expect(neuves.every((id) => serie.data.items.some((i) => i.id === id))).toBe(true)
+
+    const epreuve = await appeler<{ etapes: Array<{ section: string; items: ItemServi[] }> }>('epreuve/start', {
+      mode: 'diagnostic',
+    })
+    const logique = epreuve.data.etapes.find((e) => e.section === 'logique')!
+    expect(inedites.every((id) => logique.items.some((i) => i.id === id))).toBe(true)
+  })
+})
+
+describe('parcours : le calendrier reprend le plan figé', () => {
+  it('la semaine en cours du calendrier porte l’épreuve prévue par le plan, ni plus ni moins', async () => {
+    const { db } = await import('./queries')
+    const dans60 = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10)
+    db().prepare(`UPDATE exam_goal SET date_examen = ? WHERE exam_id = 'tagemage'`).run(dans60)
+    const { planDeLaSemaine, calendrierJusquExamen } = await import('./semaine')
+    const plan = planDeLaSemaine(true)
+    const calendrier = calendrierJusquExamen()
+    expect(calendrier).not.toBeNull()
+    const prevue = plan.taches.some((t) => t.type === 'blanc')
+      ? 'blanc'
+      : plan.taches.some((t) => t.type === 'diagnostic')
+        ? 'diagnostic'
+        : null
+    expect(calendrier![0].epreuve).toBe(prevue)
   })
 })

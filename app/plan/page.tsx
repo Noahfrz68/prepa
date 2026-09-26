@@ -2,13 +2,9 @@ import Link from 'next/link'
 import PlanClient from './PlanClient'
 import { calendrierJusquExamen, historiqueSemaines, planDeLaSemaine } from '@/core/db/semaine'
 import { jourLisible } from '@/app/_composants/dates'
+import { duree as heures } from '@/app/_composants/nombres'
 
 export const dynamic = 'force-dynamic'
-
-const heures = (min: number) =>
-  min >= 60
-    ? `${Math.floor(min / 60)} h${min % 60 ? String(Math.round(min % 60)).padStart(2, '0') : ''}`
-    : `${Math.round(min)} min`
 
 export default function PagePlan() {
   const plan = planDeLaSemaine()
@@ -39,8 +35,10 @@ export default function PagePlan() {
         <section className="mt-12">
           <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Jusqu’à l’examen</h2>
           <p className="mb-3 text-xs leading-relaxed text-doux">
-            Projection : les règles du plan rejouées semaine après semaine, en supposant chaque
-            semaine faite comme prévue. Elle bouge à chaque épreuve passée ou manquée.
+            La semaine en cours reprend ton plan de lundi, tel quel. Les suivantes rejouent les règles
+            actuelles du plan, en supposant chaque semaine faite comme prévue, et le cours avance à ton
+            rythme mesuré (leçons réellement étudiées par semaine). Recalculé à chaque visite : là où
+            une prévision écrite lundi diffère, c’est ce tableau qui est à jour.
           </p>
           <div className="overflow-x-auto rounded-xl border border-bord bg-carte">
             <table className="w-full text-sm">

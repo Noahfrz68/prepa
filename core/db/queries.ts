@@ -4,13 +4,15 @@ import { SECTIONS, type SectionTageMage } from '@/exams/tagemage'
 import { issueDe, pointsDe, resultatSerie, type Issue } from '@/core/scoring/tagemage'
 import { lireCases, lireFigure } from '@/core/figures/lire'
 import type { Case, Figure } from '@/core/figures/types'
-import { itemsComprehensionGroupes } from './selection'
+import { textesPourTypes } from './selection'
+import { poidsDesTypes } from './poids'
+import { aleaDepuis } from '@/core/generation/alea'
 import type { ItemParse } from '@/core/import/parse'
 import { ErreurRequete } from '@/core/erreurs'
 import { tempsBorne, verifierSessionOuverte } from './garde'
 import { normaliserMultiplication, normaliserMultiplicationSi } from '@/core/import/typographie'
 import { difficulteObservee, type DifficulteObservee } from '@/core/stats/difficulte'
-import { modeleEnonce } from '@/core/scheduler/tirage'
+import { modeleEnonce, tirageEquilibre, type Candidat } from '@/core/scheduler/tirage'
 
 let amorce = false
 
@@ -270,6 +272,88 @@ export interface ItemDrill {
  *
  * Priorise les items jamais vus, puis les moins vus.
  */
+/**
+ * Réserve d'épreuve : une question d'annale jamais vue ne sert pas à
+ * l'entraînement. Ce sont les seules qui mesurent le niveau sans familiarité ;
+ * consommées en série, elles ne peuvent plus servir à une épreuve comparable.
+ * Condition SQL sur l'alias `i`.
+ */
+// `IS` et non `=` : pour une question sans étiquette (tags NULL), « NOT (NULL AND …) »
+// vaut NULL, et la condition écartait TOUTES les questions jamais vues.
+export const HORS_RESERVE = `NOT (i.tags IS 'annale' AND NOT EXISTS (SELECT 1 FROM attempt r WHERE r.item_id = i.id))`
+
+/** Les questions tirables d'une série, sans les champs lourds. */
+function candidatesDrill(section: string, skillIds: string[], reserve = true): Candidat[] {
+  const filtre = skillIds.length > 0 ? `AND i.skill_id IN (${skillIds.map(() => '?').join(',')})` : ''
+  return db()
+    .prepare(
+      `SELECT i.id, i.skill_id AS skillId, i.enonce,
+              (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu
+         FROM item i
+        WHERE i.exam_id = 'tagemage' AND i.section = ? AND i.statut = 'valide' ${filtre}
+          ${reserve ? `AND ${HORS_RESERVE}` : ''}`,
+    )
+    .all(section, ...skillIds) as Candidat[]
+}
+
+/** Questions d'un même modèle d'énoncé qu'une série peut contenir. */
+export const MAX_PAR_MODELE = 2
+
+/**
+ * Sous-tests où le début de l'énoncé EST le scénario (« Une urne contient… »,
+ * un argument à juger). En expression, en logique et en conditions minimales,
+ * la consigne est fixe par construction — comme au TAGE MAGE — et c'est le
+ * contenu qui varie : y plafonner par début d'énoncé couperait une série
+ * d'orthographe à deux questions.
+ */
+const SECTIONS_A_SCENARIO = new Set(['calcul', 'raisonnement'])
+
+/**
+ * Tirage d'une série hors compréhension. Quand les types visés n'ont pas de
+ * quoi remplir la série, on complète avec le reste du sous-test plutôt que de
+ * rendre deux questions — ou de resservir les mêmes. Là où le début de
+ * l'énoncé est le scénario, une série ne contient pas plus de MAX_PAR_MODELE
+ * questions d'un même modèle : un type qui n'en a qu'un (neuf problèmes
+ * d'urne) ne remplit plus une série à lui seul.
+ */
+function tirageCible(section: string, skillIds: string[], taille: number): number[] {
+  const poids = poidsDesTypes()
+  const alea = aleaDepuis(Date.now())
+  const plafonner = SECTIONS_A_SCENARIO.has(section)
+  const parModele = new Map<string, number>()
+  const accepter = (c: Candidat) => {
+    if (!plafonner) return true
+    const k = `${c.skillId}|${modeleEnonce(c.enonce)}`
+    if ((parModele.get(k) ?? 0) >= MAX_PAR_MODELE) return false
+    parModele.set(k, (parModele.get(k) ?? 0) + 1)
+    return true
+  }
+
+  const vises = tirageEquilibre(candidatesDrill(section, skillIds), taille, poids, alea).filter(accepter)
+  if (vises.length >= taille) return vises.map((c) => c.id)
+
+  // Complément : le reste du sous-test, sous le même plafond. On en tire large
+  // puis on filtre, pour que le plafond ne vide pas le complément.
+  const pris = new Set(vises.map((c) => c.id))
+  const reste = candidatesDrill(section, []).filter((c) => !pris.has(c.id))
+  const ordonne = tirageEquilibre(reste, reste.length, poids, alea)
+  const complement = ordonne.filter(accepter).slice(0, taille - vises.length)
+  const choisis = [...vises, ...complement]
+  // Banque trop pauvre en modèles : on relâche le plafond plutôt que de
+  // rendre une série incomplète.
+  if (choisis.length < taille) {
+    const dejaPris = new Set(choisis.map((c) => c.id))
+    choisis.push(...ordonne.filter((c) => !dejaPris.has(c.id)).slice(0, taille - choisis.length))
+  }
+  // En dernier recours seulement, la réserve d'épreuve.
+  if (choisis.length < taille) {
+    const dejaPris = new Set(choisis.map((c) => c.id))
+    const reserve = candidatesDrill(section, skillIds, false).filter((c) => !dejaPris.has(c.id))
+    choisis.push(...tirageEquilibre(reserve, taille - choisis.length, poids, alea))
+  }
+  return choisis.map((c) => c.id)
+}
+
 export function demarrerDrill(
   section: string,
   taille: number,
@@ -298,16 +382,23 @@ export function demarrerDrill(
   const filtreSkills = skillIds.length > 0 ? `AND i.skill_id IN (${skillIds.map(() => '?').join(',')})` : ''
 
   // La compréhension se tire par TEXTES complets, comme à l'épreuve : trois
-  // textes de cinq questions plutôt que quinze passages à lire. L'exception
-  // assumée est le travail ciblé — carnet d'erreurs, ou révision d'un seul type
-  // de question — où l'on accepte une question sous son texte, faute de pouvoir
-  // réunir cinq questions du même type sur le même passage.
+  // textes de cinq questions plutôt que quinze passages à lire — y compris
+  // quand le plan vise des types précis : on prend alors les textes où ces
+  // types sont les plus présents. Seuls le carnet et la revanche servent une
+  // question sous son texte, puisqu'ils rejouent des questions précises.
+  //
+  // Les autres sous-tests passent par le tirage équilibré des épreuves : pas
+  // deux fois le même modèle dans une série, les modèles les moins vus
+  // d'abord. Le simple « moins vues d'abord » servait neuf fois le même
+  // problème d'urne avec d'autres nombres.
   const cible =
     options.modeleDe !== undefined
       ? questionsDeRevanche(options.modeleDe, taille)
-      : itemIds.length === 0 && section === 'comprehension' && skillIds.length === 0
-        ? itemsComprehensionGroupes(taille)
-        : itemIds
+      : itemIds.length > 0
+        ? itemIds
+        : section === 'comprehension'
+          ? textesPourTypes(skillIds, taille)
+          : tirageCible(section, skillIds, taille)
 
   const impose = cible.length > 0
 
@@ -647,6 +738,7 @@ export function questionsDeRevanche(itemId: number, taille: number): number[] {
          FROM item i
         WHERE i.exam_id = 'tagemage' AND i.statut = 'valide' AND i.id <> ?
           AND i.section = ? AND ${source.skill_id ? 'i.skill_id = ?' : 'i.skill_id IS NULL'}
+          AND ${HORS_RESERVE}
         ORDER BY vu ASC, RANDOM()`,
     )
     .all(itemId, source.section, ...(source.skill_id ? [source.skill_id] : [])) as Array<{

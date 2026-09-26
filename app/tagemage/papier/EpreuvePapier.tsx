@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { poster } from '@/app/_composants/reseau'
 import BoutonImprimer from '@/app/_composants/BoutonImprimer'
@@ -73,9 +73,20 @@ function effacer(mode: ModeEpreuve) {
   }
 }
 
-function lireComposition(mode: ModeEpreuve): Composition | null {
+/** Le sujet gardé dans ce navigateur, brut : une chaîne se compare, un objet non. */
+function lireBrut(mode: ModeEpreuve): string | null {
   try {
-    const brut = localStorage.getItem(cle(mode))
+    return localStorage.getItem(cle(mode))
+  } catch {
+    return null
+  }
+}
+function abonnerStockage(prevenir: () => void) {
+  window.addEventListener('storage', prevenir)
+  return () => window.removeEventListener('storage', prevenir)
+}
+function analyser(brut: string | null): Composition | null {
+  try {
     return brut ? (JSON.parse(brut) as Composition) : null
   } catch {
     return null
@@ -93,21 +104,20 @@ function lireComposition(mode: ModeEpreuve): Composition | null {
  */
 export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
   const router = useRouter()
-  const [composition, setComposition] = useState<Composition | null>(null)
-  const [vue, setVue] = useState<'accueil' | 'sujet' | 'saisie'>('accueil')
+  // Le sujet composé un autre jour est retrouvé au retour sur la page : lu
+  // comme un état externe du navigateur. Tant que l'utilisateur n'a rien
+  // choisi (undefined), c'est lui qui décide de la vue.
+  const brutSauve = useSyncExternalStore(abonnerStockage, () => lireBrut(mode), () => null)
+  const sauvee = useMemo(() => analyser(brutSauve), [brutSauve])
+  const [compositionChoisie, setComposition] = useState<Composition | null | undefined>(undefined)
+  const [vueChoisie, setVue] = useState<'accueil' | 'sujet' | 'saisie' | undefined>(undefined)
+  const composition = compositionChoisie !== undefined ? compositionChoisie : sauvee
+  const vue = vueChoisie ?? (sauvee ? 'sujet' : 'accueil')
   const [reponses, setReponses] = useState<Record<string, Reponse[]>>({})
   const [minutes, setMinutes] = useState<Record<string, number>>({})
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState('')
 
-  // Le sujet composé un autre jour est retrouvé au retour sur la page.
-  useEffect(() => {
-    const c = lireComposition(mode)
-    if (c) {
-      setComposition(c)
-      setVue('sujet')
-    }
-  }, [mode])
 
   const composer = async () => {
     setOccupe(true)
@@ -160,7 +170,7 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
     }
     setReponses(
       Object.fromEntries(
-        composition.etapes.map((e) => [e.section, e.items.map(() => ({ lettre: null, confiance: 3 }))]),
+        composition.etapes.map((e) => [e.section, e.items.map(() => ({ lettre: null, confiance: null }))]),
       ),
     )
     setMinutes(Object.fromEntries(composition.etapes.map((e) => [e.section, Math.round(e.secondes / 60)])))
@@ -244,8 +254,10 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
         </button>
         <h1 className="mt-6 text-2xl font-semibold tracking-tight">Saisir la feuille de réponses</h1>
         <p className="mt-2 text-sm leading-relaxed text-doux">
-          Une lettre par question (laisse « — » pour une case vide), la confiance notée, et le temps
-          passé sur chaque sous-test. Le temps est réparti également entre ses questions.
+          Une lettre par question (laisse « — » pour une case vide), la confiance si tu l’as notée, et
+          le temps passé sur chaque sous-test. Une confiance laissée vide n’est pas inventée : la
+          réponse compte pour le score, pas pour la calibration. Le temps, réparti également entre les
+          questions, compte dans ton volume de travail mais dans aucune statistique de temps.
         </p>
 
         <div className="mt-6 space-y-6">
@@ -269,7 +281,7 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
               </div>
               <ol className="mt-3 space-y-1.5">
                 {e.items.map((it, i) => {
-                  const r = reponses[e.section]?.[i] ?? { lettre: null, confiance: 3 }
+                  const r = reponses[e.section]?.[i] ?? { lettre: null, confiance: null }
                   const maj = (patch: Partial<Reponse>) =>
                     setReponses((tout) => ({
                       ...tout,
@@ -297,7 +309,8 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
                           <button
                             key={c}
                             disabled={r.lettre === null}
-                            onClick={() => maj({ confiance: c })}
+                            // Un second clic efface : la confiance reste facultative.
+                            onClick={() => maj({ confiance: r.confiance === c ? null : c })}
                             className={`h-6 w-6 rounded border disabled:opacity-30 ${
                               r.confiance === c && r.lettre !== null
                                 ? 'border-accent text-accent'

@@ -112,7 +112,10 @@ function sauvegarderSiNecessaire(db: Database.Database) {
     if (fs.existsSync(cible)) return
 
     db.backup(cible)
-      .then(() => elaguerSauvegardes())
+      .then(() => {
+        elaguerSauvegardes(SAUVEGARDES_DIR)
+        copierAilleurs(cible)
+      })
       .catch((e: unknown) => console.error('[sauvegarde] échec :', e))
   } catch (e) {
     console.error('[sauvegarde] échec :', e)
@@ -120,14 +123,68 @@ function sauvegarderSiNecessaire(db: Database.Database) {
 }
 
 /** Ne touche qu'aux sauvegardes quotidiennes : les copies nommées à la main restent. */
-function elaguerSauvegardes() {
+function elaguerSauvegardes(dossier: string) {
   const quotidiennes = fs
-    .readdirSync(SAUVEGARDES_DIR)
+    .readdirSync(dossier)
     .filter((f) => /^app-\d{4}-\d{2}-\d{2}\.db$/.test(f))
     .sort()
   for (const f of quotidiennes.slice(0, Math.max(0, quotidiennes.length - SAUVEGARDES_GARDEES))) {
-    fs.rmSync(path.join(SAUVEGARDES_DIR, f), { force: true })
+    fs.rmSync(path.join(dossier, f), { force: true })
   }
+}
+
+/**
+ * Dossier où recopier chaque sauvegarde quotidienne, hors de ce disque :
+ * `PREPA_SAUVEGARDES_EXTERNES` dans .env.local (un dossier OneDrive, une clé
+ * USB). Les sauvegardes de data/sauvegardes/ vivent sur le même disque que la
+ * base : une panne emporterait les deux. Vide par défaut — envoyer ses
+ * données ailleurs est un choix, pas un réglage implicite.
+ */
+export function dossierSauvegardesExternes(): string | null {
+  const d = process.env.PREPA_SAUVEGARDES_EXTERNES?.trim()
+  return d ? path.resolve(d) : null
+}
+
+function copierAilleurs(source: string) {
+  const dossier = dossierSauvegardesExternes()
+  if (!dossier || BASE_ALTERNATIVE) return
+  try {
+    fs.mkdirSync(dossier, { recursive: true })
+    fs.copyFileSync(source, path.join(dossier, path.basename(source)))
+    elaguerSauvegardes(dossier)
+  } catch (e) {
+    // Clé débranchée, dossier inaccessible : la sauvegarde locale reste faite.
+    console.error('[sauvegarde] copie externe impossible :', e)
+  }
+}
+
+/**
+ * Les sauvegardes présentes, les plus récentes d'abord. Les quotidiennes
+ * tournent seules (SAUVEGARDES_GARDEES) ; les copies nommées « avant-… »,
+ * faites avant une opération risquée, restent jusqu'à ce qu'on les range.
+ */
+export function listeSauvegardes(): Array<{ nom: string; octets: number; quotidienne: boolean; le: Date }> {
+  if (!fs.existsSync(SAUVEGARDES_DIR)) return []
+  return fs
+    .readdirSync(SAUVEGARDES_DIR)
+    .filter((f) => f.endsWith('.db'))
+    .map((nom) => {
+      const st = fs.statSync(path.join(SAUVEGARDES_DIR, nom))
+      return { nom, octets: st.size, quotidienne: /^app-\d{4}-\d{2}-\d{2}\.db$/.test(nom), le: st.mtime }
+    })
+    .sort((a, b) => b.le.getTime() - a.le.getTime())
+}
+
+/**
+ * Range les copies nommées (hors quotidiennes) de plus de `jours` jours.
+ * Renvoie les fichiers supprimés ; `essai` ne supprime rien et dit ce qui le
+ * serait. Les quotidiennes ne sont jamais touchées ici.
+ */
+export function rangerSauvegardesNommees(jours: number, essai = true): string[] {
+  const limite = Date.now() - jours * 86_400_000
+  const vieilles = listeSauvegardes().filter((s) => !s.quotidienne && s.le.getTime() < limite)
+  if (!essai) for (const s of vieilles) fs.rmSync(path.join(SAUVEGARDES_DIR, s.nom), { force: true })
+  return vieilles.map((s) => s.nom)
 }
 
 export { DB_PATH }

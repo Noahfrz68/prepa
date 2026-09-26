@@ -115,3 +115,19 @@ export function pluriel(n: number, singulier: string, pluriel = `${singulier}s`)
 export function capitale(texte: string): string {
   return texte.charAt(0).toUpperCase() + texte.slice(1)
 }
+
+/**
+ * Une majuscule en tête de CHAQUE phrase. Un scénario assemble plusieurs
+ * phrases dont certaines commencent par un fragment en minuscule (« la
+ * limitation de vitesse… est donc efficace ») : `capitale` ne corrigeait que
+ * la première, et 37 énoncés portaient « …d'un tiers. la limitation… ».
+ * Ne touche qu'une lettre qui suit un point final, d'exclamation ou
+ * d'interrogation et une espace ; une variable (« x³ ») ou une abréviation
+ * (« cf. ») n'apparaissent pas dans les scénarios où on l'applique.
+ */
+export function capitaliserPhrases(texte: string): string {
+  return capitale(texte).replace(
+    /([.!?][\s\u00a0]+)([a-zàâäéèêëîïôöûùüÿç])/g,
+    (_, fin: string, lettre: string) => fin + lettre.toUpperCase(),
+  )
+}

@@ -85,21 +85,57 @@ export function qcm(
   // même ordre de grandeur pour que le leurre reste crédible.
   let ecart = 1
   while (valeurs.length < 5 && ecart < 5000) {
-    const pas = Math.max(1, Math.round(Math.abs(bonne) * 0.1 * ecart)) || ecart
+    // Le pas croît à chaque tour, même autour de 0 : avec Math.max(1, …), une
+    // réponse nulle proposait sans fin 1 et −1, et la question sortait avec trois
+    // propositions.
+    const pas = Math.max(ecart, Math.round(Math.abs(bonne) * 0.1 * ecart))
     ajouter(bonne + pas)
     if (valeurs.length < 5) ajouter(bonne - pas)
     ecart++
   }
 
   const melange = a.melanger(valeurs)
-  const textes = melange.map(formater)
-  const index = textes.indexOf(formater(bonne))
+  const bruts = melange.map(formater)
+  const index = bruts.indexOf(formater(bonne))
+  const textes = harmoniserDecimales(bruts)
+  const motifsHarmonises = new Map<string, string>()
+  bruts.forEach((b, i) => {
+    const m = motifs.get(b)
+    if (m) motifsHarmonises.set(textes[i], m)
+  })
 
   return {
     options: textes,
     bonneReponse: LETTRES[index],
-    diagnostics: parLettre(textes, motifs),
+    diagnostics: parLettre(textes, motifsHarmonises),
   }
+}
+
+/** Un nombre écrit à la française : signe, groupes de milliers, décimales après la virgule. */
+const NOMBRE = /[−-]?\d{1,3}(?:[\u00a0\u202f ]\d{3})*(?:,(\d+))?/g
+
+/**
+ * Même nombre de décimales pour les cinq propositions.
+ *
+ * « 5 h · 9 h · 8 h · 18 h · 3,61 h » désignait la bonne réponse par sa seule
+ * forme : la seule décimale est forcément le résultat d'un calcul, les entiers
+ * des leurres ronds. On complète donc les entiers par des zéros (« 5,00 h »)
+ * dès qu'une proposition porte des décimales. Ne s'applique qu'aux
+ * propositions qui contiennent un seul nombre : une fraction ou une durée en
+ * heures et minutes gardent leur forme.
+ */
+export function harmoniserDecimales(textes: string[]): string[] {
+  const trouves = textes.map((t) => [...t.matchAll(NOMBRE)])
+  if (trouves.some((m) => m.length !== 1)) return textes
+  const decimales = trouves.map((m) => m[0][1]?.length ?? 0)
+  const max = Math.max(...decimales)
+  if (max === 0 || decimales.every((k) => k === max)) return textes
+  return textes.map((t, i) => {
+    const m = trouves[i][0]
+    const entier = m[1] === undefined ? m[0] : m[0].slice(0, -(m[1].length + 1))
+    const frac = (m[1] ?? '').padEnd(max, '0')
+    return t.slice(0, m.index) + `${entier},${frac}` + t.slice((m.index ?? 0) + m[0].length)
+  })
 }
 
 /**

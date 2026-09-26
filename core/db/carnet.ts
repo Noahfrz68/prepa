@@ -3,8 +3,9 @@ import { lireCases, lireFigure } from '@/core/figures/lire'
 import type { Case, Figure } from '@/core/figures/types'
 import { PAR_SKILL } from '@/exams/tagemage/lecons'
 import { SECTIONS_PAR_ID } from '@/exams/tagemage'
-import { estDue, etatReprise, type EtatReprise } from '@/core/scheduler/reprise'
-import { LIBELLE_CAUSE, type CauseErreur } from '@/core/stats/causes'
+import { estDue, etatReprise, PLAFOND_REPRISES_JOUR, type EtatReprise } from '@/core/scheduler/reprise'
+import { causesDe, LIBELLE_CAUSE, type CauseErreur } from '@/core/stats/causes'
+import { ErreurRequete } from '@/core/erreurs'
 
 /**
  * Le carnet d'erreurs.
@@ -54,7 +55,10 @@ export interface EntreeCarnet {
   /** Reprise espacée : J+1, J+3, J+7 après la dernière erreur. */
   reprise: EtatReprise
   /** La reprise est due aujourd'hui ou avant. */
+  /** Due, et dans le quota du jour (PLAFOND_REPRISES_JOUR). */
   aRejouer: boolean
+  /** Due, mais au-delà du quota du jour : elle attend son tour. */
+  enAttente: boolean
   /** Disposition dessinée de l'énoncé, pour les questions graphiques. */
   figure: Figure | null
   /** Les cinq propositions dessinées, dans l'ordre de `options`. */
@@ -86,6 +90,18 @@ export interface FiltreCarnet {
   /** Par défaut les questions comprises sont masquées : le carnet est une pile à vider. */
   inclureComprises?: boolean
   limite?: number
+  /** Interne : ignorer le quota du jour (sert à le calculer). */
+  sansQuota?: boolean
+}
+
+/** Les reprises du jour : les PLAFOND_REPRISES_JOUR dues les plus prioritaires, tout le carnet confondu. */
+function quotaDuJour(): Set<number> {
+  return new Set(
+    entreesCarnet({ limite: 5000, sansQuota: true })
+      .filter((e) => e.aRejouer)
+      .slice(0, PLAFOND_REPRISES_JOUR)
+      .map((e) => e.itemId),
+  )
 }
 
 /**
@@ -153,6 +169,7 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
     .all(...params, f.limite ?? 200) as Array<Record<string, unknown>>
 
   const aujourdhui = new Date().toLocaleDateString('sv-SE')
+  const quota = f.sansQuota ? null : quotaDuJour()
   const toutes = lignes.map((l) => {
     const skillId = (l.skill_id as string) ?? null
     const reprise = etatReprise(l.derniere_tentative as string, Number(l.reussites_depuis ?? 0))
@@ -180,7 +197,8 @@ export function entreesCarnet(f: FiltreCarnet = {}): EntreeCarnet[] {
       comprisLe: (l.compris_le as string) ?? null,
       cause: (l.cause as CauseErreur) ?? null,
       reprise,
-      aRejouer: estDue(reprise, aujourdhui),
+      aRejouer: estDue(reprise, aujourdhui) && (quota === null || quota.has(l.id as number)),
+      enAttente: estDue(reprise, aujourdhui) && quota !== null && !quota.has(l.id as number),
       figure: lireFigure(l.figure),
       optionsFigure: lireCases(l.options_figure),
       imageHash: (l.image_hash as string) ?? null,
@@ -201,6 +219,8 @@ export interface ResumeCarnet {
   parCause: Array<{ cause: CauseErreur; libelle: string; n: number }>
   /** Questions dont la reprise espacée est due aujourd'hui. */
   aRejouerAujourdhui: number
+  /** Reprises dues au-delà du quota du jour. */
+  enAttente: number
 }
 
 /** De quoi afficher un compteur sans charger tout le carnet. */
@@ -254,7 +274,9 @@ export function resumeCarnet(): ResumeCarnet {
       .all() as Array<{ cause: CauseErreur; n: number }>
   ).map((r) => ({ ...r, libelle: LIBELLE_CAUSE[r.cause] }))
 
-  const aRejouerAujourdhui = entreesCarnet({ limite: 1000 }).filter((e) => e.aRejouer).length
+  const entrees = entreesCarnet({ limite: 5000 })
+  const aRejouerAujourdhui = entrees.filter((e) => e.aRejouer).length
+  const enAttente = entrees.filter((e) => e.enAttente).length
 
   return {
     aTravailler,
@@ -262,6 +284,7 @@ export function resumeCarnet(): ResumeCarnet {
     parType,
     parCause,
     aRejouerAujourdhui,
+    enAttente,
     parSection: [...parSection.entries()]
       .map(([section, n]) => ({
         section,
@@ -369,6 +392,13 @@ export function declarerCause(itemId: number, cause: CauseErreur | null): void {
       `DELETE FROM carnet_note WHERE item_id = ? AND note IS NULL AND compris_le IS NULL AND cause IS NULL`,
     ).run(itemId)
     return
+  }
+  // Une cause qui n'a pas de sens dans ce sous-test (« erreur de calcul » en
+  // orthographe) est refusée : elle brouillerait le regroupement par cause.
+  const item = d.prepare(`SELECT section FROM item WHERE id = ?`).get(itemId) as { section: string } | undefined
+  if (!item) throw new ErreurRequete(`Question ${itemId} introuvable.`, 404)
+  if (!causesDe(item.section).includes(cause)) {
+    throw new ErreurRequete(`Cause « ${cause} » sans objet pour ce sous-test.`)
   }
   d.prepare(
     `INSERT INTO carnet_note (item_id, cause) VALUES (?, ?)

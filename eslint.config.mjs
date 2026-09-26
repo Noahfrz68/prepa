@@ -18,6 +18,13 @@ export default defineConfig([
     // d'eslint-plugin-react appelle une API retirée d'ESLint 10.
     settings: { react: { version: '19.2' } },
   },
+  {
+    // Convention du projet : un paramètre préfixé « _ » est volontairement
+    // inutilisé (une signature gardée pour les appelants).
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
   globalIgnores([
     '.next/**',
     'out/**',

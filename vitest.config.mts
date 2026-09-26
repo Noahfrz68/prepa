@@ -5,7 +5,7 @@ export default defineConfig({
     alias: { '@': import.meta.dirname },
   },
   test: {
-    include: ['core/**/*.test.ts', 'exams/**/*.test.ts'],
+    include: ['core/**/*.test.ts', 'exams/**/*.test.ts', 'app/**/*.test.ts'],
     environment: 'node',
   },
 })

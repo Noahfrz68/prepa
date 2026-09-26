@@ -102,7 +102,21 @@ export default function Raccourcis() {
     return () => window.removeEventListener('keydown', onKey, { capture: true })
   }, [ouvert])
 
-  if (!ouvert) return null
+  // Le raccourci n'aide que si on le connaît : un bouton discret le rend
+  // visible, sur toutes les pages, hors impression.
+  if (!ouvert) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOuvert(true)}
+        aria-label="Raccourcis clavier"
+        title="Raccourcis clavier (?)"
+        className="sans-impression fixed bottom-4 right-4 z-40 flex h-8 w-8 items-center justify-center rounded-full border border-bord bg-carte text-sm text-doux shadow transition hover:border-accent hover:text-texte"
+      >
+        ?
+      </button>
+    )
+  }
   const groupes = groupesDe(chemin)
 
   return (

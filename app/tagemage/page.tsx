@@ -4,10 +4,10 @@ import { historiqueScores } from '@/core/db/arbitrage'
 import CourbeScore from '@/app/_composants/CourbeScore'
 import { jourLisible } from '@/app/_composants/dates'
 import { historiqueEpreuves } from '@/core/db/epreuve'
-import { texteLongComprehension } from '@/core/db/selection'
+import { questionsEnAttente, reserveAnnales, texteLongComprehension } from '@/core/db/selection'
 import { planDeLaSemaine } from '@/core/db/semaine'
 import { prochaineSeance } from '@/app/plan/prochaine'
-import { SECONDES_PAR_QUESTION } from '@/exams/tagemage'
+import { SECONDES_PAR_QUESTION, SECTIONS } from '@/exams/tagemage'
 import { SEUIL_FIABILITE } from '@/core/stats/calculs'
 import {
   QUESTIONS_DIAGNOSTIC,
@@ -28,6 +28,13 @@ export default function HubTageMage() {
   const courbe = historiqueScores('tagemage', 20)
   const cible = etatExamens().find((e) => e.examId === 'tagemage')?.scoreCible ?? null
   const dureeBlanc = dureeTotaleMinutes(composerEpreuve('blanc'))
+  // Réserve d'annales jamais vues : ce qui permet une épreuve comparable.
+  const attente = questionsEnAttente()
+  const reserve = reserveAnnales()
+  const reserveMin = Math.min(...SECTIONS.map((s) => reserve.get(s.id) ?? 0))
+  const diagnosticSurAnnales = SECTIONS.every(
+    (s) => (reserve.get(s.id) ?? 0) >= (s.id === 'comprehension' ? QUESTIONS_DIAGNOSTIC_COMPREHENSION : QUESTIONS_DIAGNOSTIC),
+  )
   // La même séance que l'accueil : la première tâche non faite du plan.
   const prochaine = total > 0 ? prochaineSeance(planDeLaSemaine().taches) : null
   // Un texte long de sept questions validé remplace le texte de cinq : la
@@ -77,6 +84,30 @@ export default function HubTageMage() {
           </Link>
         </div>
       </header>
+
+      {/* Des questions écrites ou importées attendent une relecture : rien n'est
+          servi sans elle, et elles ne comptent dans aucune série tant qu'elles
+          n'ont pas été validées. */}
+      {attente.aRelire + attente.suspectes > 0 && (
+        <Link
+          href="/atelier"
+          className="mb-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-xl border border-bord bg-carte px-5 py-3 text-sm transition hover:border-accent"
+        >
+          <span>
+            <span className="chiffres font-medium">{attente.aRelire + attente.suspectes}</span> question
+            {attente.aRelire + attente.suspectes > 1 ? 's attendent' : ' attend'} ta relecture
+            {attente.suspectes > 0 && (
+              <span className="text-doux">
+                {' '}
+                (dont {attente.suspectes} signalée{attente.suspectes > 1 ? 's' : ''} suspecte
+                {attente.suspectes > 1 ? 's' : ''})
+              </span>
+            )}
+            <span className="text-doux"> : elles ne sont servies qu’une fois validées.</span>
+          </span>
+          <span className="text-accent">Ouvrir l’atelier →</span>
+        </Link>
+      )}
 
       {prochaine && (
         <Link
@@ -142,6 +173,26 @@ export default function HubTageMage() {
             {' '}— sujet imprimé, feuille de réponses saisie ensuite.
           </p>
 
+          {/* La réserve d'annales jamais vues : sans elle, une épreuve se compose
+              surtout de questions générées, mieux réussies, et ne se compare
+              qu'aux épreuves de même nature. */}
+          <div className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4 text-sm leading-relaxed">
+            <p className="font-medium">
+              Réserve d’annales jamais vues{' '}
+              <span className="chiffres text-doux">
+                {SECTIONS.reduce((a, s) => a + (reserve.get(s.id) ?? 0), 0)} questions
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-doux">
+              {SECTIONS.map((s) => `${s.libelle} ${reserve.get(s.id) ?? 0}`).join(' · ')}
+            </p>
+            <p className="mt-2 text-doux">
+              {diagnosticSurAnnales
+                ? 'Assez pour un diagnostic entièrement sur annales : les épreuves les servent en premier, et les séries n’y touchent pas.'
+                : `Pas assez pour un diagnostic entièrement sur annales (il en faut ${QUESTIONS_DIAGNOSTIC} par sous-test, ${QUESTIONS_DIAGNOSTIC_COMPREHENSION} en compréhension ; le plus bas en compte ${reserveMin}). Les épreuves se complètent de questions générées et ne se comparent qu’entre elles. Importer une annale en PDF dans l’atelier remplit la réserve : les séries n’y touchent pas.`}
+            </p>
+          </div>
+
           {courbe.length >= 2 && (
             <div className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4">
               <p className="text-sm font-medium">Ton score dans le temps</p>
@@ -169,13 +220,31 @@ export default function HubTageMage() {
                   >
                     <span className="flex-1">
                       {h.type === 'blanc' ? 'Blanc complet' : 'Diagnostic'}
-                      {!h.conditionsReelles && (
+                      {h.papier && <span className="ml-2 text-xs text-doux">sur papier</span>}
+                      {h.nature === 'generees' && (
+                        <span
+                          className="ml-2 text-xs text-doux"
+                          title="Ne se compare qu’aux autres épreuves de questions générées"
+                        >
+                          questions générées
+                        </span>
+                      )}
+                      {h.horsDelai ? (
                         <span
                           className="ml-2 text-xs text-blanc"
-                          title="La banque manquait de questions pour au moins un sous-test"
+                          title="Reprise après une coupure de plus de 5 minutes, chronomètre arrêté"
                         >
-                          banque incomplète
+                          hors conditions réelles
                         </span>
+                      ) : (
+                        !h.conditionsReelles && (
+                          <span
+                            className="ml-2 text-xs text-blanc"
+                            title="La banque manquait de questions pour au moins un sous-test"
+                          >
+                            banque incomplète
+                          </span>
+                        )
                       )}
                     </span>
                     <span className="chiffres text-doux">{h.n} questions</span>

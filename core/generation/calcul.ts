@@ -10,6 +10,7 @@
 import { capitale, euros, fraction, nombre, pgcd, pourcent, ppcm } from './alea'
 import { qcm, qcmTexte } from './qcm'
 import type { Famille } from './types'
+import { MODELES_CALCUL_SUPPLEMENTAIRES } from './calcul-modeles'
 
 const S = 'calcul' as const
 
@@ -967,10 +968,14 @@ const robinets: Famille = {
     const { options, bonneReponse, diagnostics } = qcm(
       a,
       ensemble,
+      // Des leurres qui sont eux aussi des calculs, souvent non ronds : avec des
+      // entiers seuls en face (5 h, 9 h, 18 h…), la seule décimale désignait
+      // la bonne réponse sans qu'on ait rien à calculer.
       [
+        [x / 2, 'c’est comme si la seconde pompe allait aussi vite que la première : le temps aurait été divisé par deux'],
         [(x + y) / 2, 'c’est la moyenne des deux durées — or à deux on va plus vite que chacune seule'],
+        [(x * y) / (y - x), 'les débits ont été soustraits (1/' + x + ' − 1/' + y + ') au lieu d’être additionnés'],
         [x + y, 'les durées ont été additionnées : ce serait le temps si les pompes travaillaient l’une APRÈS l’autre'],
-        [Math.abs(y - x), 'c’est l’écart entre les deux durées'],
         [Math.min(x, y), 'c’est la durée de la pompe la plus rapide, seule'],
       ],
       (n) => `${nombre(n, Number.isInteger(n) ? 0 : 2)} h`,
@@ -1092,4 +1097,6 @@ export const FAMILLES_CALCUL: Famille[] = [
   vitesseMoyenne,
   robinets,
   suites,
+  // Deuxièmes modèles des types qui n'en avaient qu'un (calcul-modeles.ts).
+  ...MODELES_CALCUL_SUPPLEMENTAIRES,
 ]

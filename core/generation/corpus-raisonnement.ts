@@ -268,4 +268,137 @@ export const SCENARIOS: Scenario[] = [
     contexte: { sujet: 'ce règlement', mesure: 'l’interdiction décidée', effet: 'le respect de la règle', groupe: 'le public des usagers' },
     texte: (c) => `${c.mesure} est légitime, car elle interdit une pratique illégitime. Et cette pratique est illégitime puisqu’elle est interdite.`,
   },
+
+  /* ------------------------------------------ scénarios supplémentaires -- */
+  // Trois de plus par faille : avec quatre scénarios chacune, un même argument
+  // revenait jusqu'à quatre fois dans la banque, et sa faille se reconnaissait
+  // de mémoire plutôt que se trouvait.
+
+  {
+    faille: 'causalite',
+    contexte: { sujet: 'cette commune', mesure: 'l’installation de caméras de surveillance', effet: 'le nombre de cambriolages', groupe: 'le panel d’habitants interrogés' },
+    texte: (c) => `Un an après ${c.mesure}, ${c.effet} dans ${c.sujet} a reculé de 20 %. ${c.mesure} a donc fait baisser la délinquance.`,
+  },
+  {
+    faille: 'causalite',
+    contexte: { sujet: 'ce collège', mesure: 'l’interdiction des téléphones portables', effet: 'la moyenne des élèves', groupe: 'la classe observée' },
+    texte: (c) => `Depuis ${c.mesure}, ${c.effet} de ${c.sujet} a progressé d’un point. C’est donc ${c.mesure} qui explique ce progrès.`,
+  },
+  {
+    faille: 'causalite',
+    contexte: { sujet: 'cette enseigne', mesure: 'le changement de logo', effet: 'le chiffre d’affaires', groupe: 'l’échantillon de clients interrogés' },
+    texte: (c) => `Le trimestre qui a suivi ${c.mesure}, ${c.effet} de ${c.sujet} a bondi de 15 %. ${c.mesure} a donc séduit la clientèle.`,
+  },
+
+  {
+    faille: 'echantillon',
+    contexte: { sujet: 'un magazine de voyage', mesure: 'le sondage réalisé auprès de ses lecteurs', effet: 'le goût des Français pour les voyages lointains', groupe: 'le lectorat du magazine' },
+    texte: (c) => `Selon ${c.mesure}, 80 % des personnes interrogées partent chaque année à l’étranger. ${c.effet} est donc massif.`,
+  },
+  {
+    faille: 'echantillon',
+    contexte: { sujet: 'une salle de sport', mesure: 'l’enquête menée auprès de ses abonnés', effet: 'la pratique sportive de la population', groupe: 'le groupe des abonnés' },
+    texte: (c) => `D’après ${c.mesure}, neuf personnes sur dix font du sport chaque semaine. ${c.effet} est donc bien plus répandue qu’on ne le dit.`,
+  },
+  {
+    faille: 'echantillon',
+    contexte: { sujet: 'un site d’information en ligne', mesure: 'le vote organisé sur sa page d’accueil', effet: 'l’opinion des citoyens', groupe: 'l’ensemble des internautes ayant voté' },
+    texte: (c) => `${c.mesure} donne 65 % d’opinions favorables à la réforme. ${c.effet} lui est donc largement acquise.`,
+  },
+
+  {
+    faille: 'faux_dilemme',
+    contexte: { sujet: 'le club', mesure: 'la vente du terrain d’entraînement', effet: 'la survie financière du club', groupe: 'l’ensemble des adhérents' },
+    texte: (c) => `Soit ${c.sujet} double les cotisations, soit il procède à ${c.mesure}. Doubler les cotisations ferait fuir les adhérents : ${c.mesure} est donc inévitable.`,
+  },
+  {
+    faille: 'faux_dilemme',
+    contexte: { sujet: 'le gouvernement', mesure: 'la suppression de la prime', effet: 'la maîtrise de la dette', groupe: 'les ménages bénéficiaires' },
+    texte: (c) => `Il n’y a que deux options : laisser filer la dette ou décider ${c.mesure}. Laisser filer la dette étant irresponsable, ${c.mesure} s’impose.`,
+  },
+  {
+    faille: 'faux_dilemme',
+    contexte: { sujet: 'l’hôpital', mesure: 'la fermeture de la maternité', effet: 'la sécurité des accouchements', groupe: 'les patientes du secteur' },
+    texte: (c) => `Ou bien ${c.sujet} recrute dix médecins qu’il ne trouve pas, ou bien il procède à ${c.mesure}. Faute de candidats, ${c.mesure} est la seule solution.`,
+  },
+
+  {
+    faille: 'autorite',
+    contexte: { sujet: 'un chef étoilé', mesure: 'ce régime sans gluten', effet: 'la santé digestive', groupe: 'le panel de patients suivis' },
+    texte: (c) => `${c.sujet} recommande ${c.mesure} à tous ses clients pour préserver ${c.effet}. Ce régime est donc bon pour la santé.`,
+  },
+  {
+    faille: 'autorite',
+    contexte: { sujet: 'un célèbre romancier', mesure: 'la réforme des retraites', effet: 'l’équilibre des comptes sociaux', groupe: 'le groupe d’économistes consultés' },
+    texte: (c) => `${c.sujet}, traduit dans quarante langues, juge que ${c.mesure} ruinera ${c.effet}. Il faut donc y renoncer.`,
+  },
+  {
+    faille: 'autorite',
+    contexte: { sujet: 'une championne olympique', mesure: 'cette application de méditation', effet: 'la concentration', groupe: 'l’échantillon d’utilisateurs étudiés' },
+    texte: (c) => `${c.sujet} assure que ${c.mesure} a décuplé ${c.effet}. Chacun devrait donc l’utiliser.`,
+  },
+
+  {
+    faille: 'inversion',
+    contexte: { sujet: 'les ménages étudiés', mesure: 'l’achat d’une voiture neuve', effet: 'la hausse des revenus', groupe: 'l’ensemble des foyers observés' },
+    texte: (c) => `Chez ${c.sujet}, ${c.mesure} coïncide avec ${c.effet}. Acheter une voiture neuve fait donc gagner davantage.`,
+  },
+  {
+    faille: 'inversion',
+    contexte: { sujet: 'les patients du service', mesure: 'la prise d’antalgiques', effet: 'l’intensité des douleurs', groupe: 'le groupe de patients suivis' },
+    texte: (c) => `Les patients qui prennent le plus d’antalgiques sont ceux qui souffrent le plus. ${c.mesure} aggrave donc ${c.effet}.`,
+  },
+  {
+    faille: 'inversion',
+    contexte: { sujet: 'les villes étudiées', mesure: 'le nombre de pompiers en service', effet: 'l’ampleur des incendies', groupe: 'l’ensemble des interventions recensées' },
+    texte: (c) => `Plus ${c.mesure} sur un incendie est élevé, plus les dégâts sont importants. Les pompiers aggravent donc ${c.effet}.`,
+  },
+
+  {
+    faille: 'moyenne',
+    contexte: { sujet: 'ce pays', mesure: 'la croissance économique', effet: 'le revenu par habitant', groupe: 'l’ensemble des foyers' },
+    texte: (c) => `${c.effet} de ${c.sujet} a doublé en dix ans grâce à ${c.mesure}. Tous les habitants vivent donc deux fois mieux qu’avant.`,
+  },
+  {
+    faille: 'moyenne',
+    contexte: { sujet: 'cette ligne de bus', mesure: 'le nouveau tracé', effet: 'le temps de trajet', groupe: 'l’ensemble des voyageurs' },
+    texte: (c) => `${c.effet} moyen sur ${c.sujet} a baissé de cinq minutes avec ${c.mesure}. Chaque voyageur gagne donc cinq minutes.`,
+  },
+  {
+    faille: 'moyenne',
+    contexte: { sujet: 'cette entreprise', mesure: 'l’accord salarial', effet: 'le salaire', groupe: 'l’ensemble des salariés' },
+    texte: (c) => `${c.effet} moyen dans ${c.sujet} a augmenté de 4 % après ${c.mesure}. Aucun salarié n’a donc perdu de pouvoir d’achat.`,
+  },
+
+  {
+    faille: 'survie',
+    contexte: { sujet: 'les restaurants de la ville', mesure: 'la cuisine traditionnelle', effet: 'la longévité d’un restaurant', groupe: 'l’ensemble des établissements encore ouverts' },
+    texte: (c) => `Les restaurants ouverts depuis plus de trente ans servent presque tous ${c.mesure}. ${c.mesure} assure donc ${c.effet}.`,
+  },
+  {
+    faille: 'survie',
+    contexte: { sujet: 'les start-up étudiées', mesure: 'la levée de fonds rapide', effet: 'le succès d’une jeune entreprise', groupe: 'l’ensemble des start-up encore en activité' },
+    texte: (c) => `Les start-up devenues célèbres ont toutes réalisé ${c.mesure}. ${c.mesure} garantit donc ${c.effet}.`,
+  },
+  {
+    faille: 'survie',
+    contexte: { sujet: 'les vieux meubles', mesure: 'la fabrication artisanale', effet: 'la durabilité du mobilier', groupe: 'l’ensemble des meubles anciens conservés' },
+    texte: (c) => `Les meubles anciens qui nous sont parvenus sont d’une solidité remarquable. ${c.mesure} d’autrefois assurait donc ${c.effet}.`,
+  },
+
+  {
+    faille: 'petition',
+    contexte: { sujet: 'ce manuel', mesure: 'la méthode enseignée', effet: 'la réussite des élèves', groupe: 'l’ensemble des élèves formés' },
+    texte: (c) => `${c.mesure} est la plus efficace, puisque les élèves qui la suivent réussissent. Et ils réussissent parce que c’est la méthode la plus efficace.`,
+  },
+  {
+    faille: 'petition',
+    contexte: { sujet: 'ce journal', mesure: 'l’information publiée', effet: 'la crédibilité du journal', groupe: 'l’ensemble des lecteurs' },
+    texte: (c) => `${c.mesure} est fiable, car ce journal ne publie que des informations fiables. La preuve : il l’a publiée.`,
+  },
+  {
+    faille: 'petition',
+    contexte: { sujet: 'ce parti', mesure: 'le programme présenté', effet: 'l’intérêt général', groupe: 'l’ensemble des électeurs' },
+    texte: (c) => `${c.mesure} sert ${c.effet}, puisque tout ce qui sert ${c.effet} figure dans ce programme.`,
+  },
 ]

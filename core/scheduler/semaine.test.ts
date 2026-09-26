@@ -3,6 +3,7 @@ import {
   MINUTES_BLANC,
   composerSemaine,
   projeterCalendrier,
+  desequilibre,
   semainesLisibles,
   type BesoinSection,
   type ParametresSemaine,
@@ -157,5 +158,61 @@ describe('projeterCalendrier', () => {
     const lecons = cal.map((s) => s.leconsRestantes)
     expect(lecons.every((n, i) => i === 0 || n <= lecons[i - 1])).toBe(true)
     expect(lecons[lecons.length - 1]).toBe(0)
+  })
+})
+
+describe('projeterCalendrier — semaine figée et rythme mesuré', () => {
+  const base = {
+    semaineDu: '2026-09-21',
+    joursRestants: 59,
+    budgetMinutes: 600,
+    leconsRestantes: 42,
+    semainesDepuisDernierBlanc: null,
+    joursDepuisDerniereEpreuve: 4,
+  }
+
+  it('reprend la semaine en cours telle que le plan figé la prévoit', () => {
+    const cal = projeterCalendrier({ ...base, semaineEnCours: { epreuve: null, leconsRestantesFin: 38 } })
+    // Le plan de lundi n'avait pas de blanc : le calendrier ne l'invente pas.
+    expect(cal[0].epreuve).toBeNull()
+    expect(cal[0].leconsRestantes).toBe(38)
+    // Le premier blanc, dû, tombe la semaine suivante.
+    expect(cal[1].epreuve).toBe('blanc')
+  })
+
+  it('épuise le cours au rythme réellement mesuré, pas au plafond du plan', () => {
+    const plafond = projeterCalendrier({ ...base, semaineEnCours: { epreuve: null, leconsRestantesFin: 38 } })
+    const mesure = projeterCalendrier({
+      ...base,
+      semaineEnCours: { epreuve: null, leconsRestantesFin: 38 },
+      leconsParSemaine: 10,
+    })
+    expect(mesure[1].leconsRestantes).toBe(28)
+    expect(mesure[2].leconsRestantes).toBe(18)
+    expect(plafond[1].leconsRestantes).toBeLessThan(mesure[1].leconsRestantes)
+  })
+})
+
+describe('desequilibre', () => {
+  const serie = (section: string, faits: number, sur: number, taux: number) => ({
+    type: 'entrainement' as const,
+    section,
+    mesure: { faits, sur },
+    fait: faits >= sur,
+    tauxActuel: taux,
+  })
+
+  it('signale un sous-test fort surentraîné pendant qu’un plus faible est en retard', () => {
+    const d = desequilibre([serie('calcul', 9, 1, 0.79), serie('comprehension', 0, 2, 0.62), serie('logique', 3, 3, 0.75)])
+    expect(d?.surplus.section).toBe('calcul')
+    expect(d?.retards.map((r) => r.section)).toEqual(['comprehension'])
+  })
+
+  it('ne dit rien d’un surplus sur sa faiblesse', () => {
+    expect(desequilibre([serie('expression', 5, 2, 0.51), serie('calcul', 0, 1, 0.79)])).toBeNull()
+  })
+
+  it('ne dit rien sans retard ailleurs', () => {
+    expect(desequilibre([serie('calcul', 9, 1, 0.79), serie('logique', 3, 3, 0.75)])).toBeNull()
   })
 })

@@ -46,9 +46,9 @@ export function insererDepuisPdf(
   const inserer = d.prepare(`
     INSERT INTO item
       (exam_id, section, type_item, enonce, contexte_texte, info_1, info_2, options,
-       bonne_reponse, explication_reference, source, statut)
+       bonne_reponse, explication_reference, source, statut, tags)
     VALUES (@exam, @section, @type, @enonce, @contexte, @info1, @info2, @options,
-            @bonne, @explication, 'importe', 'a_relire')
+            @bonne, @explication, 'importe', 'a_relire', 'annale')
   `)
 
   let inseres = 0
@@ -129,9 +129,9 @@ export function insererFigures(
   const insererItem = d.prepare(`
     INSERT INTO item
       (exam_id, section, type_item, enonce, options, bonne_reponse,
-       explication_reference, source, statut, media_id)
+       explication_reference, source, statut, media_id, tags)
     VALUES (@exam, @section, 'qcm', @enonce, @options, @bonne, @explication,
-            'importe', 'a_relire', @media)
+            'importe', 'a_relire', @media, 'annale')
   `)
 
   let inseres = 0
@@ -541,7 +541,7 @@ export function questionsAVerifier(limite = 20): QuestionAVerifier[] {
       `SELECT i.id, i.section, i.enonce, i.options, i.bonne_reponse, i.type_item,
               SUM(CASE WHEN a.a_saute = 0 THEN 1 ELSE 0 END)                             AS n,
               SUM(CASE WHEN a.a_saute = 0 AND a.est_correct = 1 THEN 1 ELSE 0 END)       AS justes,
-              SUM(CASE WHEN a.a_saute = 0 AND a.est_correct = 0 AND a.confiance = 4 THEN 1 ELSE 0 END)
+              SUM(CASE WHEN a.a_saute = 0 AND a.est_correct = 0 AND a.confiance = 4 AND a.confiance_declaree = 1 THEN 1 ELSE 0 END)
                                                                                        AS erreursCertaines,
               (SELECT f.reponse_donnee || ':' || COUNT(*) FROM attempt f
                 WHERE f.item_id = i.id AND f.a_saute = 0 AND f.est_correct = 0

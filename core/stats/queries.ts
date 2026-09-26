@@ -1,5 +1,7 @@
 import { db } from '@/core/db/queries'
 import { SECTIONS, SECTIONS_PAR_ID } from '@/exams/tagemage'
+import { modeleEnonce } from '@/core/scheduler/tirage'
+import { reussiteAFroid, type ReussiteAFroid } from './afroid'
 import {
   questionsAExpedier,
   calibrer,
@@ -21,6 +23,11 @@ import {
  * Les tentatives sautées sont exclues de la calibration et des temps : un saut
  * n'exprime aucune confiance, et son temps ne mesure aucune résolution. Elles
  * comptent en revanche dans les taux de réussite, comme partout ailleurs.
+ *
+ * Même règle pour ce qui n'a pas été mesuré : une confiance que personne n'a
+ * déclarée (feuille papier laissée vide, `confiance_declaree = 0`) n'entre pas
+ * dans la calibration, et un temps déclaré en bloc puis réparti également
+ * (épreuve papier, `temps_mesure = 0`) n'entre dans aucune médiane.
  */
 
 export interface SyntheseStrategie {
@@ -54,7 +61,7 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
       `SELECT a.confiance AS niveau, COUNT(*) AS n, SUM(a.est_correct) AS justes
          FROM attempt a
          JOIN exam_session s ON s.id = a.session_id
-        WHERE s.exam_id = ? AND a.a_saute = 0
+        WHERE s.exam_id = ? AND a.a_saute = 0 AND a.confiance_declaree = 1
         GROUP BY a.confiance`,
     )
     .all(examId) as Array<{ niveau: Niveau; n: number; justes: number }>
@@ -84,7 +91,7 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
     `SELECT a.temps_ms AS v
        FROM attempt a
        JOIN exam_session s ON s.id = a.session_id
-      WHERE s.exam_id = ? AND a.a_saute = 0`,
+      WHERE s.exam_id = ? AND a.a_saute = 0 AND a.temps_mesure = 1`,
     [examId],
   )
 
@@ -97,8 +104,10 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
     .prepare(
       `WITH base AS (
          SELECT i.skill_id, a.temps_ms, a.est_correct, a.a_saute,
-                ROW_NUMBER() OVER (PARTITION BY i.skill_id, a.a_saute ORDER BY a.temps_ms) AS rang,
-                COUNT(*)     OVER (PARTITION BY i.skill_id, a.a_saute)                     AS nr
+                -- Le temps n'a de sens que pour une question traitée ET chronométrée.
+                (a.a_saute = 1 OR a.temps_mesure = 0) AS sans_temps,
+                ROW_NUMBER() OVER (PARTITION BY i.skill_id, (a.a_saute = 1 OR a.temps_mesure = 0) ORDER BY a.temps_ms) AS rang,
+                COUNT(*)     OVER (PARTITION BY i.skill_id, (a.a_saute = 1 OR a.temps_mesure = 0))                     AS nr
            FROM attempt a
            JOIN item i         ON i.id = a.item_id
            JOIN exam_session s ON s.id = a.session_id
@@ -109,7 +118,7 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
               k.section                                             AS section,
               COUNT(*)                                              AS n,
               SUM(b.est_correct)                                    AS justes,
-              AVG(CASE WHEN b.a_saute = 0 AND b.rang IN ((b.nr + 1) / 2, (b.nr + 2) / 2)
+              AVG(CASE WHEN b.sans_temps = 0 AND b.rang IN ((b.nr + 1) / 2, (b.nr + 2) / 2)
                        THEN b.temps_ms END)                         AS tempsMedianMs
          FROM base b
          JOIN skill k ON k.id = b.skill_id
@@ -137,7 +146,7 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
                FROM attempt a
                JOIN item i         ON i.id = a.item_id
                JOIN exam_session s ON s.id = a.session_id
-              WHERE s.exam_id = ? AND a.a_saute = 0
+              WHERE s.exam_id = ? AND a.a_saute = 0 AND a.temps_mesure = 1
            )
            SELECT section, AVG(temps_ms) AS mediane
              FROM base
@@ -163,7 +172,7 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
               SUM(CASE WHEN a.a_saute = 0 AND a.est_correct = 0 THEN 1 ELSE 0 END) AS fausses,
               SUM(a.a_saute)                                                   AS blanches,
               SUM(a.points_gagnes)                                             AS points,
-              SUM(a.temps_ms)                                                  AS tempsMs
+              SUM(CASE WHEN a.temps_mesure = 1 THEN a.temps_ms ELSE 0 END)     AS tempsMs
          FROM attempt a
          JOIN item i         ON i.id = a.item_id
          JOIN exam_session s ON s.id = a.session_id
@@ -186,7 +195,7 @@ export function syntheseStrategie(examId = 'tagemage'): SyntheseStrategie {
          FROM attempt a
          JOIN item i         ON i.id = a.item_id
          JOIN exam_session s ON s.id = a.session_id
-        WHERE s.exam_id = ? AND a.a_saute = 0
+        WHERE s.exam_id = ? AND a.a_saute = 0 AND a.confiance_declaree = 1
         GROUP BY i.section, a.confiance`,
     )
     .all(examId) as Array<{ section: string; niveau: Niveau; n: number }>
@@ -240,4 +249,34 @@ function medianeSql(sourceSql: string, params: unknown[]): number | null {
 export function sectionsSansDonnees(leviers: Array<{ section: string }>): string[] {
   const vues = new Set(leviers.map((l) => l.section))
   return SECTIONS.filter((s) => !vues.has(s.id)).map((s) => s.libelle)
+}
+
+/** Sous-tests où le début de l'énoncé ou le texte support est un vrai scénario. */
+const SCENARIO_PAR_ENONCE = new Set(['calcul', 'raisonnement', 'conditions_minimales'])
+
+/** Réussite à froid et avec l'habitude, par sous-test (core/stats/afroid.ts). */
+export function reussiteAFroidParSection(examId = 'tagemage'): ReussiteAFroid[] {
+  const lignes = db()
+    .prepare(
+      `SELECT i.section, i.skill_id AS skillId, i.enonce, i.contexte_texte AS texte, a.est_correct AS juste
+         FROM attempt a
+         JOIN item i         ON i.id = a.item_id
+         JOIN exam_session s ON s.id = a.session_id
+        WHERE s.exam_id = ?
+        ORDER BY a.id`,
+    )
+    .all(examId) as Array<{ section: string; skillId: string | null; enonce: string; texte: string | null; juste: number }>
+
+  return reussiteAFroid(
+    lignes.map((l) => ({
+      section: l.section,
+      scenario:
+        l.section === 'comprehension'
+          ? l.texte
+          : SCENARIO_PAR_ENONCE.has(l.section)
+            ? `${l.skillId ?? ''}|${modeleEnonce(l.enonce)}`
+            : null,
+      juste: l.juste === 1,
+    })),
+  )
 }

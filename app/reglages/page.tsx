@@ -2,6 +2,10 @@ import Link from 'next/link'
 import { etatChaine, fournisseurActif } from '@/core/ia/fournisseurs'
 import { historiqueMemoire } from '@/core/ia/tuteur'
 import ChoixTheme from '@/app/_composants/ChoixTheme'
+import RangerSauvegardes from './RangerSauvegardes'
+import { dossierSauvegardesExternes, listeSauvegardes } from '@/core/db/client'
+import { jourLisible } from '@/app/_composants/dates'
+import { decimal } from '@/app/_composants/nombres'
 import { momentLisible } from '@/app/_composants/dates'
 
 export const dynamic = 'force-dynamic'
@@ -10,6 +14,8 @@ export default function PageReglages() {
   const chaine = etatChaine()
   const actif = fournisseurActif()
   const memoires = historiqueMemoire('tagemage', 5)
+  const sauvegardes = listeSauvegardes()
+  const externe = dossierSauvegardesExternes()
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
@@ -124,6 +130,45 @@ export default function PageReglages() {
             Exporter en JSON
           </a>
         </div>
+        <div className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4 text-sm">
+          <p className="font-medium">
+            Sauvegardes présentes{' '}
+            <span className="chiffres text-doux">
+              {sauvegardes.length} · {decimal(sauvegardes.reduce((a, x) => a + x.octets, 0) / 1_048_576)} Mo
+            </span>
+          </p>
+          <ul className="mt-2 space-y-0.5 text-xs text-doux">
+            {sauvegardes.slice(0, 8).map((x) => (
+              <li key={x.nom} className="flex justify-between gap-4">
+                <span>
+                  {x.nom}
+                  {!x.quotidienne && <span className="ml-2 text-blanc">copie nommée</span>}
+                </span>
+                <span className="chiffres">
+                  {jourLisible(x.le)} · {decimal(x.octets / 1_048_576)} Mo
+                </span>
+              </li>
+            ))}
+            {sauvegardes.length > 8 && <li>… et {sauvegardes.length - 8} autres</li>}
+          </ul>
+          <RangerSauvegardes />
+          <p className="mt-4 text-xs leading-relaxed text-doux">
+            {externe ? (
+              <>
+                Copie hors de ce disque : chaque sauvegarde quotidienne est recopiée dans{' '}
+                <code className="text-texte">{externe}</code>.
+              </>
+            ) : (
+              <>
+                Toutes les sauvegardes sont sur le même disque que la base : une panne emporterait les
+                deux. Pour en garder une copie ailleurs (dossier OneDrive, clé USB), indique un dossier
+                dans <code className="text-texte">PREPA_SAUVEGARDES_EXTERNES</code>, dans{' '}
+                <code className="text-texte">.env.local</code>, puis relance l’application.
+              </>
+            )}
+          </p>
+        </div>
+
         <p className="mt-3 text-xs leading-relaxed text-doux">
           La base se restaure en remplaçant <code className="text-texte">data/app.db</code> par la
           copie, application arrêtée (et en supprimant{' '}

@@ -1,4 +1,5 @@
 import type { ScoreHistorique } from '@/core/db/arbitrage'
+import { descriptionComposition, LIBELLE_NATURE } from '@/core/stats/nature'
 
 /**
  * La courbe du score dans le temps, chaque épreuve avec son intervalle à 95 %.
@@ -8,7 +9,12 @@ import type { ScoreHistorique } from '@/core/db/arbitrage'
  * épreuves dont les moustaches se chevauchent largement ne disent pas encore
  * qu'on a progressé. La courbe montre donc la marge avec le point.
  *
- * Choix de forme : une seule série, donc pas de légende (le titre la nomme) ;
+ * Deux natures d'épreuve (core/stats/nature.ts) : sur annales, en points
+ * pleins ; surtout des questions générées, en points creux. La ligne ne relie
+ * que des épreuves de même nature — les relier ferait lire un progrès là où
+ * la banque a changé. Une légende apparaît dès que les deux se côtoient.
+ *
+ * Choix de forme : une seule série par nature, légende seulement si besoin ;
  * axe du temps réel, pour qu'un trou de trois semaines se voie ; cible en
  * pointillé, en encre discrète ; seul le dernier point porte son étiquette.
  * Chaque point a une zone de survol large avec le détail, et un tableau des
@@ -82,7 +88,16 @@ export default function CourbeScore({
     if (yEtiquetteDernier >= yEtiquetteCible) yEtiquetteDernier = yEtiquetteCible + ECART_ETIQUETTES
     else yEtiquetteCible = yEtiquetteDernier + ECART_ETIQUETTES
   }
-  const trace = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ')
+  // Un tracé par nature : chaque point rejoint la précédente épreuve de même nature.
+  const traces = (['annales', 'generees'] as const).map((nature) => ({
+    nature,
+    d: points
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.nature === nature)
+      .map(({ p, i }, k) => `${k === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`)
+      .join(' '),
+  }))
+  const mixte = new Set(points.map((p) => p.nature)).size > 1
   const datesAffichees = compacte || points.length > 8 ? [0, dernier] : points.map((_, i) => i)
 
   return (
@@ -133,18 +148,42 @@ export default function CourbeScore({
         )}
 
         {/* Ligne et points : anneau de la couleur du fond pour détacher le point de sa moustache. */}
-        <path d={trace} fill="none" stroke="var(--serie)" strokeWidth={2} strokeLinejoin="round" />
-        {points.map((p, i) => (
-          <circle
-            key={`p${p.sessionId}`}
-            cx={x(i)}
-            cy={y(p.score)}
-            r={4.5}
-            fill="var(--serie)"
-            stroke="var(--fond-carte)"
-            strokeWidth={2}
-          />
-        ))}
+        {traces.map((t) =>
+          t.d.includes('L') ? (
+            <path
+              key={t.nature}
+              d={t.d}
+              fill="none"
+              stroke="var(--serie)"
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeDasharray={t.nature === 'generees' ? '4 4' : undefined}
+            />
+          ) : null,
+        )}
+        {points.map((p, i) =>
+          p.nature === 'annales' ? (
+            <circle
+              key={`p${p.sessionId}`}
+              cx={x(i)}
+              cy={y(p.score)}
+              r={4.5}
+              fill="var(--serie)"
+              stroke="var(--fond-carte)"
+              strokeWidth={2}
+            />
+          ) : (
+            <circle
+              key={`p${p.sessionId}`}
+              cx={x(i)}
+              cy={y(p.score)}
+              r={4}
+              fill="var(--fond-carte)"
+              stroke="var(--serie)"
+              strokeWidth={2}
+            />
+          ),
+        )}
 
         {/* Étiquette du dernier point seulement. */}
         <text
@@ -176,11 +215,30 @@ export default function CourbeScore({
           <circle key={`h${p.sessionId}`} cx={x(i)} cy={y(p.score)} r={14} fill="transparent">
             <title>
               {`${jourLong(p.jour)} · ${p.type === 'blanc' ? 'Blanc' : 'Diagnostic'} · ${p.score} / ${maximum}` +
-                (p.bas !== null ? ` (intervalle ${p.bas}–${p.haut})` : '')}
+                (p.bas !== null ? ` (intervalle ${p.bas}–${p.haut})` : '') +
+                ` · ${descriptionComposition(p.partAnnales)}`}
             </title>
           </circle>
         ))}
       </svg>
+
+      {mixte && (
+        <figcaption className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-doux">
+          <span className="inline-flex items-center gap-1.5">
+            <svg width="10" height="10" aria-hidden="true">
+              <circle cx="5" cy="5" r="4" fill="var(--serie)" />
+            </svg>
+            {LIBELLE_NATURE.annales}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <svg width="10" height="10" aria-hidden="true">
+              <circle cx="5" cy="5" r="3.5" fill="none" stroke="var(--serie)" strokeWidth="1.5" />
+            </svg>
+            {LIBELLE_NATURE.generees}
+          </span>
+          <span>— deux natures ne se comparent pas entre elles.</span>
+        </figcaption>
+      )}
 
       {!compacte && (
         <details className="mt-2 text-xs text-doux">
@@ -192,6 +250,7 @@ export default function CourbeScore({
                 <th className="py-1 font-normal">Épreuve</th>
                 <th className="py-1 text-right font-normal">Score</th>
                 <th className="py-1 text-right font-normal">Intervalle à 95 %</th>
+                <th className="py-1 text-right font-normal">Annales</th>
               </tr>
             </thead>
             <tbody>
@@ -203,6 +262,7 @@ export default function CourbeScore({
                   <td className="chiffres py-1 text-right">
                     {p.bas !== null ? `${p.bas} – ${p.haut}` : '—'}
                   </td>
+                  <td className="chiffres py-1 text-right">{Math.round(p.partAnnales * 100)} %</td>
                 </tr>
               ))}
             </tbody>
