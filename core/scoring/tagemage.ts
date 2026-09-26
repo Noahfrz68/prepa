@@ -34,6 +34,9 @@ export const NB_PROPOSITIONS = 5
  */
 export const HASARD = 1 / NB_PROPOSITIONS // 0.2
 
+/** Ce qu'une case vide laisse sur la table, en points bruts : l'espérance d'une croix au hasard. */
+export const MANQUE_CASE_VIDE = HASARD * BAREME.juste // 0.8
+
 export type Issue = 'juste' | 'faux' | 'blanc'
 
 export function issueDe(reponse: string | null, bonneReponse: string): Issue {

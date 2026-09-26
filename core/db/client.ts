@@ -4,7 +4,13 @@ import path from 'node:path'
 import { migrer } from './migrer.mjs'
 
 const DB_DIR = path.join(process.cwd(), 'data')
-const DB_PATH = path.join(DB_DIR, 'app.db')
+/**
+ * `PREPA_DB` pointe vers une autre base : les tests de parcours s'en servent
+ * pour jouer une série ou une épreuve de bout en bout sans toucher à la
+ * vraie. Une base désignée ainsi n'est jamais sauvegardée.
+ */
+const BASE_ALTERNATIVE = process.env.PREPA_DB?.trim() || null
+const DB_PATH = BASE_ALTERNATIVE ? path.resolve(BASE_ALTERNATIVE) : path.join(DB_DIR, 'app.db')
 const MIGRATIONS_DIR = path.join(process.cwd(), 'core', 'db', 'migrations')
 const SAUVEGARDES_DIR = path.join(DB_DIR, 'sauvegardes')
 
@@ -48,7 +54,7 @@ export function getDb(): Database.Database {
     return cache.__prepaDb
   }
 
-  fs.mkdirSync(DB_DIR, { recursive: true })
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true })
   const db = new Database(DB_PATH)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
@@ -94,6 +100,7 @@ function migrerSiNecessaire(db: Database.Database) {
  * plusieurs jours continue d'en produire une chaque jour.
  */
 function sauvegarderSiNecessaire(db: Database.Database) {
+  if (BASE_ALTERNATIVE) return
   const maintenant = Date.now()
   if (cache.__prepaSauvegarde && maintenant - cache.__prepaSauvegarde < 3600_000) return
   cache.__prepaSauvegarde = maintenant

@@ -14,6 +14,42 @@
   /* Série des graphiques : l'accent un cran plus sombre, pour rester dans la
      bande de luminosité lisible sur fond sombre (OKLCH L 0,48-0,67). */
   --serie: #4b8df8;
+  color-scheme: dark;
+}
+
+/* Mode clair : suit le système, sauf choix explicite dans les réglages
+   (attribut data-theme posé sur <html> avant le premier affichage).
+   Chaque couleur de texte garde un contraste d'au moins 4,5:1 sur le fond et
+   sur les cartes ; les couleurs d'état sont assombries d'un cran pour ça. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='sombre']) {
+    --fond: #f4f5f7;
+    --fond-carte: #ffffff;
+    --fond-carte-clair: #eceef2;
+    --bord: #d5d9e0;
+    --texte: #16191f;
+    --texte-doux: #555d6b;
+    --accent: #2459d6;
+    --juste: #13733a;
+    --faux: #c62828;
+    --blanc-reponse: #a35207;
+    --serie: #2f6fe8;
+    color-scheme: light;
+  }
+}
+:root[data-theme='clair'] {
+  --fond: #f4f5f7;
+  --fond-carte: #ffffff;
+  --fond-carte-clair: #eceef2;
+  --bord: #d5d9e0;
+  --texte: #16191f;
+  --texte-doux: #555d6b;
+  --accent: #2459d6;
+  --juste: #13733a;
+  --faux: #c62828;
+  --blanc-reponse: #a35207;
+  --serie: #2f6fe8;
+  color-scheme: light;
 }
 
 @theme inline {

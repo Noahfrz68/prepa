@@ -10,18 +10,24 @@ stratégie de score**.
 
 ```bash
 npm install
-npm run dev
+npm run app
 ```
 
-Puis ouvrir <http://localhost:3000>. La base est créée et la taxonomie semée au premier
+Puis ouvrir <http://127.0.0.1:3000>. La base est créée et la taxonomie semée au premier
 lancement — rien à configurer. Le serveur n'écoute que sur cette machine (127.0.0.1) : il
 n'est pas joignable depuis le réseau local.
+
+**Au quotidien, `npm run app`** : la version de production compile une fois (une minute
+environ) puis sert chaque page instantanément, sans les recompilations à la volée du mode
+développement. `npm run dev` sert à modifier le code ; ses rechargements à chaud et ses
+contrôles supplémentaires ralentissent un drill chronométré. Après une mise à jour du code,
+relancer `npm run app` recompile.
 
 | Commande | Effet |
 |---|---|
 | `npm run dev` | Lance l'application en mode développement, sur le port 3000 |
 | `npm run app` | Compile puis lance la version de production — plus rapide pour l'usage quotidien |
-| `npm test` | Joue la suite de tests (barèmes, parseurs, planification, sessions, couche IA) |
+| `npm test` | Joue la suite de tests (barèmes, parseurs, planification, sessions, couche IA, parcours de bout en bout) |
 | `npm run typecheck` | Vérifie les types sans compiler |
 | `npm run lint` | Lance ESLint (règles Next.js, React et TypeScript) |
 | `npm run build` | Build de production seul |
@@ -82,8 +88,9 @@ l'historique de progression du planificateur (lot 7) et n'est délibérément pa
 
 Deux formats, lancés depuis le hub TAGE MAGE, avec le même moteur.
 
-- **Diagnostic** — 40 questions : 7 par sous-test, 5 en compréhension (un texte entier), à la
-  cadence réelle (80 s par question). Les questions sont réparties entre les types de chaque
+- **Diagnostic** — 7 questions par sous-test à la cadence réelle (80 s par question). En
+  compréhension, un texte long de 7 questions quand la banque en a un de validé, sinon un
+  texte entier de 5 (40 questions en tout). Les questions sont réparties entre les types de chaque
   sous-test au prorata de leur poids à l'examen, sans servir deux fois le même modèle.
   Assez court pour être passé souvent, assez représentatif pour être extrapolé.
 - **Blanc complet** — 90 questions, 6 × 20 minutes enchaînées, sans pause ni retour arrière
@@ -153,8 +160,10 @@ vérité, et le calendrier ne peut pas dériver.
 
 **Le plan hebdomadaire** (devenu transversal au lot 7) place d'abord ce qui est périssable (les révisions dues), puis ce qui
 rapporte (les faiblesses), sans jamais mélanger deux sous-tests dans une même séance. Il ajoute
-un diagnostic tant qu'aucune épreuve n'a été passée, et un blanc toutes les deux semaines dans
-les six semaines qui précèdent l'examen. Chaque séance se lance en un clic et **cible
+le premier blanc dès que la banque le permet — il sert de référence —, puis un blanc toutes les
+deux semaines dans les six semaines qui précèdent l'examen, et chaque semaine le dernier mois.
+Hors blancs, un diagnostic revient au moins tous les quatorze jours : sans mesure régulière, la
+pente de progression n'existe pas. Chaque séance se lance en un clic et **cible
 réellement les sous-compétences nommées**, pas tout le sous-test.
 
 Le budget est **recalibré sur le volume réellement mesuré**, jamais sur le déclaratif : si
@@ -195,10 +204,11 @@ jamais une dépendance.**
 `/reglages` montre l'état de la chaîne de fournisseurs. Les clés se posent dans `.env.local`
 (voir `.env.local.exemple`), jamais dans l'interface.
 
-**Chaîne par défaut** : Google AI Studio, puis Groq — tous deux gratuits pour le volume d'un
+**Chaîne par défaut** : Google AI Studio (`gemini-3.8-flash`), puis Groq
+(`llama-3.3-70b-versatile`) — tous deux gratuits pour le volume d'un
 utilisateur unique. Ollama est implémenté mais hors de la chaîne par défaut : sur une machine
 sans GPU dédié, un 7B tourne à 40-70 s par débrief avec un JSON peu fiable. Anthropic est
-présent et ne s'active qu'avec une clé délibérément posée — un fournisseur payant ne doit
+présent (`claude-opus-5-5`) et ne s'active qu'avec une clé délibérément posée — un fournisseur payant ne doit
 jamais démarrer tout seul quand le budget est de 0 €.
 
 **Sans aucune clé, l'application est entière.** Les écrans de résultat affichent tous leurs
@@ -344,7 +354,66 @@ locale — un second téléchargement et un traitement lourd — mais surtout de
 portent sur la prononciation et l'intonation, qu'aucun modèle ne peut juger depuis une
 transcription. Livrer une note sur ces critères serait livrer un chiffre inventé.
 
+## Ce qui s'est ajouté ensuite — mesure, plan, entraînement
+
+**Mesure**
+
+- **Courbe du score** sur l'accueil et le hub, chaque épreuve avec son intervalle à 95 % et la
+  cible en pointillé. Seules les épreuves terminées y figurent.
+- **Difficulté observée** de chaque question, tirée des réponses réelles avec un a priori
+  bayésien (une question vue deux fois ne passe pas pour « très difficile ») ; affichée comme
+  fiable à partir de 5 réponses.
+- **Questions douteuses** — ratée avec une confiance maximale, la même mauvaise lettre
+  répétée, ou jamais réussie en 3 essais : l'énoncé ou le corrigé est peut-être faux. La
+  question est signalée dans l'atelier et reste en service tant que tu ne l'envoies pas en
+  relecture.
+- **Réponses équilibrées** — les propositions sont permutées à l'import pour répartir les
+  bonnes réponses sur A à E ; un test alerte si une lettre dépasse 35 %.
+
+**Plan**
+
+- Le « fait » se **mesure** : séries closes d'au moins 10 réponses, cours étudiés, épreuves
+  terminées. Le temps de lecture des corrections compte dans le volume réalisé.
+- Le plan de la semaine est **figé le lundi**. Les séries non faites la semaine précédente sont
+  reportées, au plus la moitié, et le plan le dit.
+- **Jusqu'à l'examen** — `/plan` projette semaine par semaine les blancs, les diagnostics et
+  les cours restants.
+- Un **bandeau de reprise** apparaît sur l'accueil après 2 jours sans activité.
+
+**Entraînement**
+
+- **Rythme en direct** — pendant une série, l'avance ou le retard sur 80 s par question.
+- **Sprint** — 15 questions sous un seul chronomètre de 20 minutes, comme un sous-test. À la
+  fin du temps, ce qui reste compte comme non traité. Quitter la page en plein sprint demande
+  confirmation.
+- **Revanche** — après une erreur, 3 questions du même modèle, tout de suite.
+- **Arbre de décision** — en conditions minimales, répondre par les questions « (1) seule
+  suffit ? (2) seule ? ensemble ? » plutôt que par la lettre.
+- **Carnet d'erreurs** — chaque erreur revient à 1, 3 puis 7 jours (filtre « À rejouer
+  aujourd'hui ») ; une cause se déclare en un clic (lecture, calcul, méthode, piège, temps,
+  hésitation) et la cause dominante vient avec son remède.
+- **Épreuve sur papier** — `/tagemage/papier` compose un blanc ou un diagnostic à imprimer avec
+  sa feuille de réponses, sans ouvrir de séance ; la saisie se fait ensuite, le jour même ou
+  le lendemain. Le sujet et la saisie en cours sont gardés dans le navigateur.
+- **Fiches imprimables** — une par sous-test, depuis `/tagemage/cours`.
+
+**Interface**
+
+- **Mode clair** — le thème suit celui du système ; `/reglages` permet de forcer clair ou
+  sombre (choix gardé dans le navigateur).
+- **J−X partout** — le compte à rebours jusqu'à l'examen, en haut de chaque page TAGE MAGE.
+- **Prochaine séance** — la même sur l'accueil et sur le hub TAGE MAGE : la première tâche
+  non faite du plan.
+- **Case vide = manque à gagner** — les bilans chiffrent ce que les cases vides ont laissé
+  sur la table (0,8 point brut chacune en moyenne).
+
+Les textes de compréhension originaux de ce dépôt sont dans `contenu/comprehension/`, au
+format Markdown de l'import (`## TEXTE`, questions, `# CORRIGÉ`). Ils entrent en `à relire`
+comme tout import.
+
 ## Raccourcis clavier du drill
+
+`?` affiche, sur n'importe quelle page, les raccourcis qui y sont actifs.
 
 | Touche | Action |
 |---|---|
@@ -423,12 +492,18 @@ Trois règles tenues dans tout le code :
    Les routes passent toutes par `app/api/erreurs.ts` ; aucun message brut de SQLite
    n'arrive à l'écran.
 
+`core/db/parcours.test.ts` joue les vraies routes de l'API de bout en bout — une série avec
+renvoi après coupure, un diagnostic à l'écran, un diagnostic sur papier, un export — sur une
+base jetable désignée par `PREPA_DB`. La vraie base n'est jamais ouverte par les tests.
+
 ## Données et sécurité
 
 - **Sauvegardes** — une copie de la base par jour dans `data/sauvegardes/app-AAAA-MM-JJ.db`,
   faite par l'application elle-même ; les 14 plus récentes sont conservées. Les copies
   nommées autrement ne sont jamais supprimées. Pour restaurer : arrêter l'application,
   remplacer `data/app.db` par la copie, supprimer `app.db-wal` et `app.db-shm`.
+- **Exporter** — `/reglages` télécharge la base entière (`.db`, restaurable telle quelle) ou
+  un JSON lisible table par table (sans les images).
 - **Séances abandonnées** — une séance non close après 12 heures est rangée : supprimée si
   elle est vide, marquée interrompue sinon. Ses réponses restent comptées dans la stratégie
   et le carnet, mais elle ne compte comme aucune épreuve passée.

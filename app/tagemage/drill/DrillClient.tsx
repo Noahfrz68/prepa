@@ -10,6 +10,7 @@ import { poster } from '@/app/_composants/reseau'
 import Panne, { type EtatPanne } from '@/app/_composants/Panne'
 import Difficulte from '@/app/_composants/Difficulte'
 import TempsCorrection from '@/app/_composants/TempsCorrection'
+import ManqueAGagner from '@/app/_composants/ManqueAGagner'
 import type { DifficulteObservee } from '@/core/stats/difficulte'
 import {
   OPTIONS_CONDITIONS_MINIMALES,
@@ -359,6 +360,15 @@ export default function DrillClient({
     }
   }, [index, items, sessionId])
 
+  // Un sprint est un sous-test chronométré : le quitter par erreur le fausse.
+  // Hors sprint, chaque réponse est déjà en base et rien ne se perd.
+  useEffect(() => {
+    if (!sprint || (phase !== 'question' && phase !== 'confiance')) return
+    const retenir = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', retenir)
+    return () => window.removeEventListener('beforeunload', retenir)
+  }, [phase, sprint])
+
   useEffect(() => {
     if (!sprint || items.length === 0) return
     if (phase !== 'question' && phase !== 'confiance') return
@@ -698,9 +708,11 @@ function VueRecap({
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tuile valeur={`${resultat.justes}`} libelle="justes" ton="juste" />
         <Tuile valeur={`${resultat.fausses}`} libelle="fausses" ton="faux" />
-        <Tuile valeur={`${resultat.blanches}`} libelle="sautées" ton="blanc" />
+        <Tuile valeur={`${resultat.blanches}`} libelle="cases vides" ton="blanc" />
         <Tuile valeur={`${resultat.pointsBruts}`} libelle="points bruts" />
       </div>
+
+      <ManqueAGagner cases={resultat.blanches} />
 
       <p className="mt-4 text-sm text-doux">
         Rythme moyen{' '}

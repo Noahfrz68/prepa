@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { poster } from '@/app/_composants/reseau'
 import BoutonImprimer from '@/app/_composants/BoutonImprimer'
+import { jourLisible } from '@/app/_composants/dates'
 import type { Case, Figure } from '@/core/figures/types'
 import { OPTIONS_CONDITIONS_MINIMALES } from '@/exams/tagemage'
 import { LIBELLE_MODE, type ModeEpreuve } from '@/exams/tagemage/epreuve'
@@ -43,6 +44,34 @@ interface Composition {
 type Reponse = { lettre: string | null; confiance: number | null }
 
 const cle = (mode: ModeEpreuve) => `prepa.papier.${mode}`
+/** Le brouillon de saisie : 90 réponses recopiées ne se retapent pas deux fois. */
+const cleSaisie = (mode: ModeEpreuve) => `prepa.papier.${mode}.saisie`
+
+interface Brouillon {
+  composeeLe: number
+  reponses: Record<string, Reponse[]>
+  minutes: Record<string, number>
+}
+
+function lireBrouillon(mode: ModeEpreuve, composeeLe: number): Brouillon | null {
+  try {
+    const brut = localStorage.getItem(cleSaisie(mode))
+    const b = brut ? (JSON.parse(brut) as Brouillon) : null
+    // Un brouillon d'un autre sujet ne vaut rien pour celui-ci.
+    return b && b.composeeLe === composeeLe ? b : null
+  } catch {
+    return null
+  }
+}
+
+function effacer(mode: ModeEpreuve) {
+  try {
+    localStorage.removeItem(cle(mode))
+    localStorage.removeItem(cleSaisie(mode))
+  } catch {
+    /* rien à effacer */
+  }
+}
 
 function lireComposition(mode: ModeEpreuve): Composition | null {
   try {
@@ -100,8 +129,35 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
     }
   }
 
+  // Pendant la saisie, chaque case cochée est gardée dans le navigateur, et
+  // fermer l'onglet avec des réponses non enregistrées demande confirmation.
+  const saisieEntamee =
+    vue === 'saisie' && Object.values(reponses).some((l) => l.some((r) => r.lettre !== null))
+  useEffect(() => {
+    if (vue !== 'saisie' || !composition) return
+    try {
+      const b: Brouillon = { composeeLe: composition.composeeLe, reponses, minutes }
+      localStorage.setItem(cleSaisie(mode), JSON.stringify(b))
+    } catch {
+      /* sans stockage, la saisie vit le temps de la page */
+    }
+  }, [composition, minutes, mode, reponses, vue])
+  useEffect(() => {
+    if (!saisieEntamee) return
+    const retenir = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', retenir)
+    return () => window.removeEventListener('beforeunload', retenir)
+  }, [saisieEntamee])
+
   const ouvrirSaisie = () => {
     if (!composition) return
+    const brouillon = lireBrouillon(mode, composition.composeeLe)
+    if (brouillon) {
+      setReponses(brouillon.reponses)
+      setMinutes(brouillon.minutes)
+      setVue('saisie')
+      return
+    }
     setReponses(
       Object.fromEntries(
         composition.etapes.map((e) => [e.section, e.items.map(() => ({ lettre: null, confiance: 3 }))]),
@@ -126,11 +182,7 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
           minutes: minutes[e.section],
         })),
       })
-      try {
-        localStorage.removeItem(cle(mode))
-      } catch {
-        /* rien à effacer */
-      }
+      effacer(mode)
       router.push(`/tagemage/epreuve/${data.sessionId}`)
     } catch (e) {
       setErreur((e as Error).message)
@@ -139,11 +191,7 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
   }
 
   const abandonner = () => {
-    try {
-      localStorage.removeItem(cle(mode))
-    } catch {
-      /* rien à effacer */
-    }
+    effacer(mode)
     setComposition(null)
     setVue('accueil')
   }
@@ -313,7 +361,7 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
       <header className="mb-6 border-b border-bord pb-3">
         <h1 className="text-xl font-semibold">TAGE MAGE — {LIBELLE_MODE[mode]}</h1>
         <p className="text-xs text-doux">
-          Composé le {new Date(composition.composeeLe).toLocaleDateString('fr-FR')} ·{' '}
+          Composé le {jourLisible(composition.composeeLe, 'toujours')} ·{' '}
           {composition.etapes.reduce((n, e) => n + e.items.length, 0)} questions · une erreur ne coûte
           rien : ne laisse aucune case vide.
         </p>

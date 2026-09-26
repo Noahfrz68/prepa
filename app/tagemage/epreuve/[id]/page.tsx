@@ -9,6 +9,7 @@ import { SECTIONS_PAR_ID } from '@/exams/tagemage'
 import DebriefIA from '@/app/_composants/DebriefIA'
 import Difficulte from '@/app/_composants/Difficulte'
 import TempsCorrection from '@/app/_composants/TempsCorrection'
+import ManqueAGagner from '@/app/_composants/ManqueAGagner'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,10 +68,12 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <Tuile v={totaux.justes} l="justes" ton="juste" />
         <Tuile v={totaux.fausses} l="fausses" ton="faux" />
-        <Tuile v={totaux.sautees} l="sautées" ton="blanc" />
-        <Tuile v={totaux.nonTraitees} l="non traitées" ton="blanc" />
+        <Tuile v={totaux.sautees} l="vides, sautées" ton="blanc" />
+        <Tuile v={totaux.nonTraitees} l="vides, non traitées" ton="blanc" />
         <Tuile v={totaux.pointsBruts} l="points bruts" />
       </section>
+
+      <ManqueAGagner cases={totaux.sautees + totaux.nonTraitees} />
 
       {totaux.nonTraitees > 0 && (
         <p className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4 text-sm text-blanc">

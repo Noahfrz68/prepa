@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { etatChaine, fournisseurActif } from '@/core/ia/fournisseurs'
 import { historiqueMemoire } from '@/core/ia/tuteur'
+import ChoixTheme from '@/app/_composants/ChoixTheme'
+import { momentLisible } from '@/app/_composants/dates'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +92,47 @@ export default function PageReglages() {
         </div>
       </section>
 
+      <section className="mb-8">
+        <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Affichage</h2>
+        <p className="mb-3 text-sm leading-relaxed text-doux">
+          Le thème suit celui du système par défaut. Le choix est gardé dans ce navigateur. Partout,{' '}
+          <kbd className="kbd">?</kbd> affiche les raccourcis clavier de la page.
+        </p>
+        <ChoixTheme />
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Mes données</h2>
+        <p className="mb-3 text-sm leading-relaxed text-doux">
+          Toute ta progression tient dans un fichier. Une copie est faite chaque jour dans{' '}
+          <code className="text-texte">data/sauvegardes/</code> (les 14 dernières sont gardées) ;
+          l’export en fait une de plus, à ranger où tu veux.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href="/api/export?format=sqlite"
+            download
+            className="rounded-lg border border-bord bg-carte px-4 py-2 text-sm hover:border-accent"
+          >
+            Exporter la base (.db)
+          </a>
+          <a
+            href="/api/export?format=json"
+            download
+            className="rounded-lg border border-bord bg-carte px-4 py-2 text-sm hover:border-accent"
+          >
+            Exporter en JSON
+          </a>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-doux">
+          La base se restaure en remplaçant <code className="text-texte">data/app.db</code> par la
+          copie, application arrêtée (et en supprimant{' '}
+          <code className="text-texte">app.db-wal</code> et{' '}
+          <code className="text-texte">app.db-shm</code> s’ils existent). Le JSON sert à relire ou analyser ailleurs ; il ne contient
+          pas les images.
+        </p>
+      </section>
+
       <section>
         <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Mémoire du tuteur</h2>
         <p className="mb-3 text-sm leading-relaxed text-doux">
@@ -109,7 +152,7 @@ export default function PageReglages() {
               <li key={m.id} className="rounded-xl border border-bord bg-carte px-5 py-4">
                 <div className="flex flex-wrap items-baseline gap-x-4 text-xs text-doux">
                   <span className="chiffres">version {m.version}</span>
-                  <span>{m.genereLe}</span>
+                  <span>{momentLisible(m.genereLe)}</span>
                   <span>{m.declencheur}</span>
                   {m.modele && <span>{m.modele}</span>}
                 </div>

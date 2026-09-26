@@ -1,14 +1,9 @@
 import Link from 'next/link'
 import PlanClient from './PlanClient'
 import { calendrierJusquExamen, historiqueSemaines, planDeLaSemaine } from '@/core/db/semaine'
+import { jourLisible } from '@/app/_composants/dates'
 
 export const dynamic = 'force-dynamic'
-
-const jourLisible = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-  })
 
 const heures = (min: number) =>
   min >= 60

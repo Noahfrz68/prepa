@@ -53,7 +53,7 @@ export const AUCUN: Fournisseur = {
  */
 function gemini(): Fournisseur {
   const cle = process.env.GEMINI_API_KEY?.trim()
-  const modele = process.env.GEMINI_MODELE?.trim() || 'gemini-3.5-flash' // 2.0 Flash arrêté le 1er juin 2026
+  const modele = process.env.GEMINI_MODELE?.trim() || 'gemini-3.8-flash' // dernier Flash stable, gratuit (vérifié le 26/09/2026)
 
   return {
     id: 'gemini-free',
@@ -200,7 +200,7 @@ function ollama(): Fournisseur {
  */
 function anthropic(): Fournisseur {
   const cle = process.env.ANTHROPIC_API_KEY?.trim()
-  const modele = process.env.ANTHROPIC_MODELE?.trim() || 'claude-opus-5'
+  const modele = process.env.ANTHROPIC_MODELE?.trim() || 'claude-opus-5-5'
 
   return {
     id: 'anthropic',

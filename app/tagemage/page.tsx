@@ -2,8 +2,11 @@ import Link from 'next/link'
 import { etatExamens, etatSectionsTageMage } from '@/core/db/queries'
 import { historiqueScores } from '@/core/db/arbitrage'
 import CourbeScore from '@/app/_composants/CourbeScore'
+import { jourLisible } from '@/app/_composants/dates'
 import { historiqueEpreuves } from '@/core/db/epreuve'
 import { texteLongComprehension } from '@/core/db/selection'
+import { planDeLaSemaine } from '@/core/db/semaine'
+import { prochaineSeance } from '@/app/plan/prochaine'
 import { SECONDES_PAR_QUESTION } from '@/exams/tagemage'
 import { SEUIL_FIABILITE } from '@/core/stats/calculs'
 import {
@@ -18,21 +21,6 @@ export const dynamic = 'force-dynamic'
 /** En dessous, le taux d'un sous-test est affiché avec ⚠ (même seuil que la calibration). */
 const ECHANTILLON_FIABLE = SEUIL_FIABILITE
 
-/**
- * « 21 septembre », ou « 21 septembre 2025 » hors de l'année en cours.
- * SQLite écrit l'heure en UTC sans le dire : on la lit comme telle, puis on
- * l'affiche à l'heure locale — une épreuve passée à 1 h du matin reste du jour.
- */
-function jourLisible(sqliteUtc: string): string {
-  const d = new Date(`${sqliteUtc.replace(' ', 'T')}Z`)
-  if (Number.isNaN(d.getTime())) return sqliteUtc.slice(0, 10)
-  return d.toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' as const } : {}),
-  })
-}
-
 export default function HubTageMage() {
   const sections = etatSectionsTageMage()
   const total = sections.reduce((acc, s) => acc + s.nbItems, 0)
@@ -40,6 +28,8 @@ export default function HubTageMage() {
   const courbe = historiqueScores('tagemage', 20)
   const cible = etatExamens().find((e) => e.examId === 'tagemage')?.scoreCible ?? null
   const dureeBlanc = dureeTotaleMinutes(composerEpreuve('blanc'))
+  // La même séance que l'accueil : la première tâche non faite du plan.
+  const prochaine = total > 0 ? prochaineSeance(planDeLaSemaine().taches) : null
   // Un texte long de sept questions validé remplace le texte de cinq : la
   // carte annonce ce que le diagnostic servira vraiment.
   const questionsComprehension =
@@ -63,7 +53,7 @@ export default function HubTageMage() {
           <h1 className="text-2xl font-semibold tracking-tight">TAGE MAGE</h1>
           <p className="mt-1 text-sm text-doux">
             Barème +4 / 0 / 0 · {SECONDES_PAR_QUESTION} s par question · une erreur ne coûte
-            rien : ne laisse jamais une case vide, une croix au hasard vaut 0,8 point en moyenne.
+            rien : case vide = manque à gagner, une croix au hasard vaut 0,8 point en moyenne.
           </p>
         </div>
         <div className="flex gap-3">
@@ -87,6 +77,24 @@ export default function HubTageMage() {
           </Link>
         </div>
       </header>
+
+      {prochaine && (
+        <Link
+          href={prochaine.href}
+          className="mb-8 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-xl border border-accent bg-carte px-5 py-4 transition hover:bg-carte-clair"
+        >
+          <span>
+            <span className="block text-xs uppercase tracking-widest text-doux">
+              Prochaine séance du plan
+            </span>
+            <span className="mt-1 block font-medium">{prochaine.libelle}</span>
+          </span>
+          <span className="text-sm text-doux">
+            {prochaine.detail.replace(/^TAGE MAGE · /, '')}{' '}
+            <span className="text-accent">Commencer →</span>
+          </span>
+        </Link>
+      )}
 
       {total === 0 && (
         <div className="mb-8 rounded-xl border border-bord bg-carte px-5 py-4 text-sm">
