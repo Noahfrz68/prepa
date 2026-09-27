@@ -1,4 +1,4 @@
-import type { ScoreHistorique } from '@/core/db/arbitrage'
+import type { ScoreHistorique } from '@/core/db/scores'
 import { descriptionComposition, LIBELLE_NATURE } from '@/core/stats/nature'
 
 /**

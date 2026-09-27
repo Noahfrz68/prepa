@@ -14,6 +14,18 @@
  * construction : la notion n'y a pas de sens, et ces sous-tests sont exclus.
  */
 
+/** Réponses à froid à partir desquelles ce taux est retenu (plan, stratégie, hub). */
+export const REPONSES_MIN_A_FROID = 15
+
+/** Taux à froid par sous-test, pour ceux qui ont assez de réponses. */
+export function tauxAFroid(lignes: ReussiteAFroid[]): Map<string, { taux: number; n: number }> {
+  return new Map(
+    lignes
+      .filter((r) => r.froid.n >= REPONSES_MIN_A_FROID)
+      .map((r) => [r.section, { taux: r.froid.justes / r.froid.n, n: r.froid.n }]),
+  )
+}
+
 /** Tentatives déjà faites sur le même scénario à partir desquelles on parle d'habitude. */
 export const RENCONTRES_HABITUDE = 3
 

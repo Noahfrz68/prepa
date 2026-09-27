@@ -26,6 +26,8 @@ import {
   type Relation,
 } from './corpus-expression'
 
+import { FAMILLES_EXPRESSION_SENS } from './expression-sens'
+
 const S = 'expression' as const
 
 const SKILL = {
@@ -272,6 +274,8 @@ export const FAMILLES_EXPRESSION: Famille[] = [
   connecteur,
   synonyme,
   antonyme,
+  // Reformulation, cohérence et registre : deux questions chacun jusqu'ici.
+  ...FAMILLES_EXPRESSION_SENS,
 ]
 
 export type { QuestionGeneree, Alea }

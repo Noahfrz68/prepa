@@ -10,6 +10,7 @@ import { poster } from '@/app/_composants/reseau'
 import Panne, { type EtatPanne } from '@/app/_composants/Panne'
 import Difficulte from '@/app/_composants/Difficulte'
 import TempsCorrection from '@/app/_composants/TempsCorrection'
+import ChoixCause from '@/app/_composants/CauseErreur'
 import ManqueAGagner from '@/app/_composants/ManqueAGagner'
 import type { DifficulteObservee } from '@/core/stats/difficulte'
 import {
@@ -873,6 +874,7 @@ function LigneCorrection({ numero, c }: { numero: number; c: Correction }) {
           </Link>
         </p>
       )}
+      {!c.estCorrect && <ChoixCause itemId={c.itemId} section={c.skillId ? sectionDe(c.skillId) : ''} />}
     </li>
   )
 }

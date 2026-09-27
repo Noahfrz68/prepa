@@ -86,8 +86,14 @@ export interface LeconAPlanifier {
 export interface BesoinSection {
   section: string
   libelle: string
-  /** Taux de réussite du sous-test, null si non mesuré. */
+  /**
+   * Taux de réussite du sous-test, null si non mesuré. À froid (scénarios
+   * jamais vus, core/stats/afroid.ts) quand il est mesuré : la réussite globale
+   * mêle méthode et familiarité — 80 % en conditions minimales, 40 % à froid.
+   */
   taux: number | null
+  /** Vrai quand `taux` est la réussite à froid. */
+  tauxAFroid?: boolean
   /** Sous-compétences dues à la révision espacée. */
   skillIdsDus: string[]
   /** Questions disponibles en banque : sans elles, rien à prescrire. */
@@ -105,6 +111,8 @@ export interface ParametresSemaine {
   joursDepuisDerniereEpreuve: number | null
   /** Séries prévues la semaine passée et non faites, par sous-test. */
   reports?: Array<{ section: string; series: number }>
+  /** Note de recalibrage du budget (calibrerBudget), placée en tête des notes. */
+  noteBudget?: string | null
   aDejaPasseUneEpreuve: boolean
   banqueSuffisantePourBlanc: boolean
 }
@@ -161,6 +169,36 @@ export function leconsAEtudier(lecons: LeconAPlanifier[]): LeconAPlanifier[] {
  * sous-test à 80 %. Un sous-test non mesuré compte comme moyen — il faut bien
  * le travailler pour le mesurer, mais rien ne justifie de le prioriser.
  */
+/** Séries que reçoit au moins le sous-test le plus faible, dès que la semaine en compte assez. */
+export const SERIES_MIN_PLUS_FAIBLE = 2
+/** En dessous, la semaine est trop courte : chaque série compte, y compris les reports. */
+export const SERIES_POUR_GARANTIE = 5
+
+/**
+ * Le sous-test le plus faible reçoit au moins SERIES_MIN_PLUS_FAIBLE séries.
+ * La pondération par la faiblesse, une fois arrondie et après les reports,
+ * pouvait lui en laisser une seule — l'expression (51 %) autant que le calcul
+ * (79 %). La série manquante est prise au sous-test le mieux doté (le plus
+ * réussi à égalité), sans jamais en retirer un du plan.
+ */
+export function garantirPlusFaible(parSection: Map<string, number>, sections: BesoinSection[]): void {
+  const mesures = sections.filter((s) => s.taux !== null && s.questionsEnBanque >= 15)
+  const total = [...parSection.values()].reduce((a, n) => a + n, 0)
+  if (mesures.length === 0 || total < SERIES_POUR_GARANTIE) return
+  const faible = mesures.reduce((a, b) => ((b.taux ?? 1) < (a.taux ?? 1) ? b : a))
+  while ((parSection.get(faible.section) ?? 0) < SERIES_MIN_PLUS_FAIBLE) {
+    const donneur = sections
+      .filter((s) => s.section !== faible.section && (parSection.get(s.section) ?? 0) >= 2)
+      .sort(
+        (a, b) =>
+          (parSection.get(b.section) ?? 0) - (parSection.get(a.section) ?? 0) || (b.taux ?? 0) - (a.taux ?? 0),
+      )[0]
+    if (!donneur) return
+    parSection.set(donneur.section, (parSection.get(donneur.section) ?? 0) - 1)
+    parSection.set(faible.section, (parSection.get(faible.section) ?? 0) + 1)
+  }
+}
+
 export function repartirSeries(
   sections: BesoinSection[],
   nbSeries: number,
@@ -194,6 +232,7 @@ export function repartirSeries(
 export function composerSemaine(p: ParametresSemaine): SemaineComposee {
   const taches: Tache[] = []
   const notes: string[] = []
+  if (p.noteBudget) notes.push(p.noteBudget)
   let restant = p.budgetMinutes
 
   const semainesRestantes = p.joursRestants === null ? null : p.joursRestants / 7
@@ -327,11 +366,12 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
     for (const { section, series } of repartirSeries(p.sections, nbSeries - seriesReportees)) {
       parSection.set(section.section, (parSection.get(section.section) ?? 0) + series)
     }
+    garantirPlusFaible(parSection, p.sections)
 
     for (const section of p.sections) {
       const series = parSection.get(section.section) ?? 0
       if (series === 0) continue
-      const report = reportees.get(section.section) ?? 0
+      const report = Math.min(series, reportees.get(section.section) ?? 0)
       const mention =
         report > 0
           ? ` Dont ${report} reportée${report > 1 ? 's' : ''} de la semaine dernière, non faite${report > 1 ? 's' : ''}.`
@@ -347,8 +387,8 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
           (section.taux === null
             ? 'Jamais mesuré : ces séries serviront d’abord à situer ton niveau.'
             : section.skillIdsDus.length > 0
-              ? `${Math.round(section.taux * 100)} % de réussite à la composition du plan · ${section.skillIdsDus.length} type${section.skillIdsDus.length > 1 ? 's' : ''} de question ${section.skillIdsDus.length > 1 ? 'dus' : 'dû'} à la révision.`
-              : `${Math.round(section.taux * 100)} % de réussite à la composition du plan.`) + mention,
+              ? `${Math.round(section.taux * 100)} % de réussite${section.tauxAFroid ? ' à froid' : ''} à la composition du plan · ${section.skillIdsDus.length} type${section.skillIdsDus.length > 1 ? 's' : ''} de question ${section.skillIdsDus.length > 1 ? 'dus' : 'dû'} à la révision.`
+              : `${Math.round(section.taux * 100)} % de réussite${section.tauxAFroid ? ' à froid' : ''} à la composition du plan.`) + mention,
       })
       restant -= series * MINUTES_PAR_SERIE
     }
@@ -416,7 +456,11 @@ export function composerSemaine(p: ParametresSemaine): SemaineComposee {
 
   if (restant >= TACHE_MINIMALE) {
     notes.push(
-      `${Math.round(restant)} minutes non attribuées. Tout ce qui est mesuré est déjà couvert — élargis la banque plutôt que de repasser les mêmes questions.`,
+      // Moins qu'une série : c'est l'arrondi des séries de 25 minutes, pas une
+      // banque épuisée — la note l'affirmait avec près de 1 500 questions.
+      restant < MINUTES_PAR_SERIE
+        ? `${Math.round(restant)} minutes non attribuées : moins qu’une série de ${MINUTES_PAR_SERIE} minutes. De quoi relire les corrections de la semaine ou rejouer les reprises du carnet.`
+        : `${Math.round(restant)} minutes non attribuées : aucun sous-test n’a assez de questions en banque pour une série de plus. Élargis la banque plutôt que de repasser les mêmes questions.`,
     )
   }
 
@@ -588,4 +632,54 @@ export function desequilibre(
     taux: t.tauxActuel,
   })
   return { surplus: vue(surplus), retards: retards.map(vue) }
+}
+
+/* ------------------------------------------------------------ budget -- */
+
+/** Écart toléré entre le temps déclaré et le temps mesuré avant de recalibrer. */
+export const ECART_BUDGET_TOLERE = 0.2
+
+/**
+ * Le budget de la semaine, recalibré sur le temps réellement passé.
+ *
+ * Le plan reprenait les heures déclarées telles quelles : 10 h prévues, 7 h
+ * faites, et de nouveau 10 h la semaine suivante. Un plan qu'on ne tient pas
+ * n'est pas un manque de discipline, c'est un plan mal calibré. La référence
+ * est la MEILLEURE des semaines passées mesurées : le rythme qu'on a prouvé
+ * pouvoir tenir. Une moyenne retardait sur une préparation qui monte en
+ * charge (2 h 40 puis 7 h : « 4 h 50 », et un blanc qui mangeait la semaine) ;
+ * une vraie baisse se voit quand toutes les semaines retenues sont basses.
+ * Au-delà de ECART_BUDGET_TOLERE d'écart avec cette référence :
+ *
+ *   — en dessous, le budget descend à cette référence + 10 % (de quoi
+ *     progresser sans promettre ce qui ne se fera pas) ;
+ *   — au-dessus, il monte à la référence, sans dépasser une fois et demie le
+ *     déclaré.
+ *
+ * Sans mesure (première semaine), le déclaré fait foi.
+ */
+export function calibrerBudget(
+  declareMinutes: number,
+  mesuresMinutes: number[],
+): { budgetMinutes: number; note: string | null } {
+  if (mesuresMinutes.length === 0 || declareMinutes <= 0) return { budgetMinutes: declareMinutes, note: null }
+  const reference = Math.max(...mesuresMinutes)
+  const ecart = (reference - declareMinutes) / declareMinutes
+  const h = (m: number) => `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')}`
+  const sur = mesuresMinutes.length > 1 ? `au mieux sur les ${mesuresMinutes.length} dernières semaines` : 'la semaine dernière'
+  if (ecart < -ECART_BUDGET_TOLERE) {
+    const budget = Math.max(60, Math.round(reference * 1.1))
+    return {
+      budgetMinutes: budget,
+      note: `Budget recalibré : ${h(reference)} mesurées ${sur} pour ${h(declareMinutes)} déclarées. Le plan vise ${h(budget)} — un plan tenu vaut mieux qu’un plan ambitieux. Si ta disponibilité a vraiment changé, mets-la à jour dans Objectifs.`,
+    }
+  }
+  if (ecart > ECART_BUDGET_TOLERE) {
+    const budget = Math.min(Math.round(reference), Math.round(declareMinutes * 1.5))
+    return {
+      budgetMinutes: budget,
+      note: `Budget recalibré : ${h(reference)} mesurées ${sur}, au-delà des ${h(declareMinutes)} déclarées. Le plan suit ton rythme réel : ${h(budget)}.`,
+    }
+  }
+  return { budgetMinutes: declareMinutes, note: null }
 }

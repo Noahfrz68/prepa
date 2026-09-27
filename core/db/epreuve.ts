@@ -26,7 +26,7 @@ import {
 } from '@/core/stats/diagnostic'
 import { ErreurRequete } from '@/core/erreurs'
 import { natureDe, type NatureEpreuve } from '@/core/stats/nature'
-import { partAnnales } from './arbitrage'
+import { partAnnales } from './scores'
 import { tempsBorne, verifierSessionOuverte } from './garde'
 
 export interface EtapePreparee extends Etape {

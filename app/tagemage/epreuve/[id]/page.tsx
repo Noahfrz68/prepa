@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { notFound } from 'next/navigation'
 import { recapEpreuve, type CorrectionEpreuve } from '@/core/db/epreuve'
-import { reussiteParOrigine } from '@/core/db/arbitrage'
+import { dernierScoreSurAnnales, reussiteParOrigine } from '@/core/db/scores'
+import { jourLisible } from '@/app/_composants/dates'
 import { COUPURE_TOLEREE_MS, LIBELLE_MODE } from '@/exams/tagemage/epreuve'
 import { descriptionComposition } from '@/core/stats/nature'
 import { MINIMUM_ESTIMATION, CIBLE_REUSSITE_LEVIER } from '@/core/stats/diagnostic'
@@ -11,6 +12,9 @@ import { SECTIONS_PAR_ID } from '@/exams/tagemage'
 import DebriefIA from '@/app/_composants/DebriefIA'
 import Difficulte from '@/app/_composants/Difficulte'
 import TempsCorrection from '@/app/_composants/TempsCorrection'
+import ChoixCause from '@/app/_composants/CauseErreur'
+import { causesDeclarees } from '@/core/db/carnet'
+import type { CauseErreur } from '@/core/stats/causes'
 import ManqueAGagner from '@/app/_composants/ManqueAGagner'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +34,7 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
 
   const { scoreEstime: s, fatigue, totaux, ecart } = recap
   const origines = recap.nature === 'generees' ? reussiteParOrigine() : null
+  const surAnnales = recap.nature === 'generees' ? dernierScoreSurAnnales() : null
 
   // Une épreuve abandonnée en route n'a pas de score : extrapoler 38 questions
   // prises dans les premiers sous-tests à l'épreuve entière donnait 568 sur
@@ -119,6 +124,23 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
       )}
 
       {ecart && <EcartCible ecart={ecart} />}
+      {/* Sur une épreuve surtout générée, l'écart est optimiste : on donne
+          celui que mesure la dernière épreuve sur annales. */}
+      {ecart && recap.nature === 'generees' && (
+        <p className="mt-3 rounded-xl border border-bord bg-carte px-5 py-3 text-sm leading-relaxed text-doux">
+          Cet écart est calculé sur une épreuve surtout composée de questions générées.
+          {surAnnales ? (
+            <>
+              {' '}Sur ta dernière épreuve sur annales (
+              <span className="chiffres text-texte">{surAnnales.score}</span>, {jourLisible(surAnnales.jour)}), il
+              est de <span className="chiffres text-texte">{Math.max(0, ecart.cible - surAnnales.score)}</span>{' '}
+              points : c’est le repère le plus proche de l’épreuve réelle.
+            </>
+          ) : (
+            ' Aucune épreuve sur annales ne permet encore de le vérifier.'
+          )}
+        </p>
+      )}
 
       <DebriefIA sessionId={recap.sessionId} />
       <TempsCorrection sessionId={recap.sessionId} />
@@ -368,6 +390,7 @@ function Leviers({ leviers }: { leviers: Awaited<ReturnType<typeof recapEpreuve>
 }
 
 function Corrections({ corrections }: { corrections: CorrectionEpreuve[] }) {
+  const causes = causesDeclarees(corrections.filter((c) => !c.estCorrect).map((c) => c.itemId))
   const parSection = new Map<string, CorrectionEpreuve[]>()
   for (const c of corrections) {
     if (!parSection.has(c.section)) parSection.set(c.section, [])
@@ -386,7 +409,7 @@ function Corrections({ corrections }: { corrections: CorrectionEpreuve[] }) {
             </h3>
             <ol className="space-y-2">
               {liste.map((c, i) => (
-                <Ligne key={c.itemId} numero={i + 1} c={c} />
+                <Ligne key={c.itemId} numero={i + 1} c={c} cause={causes.get(c.itemId)} />
               ))}
             </ol>
           </div>
@@ -396,7 +419,7 @@ function Corrections({ corrections }: { corrections: CorrectionEpreuve[] }) {
   )
 }
 
-function Ligne({ numero, c }: { numero: number; c: CorrectionEpreuve }) {
+function Ligne({ numero, c, cause }: { numero: number; c: CorrectionEpreuve; cause?: CauseErreur }) {
   const etat = c.motifBlanc === 'non_traite' ? 'non traitée' : c.aSaute ? 'sautée' : c.estCorrect ? 'juste' : 'fausse'
   const couleur = c.aSaute ? 'text-blanc' : c.estCorrect ? 'text-juste' : 'text-faux'
   const options = c.typeItem === 'conditions_minimales' ? [] : c.options
@@ -472,6 +495,7 @@ function Ligne({ numero, c }: { numero: number; c: CorrectionEpreuve }) {
           </Link>
         </p>
       )}
+      {!c.estCorrect && <ChoixCause itemId={c.itemId} section={c.section} initiale={cause ?? null} />}
     </li>
   )
 }

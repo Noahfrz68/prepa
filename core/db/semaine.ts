@@ -1,4 +1,6 @@
 import { db, etatSectionsTageMage, mesuresParSkill, profil } from './queries'
+import { reussiteAFroidParSection } from '@/core/stats/queries'
+import { tauxAFroid } from '@/core/stats/afroid'
 import {
   reconstruireSkillState,
   aujourdhuiIso,
@@ -8,6 +10,7 @@ import {
 import { LECONS, PARCOURS } from '@/exams/tagemage/lecons'
 import { SECTIONS } from '@/exams/tagemage'
 import {
+  calibrerBudget,
   composerSemaine,
   lundiDeLaSemaine,
   projeterCalendrier,
@@ -243,10 +246,16 @@ function parametres(semaineDu: string) {
     .all(aujourdhuiIso(), QUESTIONS_MIN_CIBLAGE) as Array<{ id: string; section: string }>
 
   const etat = new Map(parSection.map((s) => [s.section, s]))
+  // Réussite à froid, quand elle repose sur assez de réponses : c'est elle
+  // qui dit où tu en es sur du neuf. La réussite globale y mêle la
+  // familiarité avec des scénarios déjà vus (80 % en conditions minimales,
+  // 40 % à froid) et faisait croire le plan à une maîtrise qui n'en est pas.
+  const froid = new Map([...tauxAFroid(reussiteAFroidParSection('tagemage'))].map(([k, v]) => [k, v.taux]))
   const sections: BesoinSection[] = SECTIONS.map((s) => ({
     section: s.id,
     libelle: s.libelle,
-    taux: etat.get(s.id)?.taux ?? null,
+    taux: froid.get(s.id) ?? etat.get(s.id)?.taux ?? null,
+    tauxAFroid: froid.has(s.id),
     skillIdsDus: dus.filter((x) => x.section === s.id).map((x) => x.id),
     questionsEnBanque: etat.get(s.id)?.questions ?? 0,
   }))
@@ -293,9 +302,16 @@ function parametres(semaineDu: string) {
 
   const totalBanque = parSection.reduce((a, s) => a + s.questions, 0)
 
+  // Budget recalibré sur le temps mesuré des deux semaines complètes
+  // précédentes — celles qui suivent la première séance, pour ne pas compter
+  // comme « zéro heure » des semaines d'avant l'application.
+  const declare = Math.round((profil().heuresDispoSemaine ?? 0) * 60)
+  const { budgetMinutes, note: noteBudget } = calibrerBudget(declare, mesuresSemainesPrecedentes(semaineDu, 2))
+
   return {
     semaineDu,
-    budgetMinutes: Math.round((profil().heuresDispoSemaine ?? 0) * 60),
+    budgetMinutes,
+    noteBudget,
     joursRestants,
     lecons,
     sections,
@@ -542,6 +558,38 @@ function rythmeDesLecons(): number | null {
   const jours = (Date.now() - new Date(`${l.premiere.slice(0, 10)}T00:00:00`).getTime()) / 86_400_000
   // Une semaine au moins : trois leçons lues hier ne font pas vingt et une par semaine.
   return l.n / Math.max(1, jours / 7)
+}
+
+/** Minutes réellement passées une semaine donnée : séances et épreuves, plus l'étude des leçons. */
+function minutesMesureesSemaine(semaineDu: string): number {
+  const lecons = db()
+    .prepare(
+      `SELECT COALESCE(SUM(minutes), 0) AS m FROM lecon_session
+        WHERE date(le, 'localtime') >= date(?) AND date(le, 'localtime') < date(?, '+7 days')`,
+    )
+    .get(semaineDu, semaineDu) as { m: number }
+  return volumeRealiseMinutes(semaineDu) + Math.round(lecons.m)
+}
+
+/**
+ * Les `combien` semaines complètes précédant `semaineDu`, mesurées — sans
+ * remonter avant la semaine de la toute première séance.
+ */
+function mesuresSemainesPrecedentes(semaineDu: string, combien: number): number[] {
+  const premiere = (
+    db().prepare(`SELECT MIN(date(debut, 'localtime')) AS d FROM exam_session`).get() as { d: string | null }
+  ).d
+  if (!premiere) return []
+  const debut = lundiDeLaSemaine(premiere)
+  const mesures: number[] = []
+  for (let k = 1; k <= combien; k++) {
+    const lundi = new Date(`${semaineDu}T00:00:00Z`)
+    lundi.setUTCDate(lundi.getUTCDate() - 7 * k)
+    const iso = lundi.toISOString().slice(0, 10)
+    if (iso < debut) break
+    mesures.push(minutesMesureesSemaine(iso))
+  }
+  return mesures
 }
 
 export function calendrierJusquExamen(aujourdhui = aujourdhuiIso()): SemaineProjetee[] | null {

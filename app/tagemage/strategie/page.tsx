@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { reussiteAFroidParSection, syntheseStrategie } from '@/core/stats/queries'
-import { RENCONTRES_HABITUDE, type ReussiteAFroid } from '@/core/stats/afroid'
+import { RENCONTRES_HABITUDE, tauxAFroid, type ReussiteAFroid } from '@/core/stats/afroid'
 import {
   LIBELLE_NIVEAU,
   REUSSITE_ATTENDUE,
@@ -44,7 +44,7 @@ export default function PageStrategie() {
           <Calibration s={s} />
           <RegleRemplissage s={s} />
           <PuitsDeTemps s={s} />
-          <Leviers s={s} />
+          <Leviers s={s} froid={tauxAFroid(froid)} />
           <AFroid lignes={froid} />
           <Competences s={s} />
         </div>
@@ -296,20 +296,37 @@ function PuitsDeTemps({ s }: { s: ReturnType<typeof syntheseStrategie> }) {
   )
 }
 
-function Leviers({ s }: { s: ReturnType<typeof syntheseStrategie> }) {
+/** Points perdus sur 15 questions, à un taux de réussite donné (barème +4 / 0 / 0). */
+const pertesSur15 = (taux: number) => 15 * 4 * (1 - taux)
+
+function Leviers({
+  s,
+  froid,
+}: {
+  s: ReturnType<typeof syntheseStrategie>
+  froid: Map<string, { taux: number; n: number }>
+}) {
+  // Classés par la perte à froid quand elle est mesurée : c'est elle que
+  // l'épreuve fera payer, sur des scénarios que tu n'auras jamais vus.
+  const leviers = [...s.leviers].sort(
+    (a, b) =>
+      (froid.has(b.section) ? pertesSur15(froid.get(b.section)!.taux) : b.pointsPerdus) -
+      (froid.has(a.section) ? pertesSur15(froid.get(a.section)!.taux) : a.pointsPerdus),
+  )
   return (
     <section>
       <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">
         Où tu perds tes points
       </h2>
       <p className="mb-4 text-sm text-doux">
-        Points perdus sur un sous-test de 15 questions, à ta réussite actuelle : à l’épreuve,
-        chaque sous-test pèse autant, quel que soit le temps que tu y as passé à l’entraînement.
-        C’est une mesure de ce qui s’est passé, pas une prédiction.
+        Points perdus sur un sous-test de 15 questions : à ta réussite globale, et à froid — sur des
+        scénarios jamais vus, comme le jour de l’épreuve — quand elle est mesurée. Le classement suit
+        la perte à froid : c’est elle que l’épreuve fera payer. À l’épreuve, chaque sous-test pèse
+        autant, quel que soit le temps que tu y as passé à l’entraînement.
       </p>
 
       <div className="space-y-2">
-        {s.leviers.map((l) => (
+        {leviers.map((l) => (
           <div key={l.section} className="rounded-xl border border-bord bg-carte px-5 py-4">
             <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
               <span className="chiffres w-4 text-doux">{l.numero}</span>
@@ -320,6 +337,15 @@ function Leviers({ s }: { s: ReturnType<typeof syntheseStrategie> }) {
               <span className="chiffres text-doux">{pourcent(l.tauxReussite)} de réussite</span>
               <span className="chiffres text-doux">{l.n} vues</span>
             </div>
+            {froid.has(l.section) && (
+              <p className="mt-1 text-xs text-doux">
+                À froid :{' '}
+                <span className="chiffres text-faux">
+                  −{Math.round(pertesSur15(froid.get(l.section)!.taux))} pts / 15 questions
+                </span>{' '}
+                ({pourcent(froid.get(l.section)!.taux)} sur {froid.get(l.section)!.n} scénarios jamais vus)
+              </p>
+            )}
 
             <div className="mt-2 h-1 w-full overflow-hidden rounded bg-carte-clair">
               <div className="h-full bg-faux" style={{ width: `${l.partDesPertes * 100}%` }} />

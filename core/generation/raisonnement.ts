@@ -23,6 +23,7 @@ import { qcmTexte } from './qcm'
 import type { Famille, QuestionGeneree } from './types'
 import { FAILLES, SCENARIOS } from './corpus-raisonnement'
 import { paradoxe } from './paradoxes'
+import { analogie } from './analogies'
 
 const S = 'raisonnement' as const
 
@@ -349,4 +350,5 @@ export const FAMILLES_RAISONNEMENT: Famille[] = [
   familleArgument('sophisme', 'sophisme'),
   // Le seul type qui n'avait aucune question (paradoxes.ts).
   paradoxe,
+  analogie,
 ]

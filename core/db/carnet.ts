@@ -405,3 +405,15 @@ export function declarerCause(itemId: number, cause: CauseErreur | null): void {
      ON CONFLICT (item_id) DO UPDATE SET cause = excluded.cause, maj_le = datetime('now')`,
   ).run(itemId, cause)
 }
+
+/** Causes déjà déclarées pour ces questions : l'écran de correction les réaffiche. */
+export function causesDeclarees(itemIds: number[]): Map<number, CauseErreur> {
+  if (itemIds.length === 0) return new Map()
+  const lignes = db()
+    .prepare(
+      `SELECT item_id AS id, cause FROM carnet_note
+        WHERE cause IS NOT NULL AND item_id IN (${itemIds.map(() => '?').join(',')})`,
+    )
+    .all(...itemIds) as Array<{ id: number; cause: CauseErreur }>
+  return new Map(lignes.map((l) => [l.id, l.cause]))
+}

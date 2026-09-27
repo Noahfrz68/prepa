@@ -74,7 +74,7 @@ export default function PlanClient({ initial }: { initial: PlanHebdomadaire }) {
         <div className="flex flex-wrap items-baseline justify-between gap-4">
           <p className="text-sm">
             <span className="chiffres text-2xl font-semibold">{heures(plan.minutesPlanifiees)}</span>{' '}
-            <span className="text-doux">planifiées sur {heures(plan.budgetMinutes)} disponibles</span>
+            <span className="text-doux">planifiées sur un budget de {heures(plan.budgetMinutes)}</span>
           </p>
           <p className="text-sm text-doux">
             <span className="chiffres text-texte">{heures(plan.minutesFaites)}</span> faites

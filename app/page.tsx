@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { etatExamens } from '@/core/db/queries'
-import { historiqueScores, scoreEstime } from '@/core/db/arbitrage'
+import { dernierScoreSurAnnales, historiqueScores, scoreEstime } from '@/core/db/scores'
+import { jourLisible } from '@/app/_composants/dates'
+import { LIBELLE_NATURE } from '@/core/stats/nature'
 import {
   JOURS_AVANT_RAPPEL,
   joursSansActivite,
@@ -9,7 +11,7 @@ import {
 import { prochaineSeance, type Seance } from './plan/prochaine'
 import { rangerSessionsAbandonnees } from '@/core/db/sessions'
 import { resumeCarnet } from '@/core/db/carnet'
-import type { ScoreHistorique } from '@/core/db/arbitrage'
+import type { ScoreHistorique } from '@/core/db/scores'
 import PremierPas, { type Etape } from './PremierPas'
 import Progression from './Progression'
 import { duree as heures } from '@/app/_composants/nombres'
@@ -72,10 +74,24 @@ export default function Accueil() {
             </Link>
             <Link href="/carnet" className="text-sm text-doux hover:text-texte">
               Carnet
-              {carnet.aTravailler > 0 && (
-                <span className="chiffres ml-1.5 rounded-full bg-faux/15 px-1.5 py-0.5 text-xs text-faux">
-                  {carnet.aTravailler}
+              {/* Les reprises du jour, pas le total : 230 erreurs en attente ne disent
+                  pas quoi faire aujourd'hui, 15 reprises dues si. */}
+              {carnet.aRejouerAujourdhui > 0 ? (
+                <span
+                  className="chiffres ml-1.5 rounded-full bg-faux/15 px-1.5 py-0.5 text-xs text-faux"
+                  title={`${carnet.aRejouerAujourdhui} reprises aujourd’hui · ${carnet.aTravailler} erreurs à revoir au total`}
+                >
+                  {carnet.aRejouerAujourdhui} aujourd’hui
                 </span>
+              ) : (
+                carnet.aTravailler > 0 && (
+                  <span
+                    className="chiffres ml-1.5 text-xs text-doux"
+                    title={`${carnet.aTravailler} erreurs à revoir, aucune reprise due aujourd’hui`}
+                  >
+                    {carnet.aTravailler}
+                  </span>
+                )
               )}
             </Link>
             <Link href="/atelier" className="text-sm text-accent hover:underline">
@@ -155,6 +171,7 @@ export default function Accueil() {
             examen={e}
             scoreEstime={scores.get(e.examId) ?? null}
             historique={historiques.get(e.examId) ?? []}
+            surAnnales={e.examId === 'tagemage' ? dernierScoreSurAnnales('tagemage') : null}
           />
         ))}
       </div>
@@ -228,11 +245,15 @@ function CarteExamen({
   examen,
   scoreEstime,
   historique,
+  surAnnales = null,
 }: {
   examen: ReturnType<typeof etatExamens>[number]
   scoreEstime: number | null
   historique: ScoreHistorique[]
+  /** Dernier score sur annales : le repère comparable à l'épreuve réelle. */
+  surAnnales?: { sessionId: number; score: number; jour: string } | null
 }) {
+  const derniere = historique[historique.length - 1] ?? null
   const href = examen.examId === 'tagemage' ? '/tagemage' : '/toeic'
   const maximum = examen.examId === 'tagemage' ? 600 : 990
 
@@ -256,6 +277,26 @@ function CarteExamen({
         ) : (
           <p className="text-sm text-doux">
             Score non encore estimé — passe un diagnostic pour l’obtenir.
+          </p>
+        )}
+        {/* Le dernier score peut venir d'une épreuve surtout générée, mieux
+            réussie que les annales : on le dit, et on donne à côté le dernier
+            score sur annales, seul comparable à l'épreuve réelle. */}
+        {scoreEstime !== null && derniere && examen.examId === 'tagemage' && (
+          <p className="mt-1 text-xs leading-relaxed text-doux">
+            Dernière épreuve, {LIBELLE_NATURE[derniere.nature]}.
+            {derniere.nature === 'generees' &&
+              (surAnnales ? (
+                <>
+                  {' '}Sur annales :{' '}
+                  <Link href={`/tagemage/epreuve/${surAnnales.sessionId}`} className="text-texte hover:underline">
+                    <span className="chiffres">{surAnnales.score}</span> / {maximum}
+                  </Link>{' '}
+                  ({jourLisible(surAnnales.jour)}) — le repère comparable à l’épreuve réelle.
+                </>
+              ) : (
+                ' Aucune épreuve sur annales : ce score surestime probablement ton niveau.'
+              ))}
           </p>
         )}
         {scoreEstime !== null && examen.examId === 'toeic_lr' && (

@@ -18,6 +18,7 @@
 
 import { de, euros, nombre, pgcd, pluriel, type Alea } from './alea'
 import type { Famille, Lettre, QuestionGeneree } from './types'
+import { informationsEquivalentes } from './format-cm'
 
 const S = 'conditions_minimales' as const
 
@@ -53,6 +54,13 @@ interface Moule {
   ensemble: string
   /** Ce qu'il faut retenir, indépendamment de la lettre tirée. */
   lecon: string
+  /**
+   * Pourquoi chaque fait « inutile » ne suffit pas, quand ce n'est pas une
+   * borne (CAR_INUTILE par défaut) — et ce que leur réunion laisse ouvert.
+   */
+  carI1?: string
+  carI2?: string
+  reunionInutile?: string
 }
 
 const RAISONS: Record<Lettre, string> = {
@@ -86,8 +94,8 @@ function depuisMoule(m: Moule, cible: Lettre, skillId: string, difficulte: 1 | 2
   const S2: Fait = { texte: m.suffisant2, verdict: m.carS2, suffit: true }
   const P1: Fait = { texte: m.partiel1, verdict: m.manqueP1, suffit: false }
   const P2: Fait = { texte: m.partiel2, verdict: m.manqueP2, suffit: false }
-  const I1: Fait = { texte: m.inutile1, verdict: CAR_INUTILE, suffit: false }
-  const I2: Fait = { texte: m.inutile2, verdict: CAR_INUTILE, suffit: false }
+  const I1: Fait = { texte: m.inutile1, verdict: m.carI1 ?? CAR_INUTILE, suffit: false }
+  const I2: Fait = { texte: m.inutile2, verdict: m.carI2 ?? CAR_INUTILE, suffit: false }
 
   const paires: Record<Lettre, [Fait, Fait]> = {
     A: [S1, I1],
@@ -103,8 +111,10 @@ function depuisMoule(m: Moule, cible: Lettre, skillId: string, difficulte: 1 | 2
     cible === 'C'
       ? `4. Les deux ensemble : ${m.ensemble}. La réponse est donc déterminée — mais il a fallu les deux.`
       : cible === 'E'
-        ? `4. Les deux ensemble : deux bornes réunies restent deux bornes. Plusieurs valeurs continuent ` +
-          `de satisfaire l'énoncé, la question reste sans réponse unique.`
+        ? m.reunionInutile
+          ? `4. Les deux ensemble : ${m.reunionInutile}. La question reste sans réponse unique.`
+          : `4. Les deux ensemble : deux bornes réunies restent deux bornes. Plusieurs valeurs continuent ` +
+            `de satisfaire l'énoncé, la question reste sans réponse unique.`
         : `4. On n'a pas besoin d'aller plus loin : dès qu'une information suffit seule, ` +
           `on ne teste plus la réunion.`
 
@@ -394,6 +404,170 @@ function mouleSigne(a: Alea): Moule {
   }
 }
 
+/* ------------------------------------------- scénarios supplémentaires -- */
+// Dans les huit premiers moules, une information insuffisante était toujours
+// une BORNE (« n est supérieur à… »), et l'explication le disait mot pour mot.
+// Le réflexe s'apprend vite et dispense de raisonner : 40 % à la première
+// rencontre d'un scénario, 93 % à la quatrième. Ces six moules font manquer
+// l'information autrement — une équation redondante, une propriété vraie de
+// toutes les figures, un renvoi à une grandeur inconnue, une étendue qui ne
+// dit rien du milieu, une proportionnalité sans chiffre, une nature sans valeur.
+
+function moulePrix(a: Alea): Moule {
+  const c = a.entier(2, 9)
+  let s = a.entier(1, 4)
+  if (s === c) s++
+  const x = c + s
+  const n = a.entier(3, 6)
+  const ecartClasseur = a.entier(1, 5)
+
+  return {
+    question: `Combien coûte un cahier ?`,
+    suffisant1: `${n} cahiers coûtent ${euros(n * c)}.`,
+    suffisant2: `Un cahier et un stylo coûtent ensemble ${euros(x)}, et le stylo coûte ${euros(s)}.`,
+    partiel1: `Un cahier et un stylo coûtent ensemble ${euros(x)}.`,
+    partiel2: `Un stylo coûte ${euros(s)}.`,
+    inutile1: `Deux cahiers et deux stylos coûtent ensemble ${euros(2 * x)}.`,
+    inutile2: `Un cahier coûte ${euros(ecartClasseur)} de moins qu'un classeur.`,
+    carS1: `le prix de ${n} cahiers se divise : ${euros(n * c)} ÷ ${n} = ${euros(c)}`,
+    carS2: `on retranche le stylo du total : ${euros(x)} − ${euros(s)} = ${euros(c)}`,
+    manqueP1: `une seule équation pour deux prix inconnus : c + s = ${nombre(x)} admet une infinité de couples`,
+    manqueP2: `le prix du stylo ne dit rien du cahier tant qu'aucune relation ne les lie`,
+    ensemble: `c = ${nombre(x)} − ${nombre(s)} = ${nombre(c)} €`,
+    carI1: `c'est « un cahier et un stylo » multiplié par deux : toujours une seule équation pour deux inconnues, donc une infinité de solutions`,
+    carI2: `elle relie le cahier à un classeur dont le prix est inconnu : une inconnue de plus, aucune valeur fixée`,
+    reunionInutile: `les deux relient trois prix inconnus — cahier, stylo, classeur — par deux équations, dont l'une n'est que « cahier + stylo » en double : il reste une infinité de solutions`,
+    lecon: `une équation qui n'est qu'un multiple d'une autre n'apporte rien : il faut autant d'équations INDÉPENDANTES que d'inconnues.`,
+  }
+}
+
+function mouleCarre(a: Alea): Moule {
+  const k = 2 * a.entier(2, 9)
+  const [ra, rb] = [2 * k, k / 2]
+
+  return {
+    question: `Quel est le périmètre d'un carré ?`,
+    suffisant1: `Son côté mesure ${nombre(k)} cm.`,
+    suffisant2: `Son aire vaut ${nombre(k * k)} cm².`,
+    partiel1: `Il a la même aire qu'un rectangle R.`,
+    partiel2: `Le rectangle R mesure ${nombre(ra)} cm sur ${nombre(rb)} cm.`,
+    inutile1: `Ses diagonales sont perpendiculaires et de même longueur.`,
+    inutile2: `Son côté mesure un nombre entier de centimètres.`,
+    carS1: `le périmètre d'un carré vaut quatre fois son côté : 4 × ${nombre(k)} = ${nombre(4 * k)} cm`,
+    carS2: `le côté est la racine de l'aire — ${nombre(k)} cm, une longueur étant positive —, d'où 4 × ${nombre(k)} = ${nombre(4 * k)} cm`,
+    manqueP1: `on ne sait rien de R : l'égalité des aires ne fixe aucune taille`,
+    manqueP2: `R est une autre figure : ses dimensions ne disent rien du carré tant qu'aucun lien n'est donné`,
+    ensemble: `l'aire du carré vaut ${nombre(ra)} × ${nombre(rb)} = ${nombre(k * k)} cm², donc son côté ${nombre(k)} cm et son périmètre ${nombre(4 * k)} cm`,
+    carI1: `c'est vrai de TOUT carré : une propriété que tous partagent ne distingue aucun d'eux`,
+    carI2: `une contrainte de nature, pas une valeur : une infinité de carrés la respectent`,
+    reunionInutile: `deux propriétés vérifiées par une infinité de carrés : aucune taille n'est fixée`,
+    lecon: `une propriété commune à toutes les figures d'un type (diagonales, angles droits) n'apporte jamais de mesure, et une égalité avec une figure inconnue ne vaut que si l'on connaît cette figure.`,
+  }
+}
+
+function mouleHausse(a: Alea): Moule {
+  const t = a.choix([10, 20, 25, 50])
+  const ancien = a.entier(2, 20) * 20
+  const hausse = (ancien * t) / 100
+  const nouveau = ancien + hausse
+
+  return {
+    question: `Quel est le nouveau prix d'un abonnement après sa hausse ?`,
+    suffisant1: `Il coûtait ${euros(ancien)} et a augmenté de ${t} %.`,
+    suffisant2: `La hausse, de ${t} %, a représenté ${euros(hausse)}.`,
+    partiel1: `Il a augmenté de ${t} %.`,
+    partiel2: `Avant la hausse, il coûtait ${euros(ancien)}.`,
+    inutile1: `Il a augmenté du même pourcentage que l'an dernier.`,
+    inutile2: `Après la hausse, il reste moins cher que celui d'un concurrent.`,
+    carS1: `l'ancien prix et le taux donnent le nouveau : ${euros(ancien)} × ${nombre(1 + t / 100, 2)} = ${euros(nouveau)}`,
+    carS2: `${euros(hausse)} font ${t} % de l'ancien prix, qui valait donc ${euros(ancien)} ; le nouveau vaut ${euros(ancien)} + ${euros(hausse)} = ${euros(nouveau)}`,
+    manqueP1: `un taux sans montant de départ ne donne aucun prix`,
+    manqueP2: `l'ancien prix ne dit pas de combien il a augmenté`,
+    ensemble: `${euros(ancien)} × ${nombre(1 + t / 100, 2)} = ${euros(nouveau)}`,
+    carI1: `elle renvoie à une hausse passée dont on ignore tout : ni taux, ni montant`,
+    carI2: `une comparaison avec un prix inconnu ne fixe aucune valeur`,
+    reunionInutile: `deux renvois à des grandeurs inconnues (la hausse de l'an dernier, le prix du concurrent) : rien n'est chiffré`,
+    lecon: `une information qui renvoie à une grandeur inconnue (« autant que l'an dernier », « moins que le concurrent ») ne fixe rien, même quand elle a l'air précise.`,
+  }
+}
+
+function mouleMediane(a: Alea): Moule {
+  const m = a.entier(8, 14)
+  const notes = [m - 3, m - 1, m, m + 2, m + 4]
+  // La note inconnue est m − 1 : la moyenne des cinq vaut m + 0,4.
+  const moyenne = (5 * m + 2) / 5
+
+  return {
+    question: `Quelle est la note médiane de cinq élèves à un devoir ?`,
+    suffisant1: `Rangées dans l'ordre, les notes sont ${notes.map((x) => nombre(x)).join(', ')}.`,
+    suffisant2: `Deux élèves ont moins de ${nombre(m)}, deux ont plus de ${nombre(m)}, et le cinquième a exactement ${nombre(m)}.`,
+    partiel1: `La moyenne des cinq notes vaut ${nombre(moyenne, 1)}.`,
+    partiel2: `Quatre des notes sont ${nombre(m - 3)}, ${nombre(m)}, ${nombre(m + 2)} et ${nombre(m + 4)} ; la cinquième est inconnue.`,
+    inutile1: `L'écart entre la meilleure et la moins bonne note vaut 7 points.`,
+    inutile2: `Aucune note n'est répétée.`,
+    carS1: `la médiane de cinq valeurs rangées est la troisième : ${nombre(m)}`,
+    carS2: `la médiane est la valeur qui a autant de notes au-dessous qu'au-dessus : ${nombre(m)}`,
+    manqueP1: `une moyenne ne dit rien de la valeur du milieu : des séries très différentes ont la même`,
+    manqueP2: `tout dépend de la note manquante — petite, la médiane vaut ${nombre(m)} ; grande, elle vaut ${nombre(m + 2)}`,
+    ensemble: `la moyenne fixe le total, ${nombre(5 * moyenne)}, donc la note manquante : ${nombre(5 * moyenne)} − ${nombre(4 * m + 3)} = ${nombre(m - 1)}. Rangées, les notes placent ${nombre(m)} au milieu`,
+    carI1: `l'étendue dit l'écart entre les extrêmes, rien de la valeur du milieu`,
+    carI2: `une propriété de la série, pas une valeur : elle laisse la médiane libre`,
+    reunionInutile: `l'étendue et l'absence de doublon laissent toutes les positions possibles pour la note du milieu`,
+    lecon: `la médiane ne dépend que de la valeur du milieu : ni l'étendue ni la moyenne ne la donnent. Une moyenne n'aide que si elle permet de retrouver une note manquante.`,
+  }
+}
+
+function moulePeinture(a: Alea): Moule {
+  const rendement = a.entier(5, 12)
+  const surface = rendement * a.entier(2, 8)
+  const litres = surface / rendement
+  const essai = a.entier(2, 6)
+  const pot = a.entier(2, 5)
+
+  return {
+    question: `Combien de litres de peinture faut-il pour couvrir un mur de ${nombre(surface)} m² ?`,
+    suffisant1: `Un litre de cette peinture couvre ${nombre(rendement)} m².`,
+    suffisant2: `Il a fallu ${nombre(essai)} litres de la même peinture pour un mur de ${nombre(essai * rendement)} m².`,
+    partiel1: `Un pot de cette peinture couvre ${nombre(pot * rendement)} m².`,
+    partiel2: `Un pot contient ${nombre(pot)} litres.`,
+    inutile1: `Deux pots couvrent deux fois plus de surface qu'un seul.`,
+    inutile2: `Cette peinture couvre mieux que celle utilisée l'an dernier.`,
+    carS1: `${nombre(surface)} ÷ ${nombre(rendement)} = ${nombre(litres)} litres`,
+    carS2: `l'essai donne le rendement, ${nombre(essai * rendement)} ÷ ${nombre(essai)} = ${nombre(rendement)} m² par litre, puis ${nombre(surface)} ÷ ${nombre(rendement)} = ${nombre(litres)} litres`,
+    manqueP1: `on sait ce que couvre un pot, pas ce qu'il contient : le rendement par litre reste inconnu`,
+    manqueP2: `la contenance d'un pot ne dit pas quelle surface il couvre`,
+    ensemble: `${nombre(pot * rendement)} m² pour ${nombre(pot)} litres, soit ${nombre(rendement)} m² par litre : ${nombre(litres)} litres pour le mur`,
+    carI1: `c'est la proportionnalité même, vraie de toutes les peintures : elle ne chiffre aucun rendement`,
+    carI2: `une comparaison avec une peinture dont on ignore le rendement ne fixe rien`,
+    reunionInutile: `une proportionnalité sans chiffre et une comparaison avec l'inconnu : aucun rendement n'est donné`,
+    lecon: `une proportionnalité ne se calcule qu'avec un rapport chiffré : « deux fois plus de pots, deux fois plus de surface » est vrai de toutes les peintures.`,
+  }
+}
+
+function mouleProduit(a: Alea): Moule {
+  const y = a.entier(2, 9)
+  const x = 2 * y
+
+  return {
+    question: `Deux nombres x et y étant donnés, que vaut le produit xy ?`,
+    suffisant1: `xy = ${nombre(x * y)}.`,
+    suffisant2: `x = ${nombre(x)} et y = ${nombre(y)}.`,
+    partiel1: `(x + y)² = ${nombre((x + y) ** 2)}.`,
+    partiel2: `x² + y² = ${nombre(x * x + y * y)}.`,
+    inutile1: `x et y sont deux entiers positifs distincts.`,
+    inutile2: `x est le double de y.`,
+    carS1: `le produit est donné tel quel — inutile de chercher x et y`,
+    carS2: `les deux nombres sont connus : ${nombre(x)} × ${nombre(y)} = ${nombre(x * y)}`,
+    manqueP1: `(x + y)² fixe la somme, pas le produit : ${nombre(x + y)} = ${nombre(x)} + ${nombre(y)} = ${nombre(x + 1)} + ${nombre(y - 1)}, et les produits diffèrent`,
+    manqueP2: `une somme de carrés laisse une infinité de couples possibles`,
+    ensemble: `(x + y)² = x² + 2xy + y², donc 2xy = ${nombre((x + y) ** 2)} − ${nombre(x * x + y * y)} = ${nombre(2 * x * y)} et xy = ${nombre(x * y)}, sans jamais calculer x ni y`,
+    carI1: `une nature, pas une valeur : une infinité de couples d'entiers la vérifient`,
+    carI2: `un rapport sans valeur : (2 ; 1), (6 ; 3), (18 ; 9)… tous conviennent`,
+    reunionInutile: `entiers, distincts, l'un double de l'autre : (2 ; 1), (4 ; 2), (6 ; 3)… une infinité de couples, et autant de produits`,
+    lecon: `on demande xy, pas x et y : une identité remarquable peut livrer le produit sans les nombres. Et une nature (« entiers ») ou un rapport ne fixent jamais de valeur.`,
+  }
+}
+
 /* ------------------------------------------------------------ familles -- */
 
 const LETTRES_CIBLES: Lettre[] = ['A', 'B', 'C', 'D', 'E']
@@ -425,4 +599,12 @@ export const FAMILLES_CONDITIONS: Famille[] = [
   famille('ratio', 'tm.conditions_minimales.cm_proportionnalite_et_ratios', mouleRatio, 3),
   famille('somme', 'tm.conditions_minimales.suffisance_vs_resolution', mouleSomme, 4),
   famille('signe', 'tm.conditions_minimales.pieges_de_signe_et_cas_particuliers', mouleSigne, 4),
+  famille('prix', 'tm.conditions_minimales.cm_equations_et_systemes', moulePrix, 3),
+  famille('carré', 'tm.conditions_minimales.cm_geometrie', mouleCarre, 3),
+  famille('hausse', 'tm.conditions_minimales.cm_pourcentages_et_variations', mouleHausse, 3),
+  famille('médiane', 'tm.conditions_minimales.cm_statistiques_et_probabilites', mouleMediane, 3),
+  famille('peinture', 'tm.conditions_minimales.cm_proportionnalite_et_ratios', moulePeinture, 2),
+  famille('produit', 'tm.conditions_minimales.suffisance_vs_resolution', mouleProduit, 4),
+  // Le type « maîtrise du format A–E » n'avait aucune question (format-cm.ts).
+  informationsEquivalentes,
 ]

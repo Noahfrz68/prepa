@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { etatExamens, etatSectionsTageMage } from '@/core/db/queries'
-import { historiqueScores } from '@/core/db/arbitrage'
+import { historiqueScores } from '@/core/db/scores'
 import CourbeScore from '@/app/_composants/CourbeScore'
 import { jourLisible } from '@/app/_composants/dates'
 import { historiqueEpreuves } from '@/core/db/epreuve'
 import { questionsEnAttente, reserveAnnales, texteLongComprehension } from '@/core/db/selection'
+import { reussiteAFroidParSection } from '@/core/stats/queries'
+import { tauxAFroid } from '@/core/stats/afroid'
 import { planDeLaSemaine } from '@/core/db/semaine'
 import { prochaineSeance } from '@/app/plan/prochaine'
 import { SECONDES_PAR_QUESTION, SECTIONS } from '@/exams/tagemage'
@@ -30,6 +32,7 @@ export default function HubTageMage() {
   const dureeBlanc = dureeTotaleMinutes(composerEpreuve('blanc'))
   // Réserve d'annales jamais vues : ce qui permet une épreuve comparable.
   const attente = questionsEnAttente()
+  const froid = tauxAFroid(reussiteAFroidParSection('tagemage'))
   const reserve = reserveAnnales()
   const reserveMin = Math.min(...SECTIONS.map((s) => reserve.get(s.id) ?? 0))
   const diagnosticSurAnnales = SECTIONS.every(
@@ -191,6 +194,11 @@ export default function HubTageMage() {
                 ? 'Assez pour un diagnostic entièrement sur annales : les épreuves les servent en premier, et les séries n’y touchent pas.'
                 : `Pas assez pour un diagnostic entièrement sur annales (il en faut ${QUESTIONS_DIAGNOSTIC} par sous-test, ${QUESTIONS_DIAGNOSTIC_COMPREHENSION} en compréhension ; le plus bas en compte ${reserveMin}). Les épreuves se complètent de questions générées et ne se comparent qu’entre elles. Importer une annale en PDF dans l’atelier remplit la réserve : les séries n’y touchent pas.`}
             </p>
+            {!diagnosticSurAnnales && (
+              <Link href="/atelier" className="mt-2 inline-block text-sm text-accent hover:underline">
+                Importer une annale en PDF →
+              </Link>
+            )}
           </div>
 
           {courbe.length >= 2 && (
@@ -264,7 +272,8 @@ export default function HubTageMage() {
       <p className="mb-3 text-xs text-doux">
         Réussite = bonnes réponses sur questions servies, sauts compris — la même définition
         partout dans l’application. ⚠ = moins de {ECHANTILLON_FIABLE} réponses : le taux est
-        indicatif.
+        indicatif. « À froid » : sur des scénarios jamais vus, comme le jour de l’épreuve — c’est ce
+        taux-là que le plan utilise quand il est mesuré.
       </p>
       <div className="space-y-3">
         {sections.map((s) => (
@@ -298,6 +307,14 @@ export default function HubTageMage() {
                 </span>
               ) : (
                 <span className="text-doux">—</span>
+              )}
+              {froid.has(s.id) && (
+                <span
+                  className="block text-xs text-doux"
+                  title={`${froid.get(s.id)!.n} réponses sur des scénarios jamais vus`}
+                >
+                  à froid {Math.round(froid.get(s.id)!.taux * 100)} %
+                </span>
               )}
             </div>
 

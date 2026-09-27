@@ -123,15 +123,15 @@ Le bilan produit :
 - **Trois leviers**, classés par points récupérables, avec l'hypothèse affichée.
 - Comparaison à l'épreuve précédente du même format.
 
-Aucune projection dans le temps : estimer où tu seras à la date de l'examen demande une pente
-de progression mesurée sur plusieurs semaines, que le planificateur fournira (lot 7). Inventer
-cette pente produirait un chiffre faux mais crédible.
+Aucune projection dans le temps : estimer où tu seras à la date de l'examen demanderait une pente
+de progression mesurée sur plusieurs épreuves comparables, que la banque ne permet pas encore.
+Inventer cette pente produirait un chiffre faux mais crédible.
 
 ## Objectifs
 
 `/objectifs` — volume de travail hebdomadaire, date d'examen et score cible pour chaque
 examen, avec un mode « date provisoire » si tu n'es pas encore inscrit. Ce ne sont pas des champs décoratifs : l'écart
-chiffré du bilan d'épreuve et l'arbitrage entre les deux préparations en dépendent.
+chiffré du bilan d'épreuve, le calendrier des épreuves et le budget du plan en dépendent.
 
 ## Ce que fait le lot 4 — répétition espacée et plan de révision
 
@@ -160,17 +160,8 @@ exiger le seuil à l'intérieur de chaque séance ne déclenchait presque jamais
 reconstruit en rejouant l'historique** à chaque affichage. `attempt` reste la seule source de
 vérité, et le calendrier ne peut pas dériver.
 
-**Le plan hebdomadaire** (devenu transversal au lot 7) place d'abord ce qui est périssable (les révisions dues), puis ce qui
-rapporte (les faiblesses), sans jamais mélanger deux sous-tests dans une même séance. Il ajoute
-le premier blanc dès que la banque le permet — il sert de référence —, puis un blanc toutes les
-deux semaines dans les six semaines qui précèdent l'examen, et chaque semaine le dernier mois.
-Hors blancs, un diagnostic revient au moins tous les quatorze jours : sans mesure régulière, la
-pente de progression n'existe pas. Chaque séance se lance en un clic et **cible
-réellement les sous-compétences nommées**, pas tout le sous-test.
-
-Le budget est **recalibré sur le volume réellement mesuré**, jamais sur le déclaratif : si
-l'écart dépasse 30 %, le plan est réduit plutôt que de laisser du retard s'accumuler. Un plan
-non tenu est un plan mal calibré.
+Le plan hebdomadaire qui s'appuyait sur ce calendrier a été remplacé : voir « Le plan de la
+semaine » plus bas (lot 7).
 
 ## Ce que fait le lot 5 — TOEIC Reading et vocabulaire
 
@@ -231,40 +222,39 @@ En cas d'échec : une seule nouvelle tentative, puis abandon propre. Le job est 
 `ai_job` pour ne pas refaire deux fois le même débrief et pour garder trace de ce qui a coûté
 quoi.
 
-## Ce que fait le lot 7 — l'arbitrage entre les deux préparations
+## Ce que fait le lot 7 — le plan de la semaine
 
-`/plan` remplace le plan mono-examen du lot 4 : **un seul budget hebdomadaire**, recalibré sur
-le volume réellement effectué, puis réparti entre les deux examens, puis décliné en séances
-dans chacun. L'ordre compte — on arbitre un budget réaliste, pas un budget déclaré.
+`/plan`. Le plan est **composé le lundi et ne bouge plus de la semaine** : il ne se réécrit
+pas au fil des séances, et ce qui est fait se mesure contre ce qui était prévu. Il porte sur le
+TAGE MAGE seul ; le TOEIC, dont la banque est vide, n'y a pas de place.
 
-**Le problème que personne ne pose.** On ne peut pas comparer « points par heure » entre le
-TAGE MAGE (échelle 600) et le TOEIC (échelle 990) : 10 points n'y valent pas la même chose. Ce
-qui est comparable, c'est la **fraction de l'écart restant refermée par heure** — une grandeur
-sans dimension. C'est elle qui pilote la répartition.
+**Le budget** part des heures déclarées dans Objectifs, puis se **recalibre sur le temps
+réellement passé** : la référence est la meilleure des deux dernières semaines mesurées (séances,
+épreuves, leçons). À plus de 20 % d'écart, le plan descend à cette référence + 10 %, ou monte
+jusqu'à elle — sans dépasser une fois et demie le déclaré — et le dit dans ses notes. La
+meilleure semaine plutôt que la moyenne : une préparation qui monte en charge serait sinon
+sous-estimée ; une vraie baisse se voit quand les deux semaines sont basses.
 
-Deux planchers passent avant ce calcul :
+**L'ordre de remplissage** :
 
-- **Plancher d'entretien** (1 h) — aucun examen n'est abandonné. L'anglais se dégrade vite à
-  l'arrêt, et reprendre coûte plus cher que maintenir.
-- **Plancher d'urgence** (40 %) — l'examen à moins de 6 semaines est servi d'abord, quelle que
-  soit la rentabilité marginale. Une échéance ne se négocie pas.
+1. **Les épreuves.** Le premier blanc dès que la banque le permet — il sert de référence —, puis
+   un blanc toutes les deux semaines dans les six semaines qui précèdent l'examen, et chaque
+   semaine le dernier mois. Hors blancs, un diagnostic au moins tous les quatorze jours.
+2. **Le cours**, dans l'ordre du parcours (`/tagemage/cours`), plafonné à une part de la
+   semaine qui décroît à l'approche de l'examen.
+3. **Les séries.** Les séries non faites la semaine précédente sont reportées, dans la limite de
+   la moitié. Les autres se répartissent selon la faiblesse de chaque sous-test — mesurée **à
+   froid** dès qu'il y a assez de réponses (15), la réussite globale mêlant méthode et
+   familiarité (80 % en conditions minimales, 40 % à froid). Le sous-test le plus faible reçoit
+   au moins deux séries dès que la semaine en compte cinq. Chaque série vise les types de
+   questions dus à la répétition espacée, s'ils ont au moins cinq questions en banque.
 
-Et deux plafonds, tous deux découverts en testant :
+Le « fait » se lit dans les séances ; ce qui est coché « fait hors de l'app » est compté à part,
+comme déclaré. Le calendrier « Jusqu'à l'examen » reprend la semaine en cours telle que le plan
+figé la prévoit, puis rejoue les règles semaine après semaine, avec le cours avançant au rythme
+réellement mesuré.
 
-- **Plafond de besoin** — aucun examen ne reçoit plus d'heures qu'il ne lui en reste pour
-  atteindre sa cible. Sans lui, un examen à 10 points du but raflait 92 % du budget, parce que
-  refermer ses derniers points donne une énorme fraction d'écart par heure — alors que cinq
-  heures y suffisent.
-- **Plafond de capacité** — aucun examen ne reçoit plus que ce que sa banque permet de
-  travailler. Sans lui, le TOEIC recevait 2 h 30 et n'en planifiait que 30 min : deux heures
-  perdues pour le TAGE MAGE, dont l'examen était dans cinq semaines. Les planchers eux-mêmes
-  sont bornés par cette capacité.
-
-**La pente de progression** est mesurée sur les épreuves des 8 dernières semaines, rapportées
-aux heures réellement investies. Tant qu'il n'y a pas deux épreuves passées, une pente
-conventionnelle prend le relais et l'écran dit que l'estimation est grossière.
-
-Le bandeau d'accueil porte le plan et la prochaine séance à faire, en un clic.
+Le bandeau d'accueil et le hub portent la prochaine séance à faire, en un clic.
 
 ## Ce que fait le lot 8 — le Listening et la chaîne audio
 
@@ -365,7 +355,8 @@ transcription. Livrer une note sur ces critères serait livrer un chiffre invent
 - **Nature d'une épreuve** — une épreuve mesurée au moins pour moitié sur des annales réelles
   (étiquette `annale`, posée automatiquement à l'import PDF) ne se compare qu'aux épreuves de
   même nature, et inversement : écart à la précédente, ligne de la courbe (points pleins sur
-  annales, creux sinon) et pente de progression. Les questions générées sont nettement mieux
+  annales, creux sinon). L'accueil donne à côté du dernier score le dernier score sur annales,
+  seul repère comparable à l'épreuve réelle, et le bilan chiffre l'écart à la cible sur les deux. Les questions générées sont nettement mieux
   réussies que les annales ; mélanger les deux faisait lire un progrès là où la banque avait
   changé. Le bilan affiche la composition et, le cas échéant, l'écart de réussite mesuré.
 - **Réserve d'annales** — une question d'annale jamais vue ne sert pas à l'entraînement : séries,
@@ -494,7 +485,7 @@ core/       agnostique de l'examen — base, barème, import
   db/       client SQLite, migrations, seed, requêtes
   scoring/  barèmes TAGE MAGE et TOEIC, conversions — testés unitairement
   stats/    calibration, puits de temps, leviers, estimation de score — calculs purs testés
-  scheduler/ répétition espacée SM-2, composition du plan et arbitrage — calculs purs testés
+  scheduler/ répétition espacée SM-2, reprises du carnet, tirage, plan de la semaine — calculs purs testés
   import/   parseurs texte, CSV, PDF et scripts Listening — testés unitairement
   ia/       fournisseurs interchangeables, prompt du tuteur, orchestration
   audio/    moteurs de synthèse, cache et concaténation WAV

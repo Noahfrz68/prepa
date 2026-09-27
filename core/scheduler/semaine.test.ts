@@ -3,6 +3,8 @@ import {
   MINUTES_BLANC,
   composerSemaine,
   projeterCalendrier,
+  calibrerBudget,
+  garantirPlusFaible,
   desequilibre,
   semainesLisibles,
   type BesoinSection,
@@ -214,5 +216,44 @@ describe('desequilibre', () => {
 
   it('ne dit rien sans retard ailleurs', () => {
     expect(desequilibre([serie('calcul', 9, 1, 0.79), serie('logique', 3, 3, 0.75)])).toBeNull()
+  })
+})
+
+describe('calibrerBudget', () => {
+  it('garde le déclaré sans mesure, ou dans la tolérance', () => {
+    expect(calibrerBudget(600, [])).toEqual({ budgetMinutes: 600, note: null })
+    expect(calibrerBudget(600, [540])).toEqual({ budgetMinutes: 600, note: null })
+  })
+  it('descend vers le temps réellement passé, avec 10 % de marge', () => {
+    const r = calibrerBudget(600, [420, 380])
+    expect(r.budgetMinutes).toBe(462)
+    expect(r.note).toContain('recalibré')
+  })
+  it('monte au rythme réel, sans dépasser une fois et demie le déclaré', () => {
+    expect(calibrerBudget(600, [800]).budgetMinutes).toBe(800)
+    expect(calibrerBudget(600, [1200]).budgetMinutes).toBe(900)
+  })
+})
+
+describe('garantirPlusFaible', () => {
+  const s = (section: string, taux: number) => ({ section, libelle: section, taux, skillIdsDus: [], questionsEnBanque: 100 })
+  it('donne deux séries au sous-test le plus faible, prises au mieux doté', () => {
+    const series = new Map([['comprehension', 4], ['expression', 1], ['calcul', 1]])
+    garantirPlusFaible(series, [s('comprehension', 0.62), s('expression', 0.51), s('calcul', 0.79)])
+    expect(series.get('expression')).toBe(2)
+    expect(series.get('comprehension')).toBe(3)
+    expect(series.get('calcul')).toBe(1)
+  })
+  it('laisse intacte une semaine trop courte', () => {
+    const series = new Map([['comprehension', 2], ['expression', 1], ['calcul', 1]])
+    garantirPlusFaible(series, [s('comprehension', 0.62), s('expression', 0.51), s('calcul', 0.79)])
+    expect(series.get('expression')).toBe(1)
+  })
+
+  it('ne retire jamais un sous-test du plan', () => {
+    const series = new Map([['expression', 1], ['calcul', 1], ['logique', 1], ['raisonnement', 1], ['comprehension', 1], ['conditions_minimales', 1]])
+    garantirPlusFaible(series, [s('expression', 0.51), s('calcul', 0.79)])
+    expect(series.get('calcul')).toBe(1)
+    expect(series.get('expression')).toBe(1)
   })
 })
