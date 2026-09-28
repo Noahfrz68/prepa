@@ -471,6 +471,15 @@ export function parserPdf(texte: string): ResultatPdf {
     )
   }
 
+  // L'extraction du texte perd le soulignement : une consigne qui renvoie au
+  // « passage souligné » n'a plus rien pour le désigner à l'écran.
+  const soulignees = questions.filter((q) => /soulign/i.test(q.enonce)).map((q) => q.numero)
+  if (soulignees.length > 0) {
+    avertissements.push(
+      `Question(s) ${soulignees.join(', ')} : la consigne parle d’un passage souligné, mais le soulignement disparaît à l’extraction du PDF. En relecture, mets le passage entre « » et adapte la consigne (« passage entre guillemets »), ou « texte ci-dessous » si tout le texte est concerné.`,
+    )
+  }
+
   const sansReponse = questions.filter((q) => !q.bonneReponse).length
   if (sansReponse > 0) {
     avertissements.push(
