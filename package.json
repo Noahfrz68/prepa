@@ -11,6 +11,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "iphone:dev": "node scripts/iphone.mjs dev",
+    "iphone:build": "node scripts/iphone.mjs build",
+    "iphone:servir": "node scripts/servir-iphone.mjs",
     "migrations:gen": "node scripts/generer-migrations.mjs",
     "cours:export":"jiti scripts/exporter-cours.ts",
     "audit:questions": "jiti scripts/auditer-questions.ts"

@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { ACCENTS, type Accent } from '@/exams/toeic/listening'
+import { AUCUN_MOTEUR, type EtatAudio, type MoteurTts } from './script'
 
 /**
  * Piper lit le texte sur son entrée standard. `execFile` ne sait pas alimenter
@@ -45,37 +45,8 @@ function lancerPiper(binaire: string, args: string[], texte: string): Promise<vo
 
 export const DOSSIER_AUDIO = path.join(process.cwd(), 'data', 'audio')
 
-export interface Segment {
-  /** Index du locuteur dans l'enregistrement : 0, 1, 2… */
-  locuteur: number
-  texte: string
-}
-
-export interface DemandeSynthese {
-  segments: Segment[]
-  accent: Accent
-}
-
-export interface ResultatSynthese {
-  cheminRelatif: string
-  moteur: string
-  voix: string
-  dureeMs: number | null
-}
-
-export interface MoteurTts {
-  id: 'piper' | 'aucun'
-  libelle: string
-  /** null si prêt, sinon la raison de l'indisponibilité. */
-  indisponible(): string | null
-  synthetiser(demande: DemandeSynthese, hash: string): Promise<ResultatSynthese>
-}
-
-/** Clé de cache : un script inchangé n'est jamais resynthétisé. */
-export function hashScript(segments: Segment[], accent: Accent): string {
-  const canonique = JSON.stringify({ accent, segments })
-  return createHash('sha256').update(canonique).digest('hex').slice(0, 32)
-}
+export { AUCUN_MOTEUR, hashScript } from './script'
+export type { DemandeSynthese, EtatAudio, MoteurTts, ResultatSynthese, Segment } from './script'
 
 /* --------------------------------------------------------------- Piper -- */
 
@@ -140,17 +111,6 @@ function piper(): MoteurTts {
   }
 }
 
-/* --------------------------------------------------------------- aucun -- */
-
-export const AUCUN_MOTEUR: MoteurTts = {
-  id: 'aucun',
-  libelle: 'Aucun moteur de synthèse',
-  indisponible: () => 'Aucun moteur de synthèse installé.',
-  async synthetiser() {
-    throw new Error('Aucun moteur de synthèse installé.')
-  },
-}
-
 export function moteurActif(): MoteurTts {
   const p = piper()
   return p.indisponible() === null ? p : AUCUN_MOTEUR
@@ -180,13 +140,6 @@ export function locuteursDisponibles(accent: Accent): number {
   let n = 0
   while (process.env[`PIPER_VOIX_${accent}${n === 0 ? '' : `_${n + 1}`}`]?.trim()) n++
   return n
-}
-
-export interface EtatAudio {
-  moteurServeur: { id: string; libelle: string; raisonIndisponibilite: string | null }
-  accentsDisponibles: Accent[]
-  accentsNonCouverts: Accent[]
-  locuteursParAccent: Record<string, number>
 }
 
 export function etatAudio(): EtatAudio {

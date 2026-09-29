@@ -1,8 +1,25 @@
 import fs from 'node:fs'
-import { cheminAudio } from '@/core/db/listening'
+import path from 'node:path'
+import { db } from '@/core/db/queries'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+/**
+ * Chemin sur le disque de l'audio synthétisé pour ce script, s'il existe.
+ * Ici plutôt que dans core/db/listening.ts : c'est la seule lecture du disque
+ * du module, et le reste tourne aussi dans le navigateur (version iPhone).
+ */
+function cheminAudio(hash: string): string | null {
+  const l = db()
+    .prepare(`SELECT chemin_fichier FROM media WHERE hash_script = ?`)
+    .get(hash) as { chemin_fichier: string | null } | undefined
+
+  if (!l?.chemin_fichier) return null
+
+  const complet = path.join(process.cwd(), 'data', l.chemin_fichier)
+  return fs.existsSync(complet) ? complet : null
+}
 
 /**
  * Sert un audio synthétisé depuis `data/audio/`.

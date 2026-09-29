@@ -1,4 +1,4 @@
-import { getDb } from './client'
+import { getDb } from '@/core/db/client'
 import { seed } from './seed'
 import { SECTIONS, type SectionTageMage } from '@/exams/tagemage'
 import { issueDe, pointsDe, resultatSerie, type Issue } from '@/core/scoring/tagemage'

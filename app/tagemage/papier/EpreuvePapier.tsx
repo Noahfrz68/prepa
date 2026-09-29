@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { poster } from '@/app/_composants/reseau'
+import { lienBilanEpreuve } from '@/app/_composants/liens'
 import BoutonImprimer from '@/app/_composants/BoutonImprimer'
 import { jourLisible } from '@/app/_composants/dates'
 import type { Case, Figure } from '@/core/figures/types'
@@ -193,7 +194,7 @@ export default function EpreuvePapier({ mode }: { mode: ModeEpreuve }) {
         })),
       })
       effacer(mode)
-      router.push(`/tagemage/epreuve/${data.sessionId}`)
+      router.push(lienBilanEpreuve(data.sessionId))
     } catch (e) {
       setErreur((e as Error).message)
       setOccupe(false)

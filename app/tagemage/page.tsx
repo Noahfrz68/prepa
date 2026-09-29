@@ -3,6 +3,7 @@ import { etatExamens, etatSectionsTageMage } from '@/core/db/queries'
 import { historiqueScores } from '@/core/db/scores'
 import CourbeScore from '@/app/_composants/CourbeScore'
 import { jourLisible } from '@/app/_composants/dates'
+import { lienBilanEpreuve } from '@/app/_composants/liens'
 import { historiqueEpreuves } from '@/core/db/epreuve'
 import { questionsEnAttente, reserveAnnales, texteLongComprehension } from '@/core/db/selection'
 import { reussiteAFroidParSection } from '@/core/stats/queries'
@@ -223,7 +224,7 @@ export default function HubTageMage() {
               {historique.map((h) => (
                 <li key={h.sessionId}>
                   <Link
-                    href={`/tagemage/epreuve/${h.sessionId}`}
+                    href={lienBilanEpreuve(h.sessionId)}
                     className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-bord bg-carte px-4 py-2.5 text-sm transition hover:border-accent"
                   >
                     <span className="flex-1">

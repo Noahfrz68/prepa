@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { recapEpreuve, type CorrectionEpreuve } from '@/core/db/epreuve'
 import { dernierScoreSurAnnales, reussiteParOrigine } from '@/core/db/scores'
 import { jourLisible } from '@/app/_composants/dates'
+import { lienBilanEpreuve } from '@/app/_composants/liens'
 import { COUPURE_TOLEREE_MS, LIBELLE_MODE } from '@/exams/tagemage/epreuve'
 import { descriptionComposition } from '@/core/stats/nature'
 import { MINIMUM_ESTIMATION, CIBLE_REUSSITE_LEVIER } from '@/core/stats/diagnostic'
@@ -110,7 +111,7 @@ export default async function PageRecap({ params }: { params: Promise<{ id: stri
         <p className="mt-4 text-sm text-doux">
           {LIBELLE_MODE[recap.mode]} précédent :{' '}
           <Link
-            href={`/tagemage/epreuve/${recap.precedent.sessionId}`}
+            href={lienBilanEpreuve(recap.precedent.sessionId)}
             className="text-accent hover:underline"
           >
             <span className="chiffres">{recap.precedent.score}</span> / 600

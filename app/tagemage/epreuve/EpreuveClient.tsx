@@ -11,6 +11,7 @@ import {
 } from '@/exams/tagemage'
 import { COUPURE_TOLEREE_MS, LIBELLE_MODE, type ModeEpreuve } from '@/exams/tagemage/epreuve'
 import { poster } from '@/app/_composants/reseau'
+import { lienBilanEpreuve } from '@/app/_composants/liens'
 import Panne, { type EtatPanne } from '@/app/_composants/Panne'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
@@ -283,7 +284,7 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
       try {
         await poster('/api/epreuve/finish', { sessionId: s.sessionId })
         effacerSauvegarde(mode)
-        router.push(`/tagemage/epreuve/${s.sessionId}`)
+        router.push(lienBilanEpreuve(s.sessionId))
       } catch (e) {
         setErreur((e as Error).message)
         setPhase('erreur')
@@ -425,7 +426,7 @@ export default function EpreuveClient({ mode }: { mode: ModeEpreuve }) {
       } else {
         await poster('/api/epreuve/finish', { sessionId })
         effacerSauvegarde(mode)
-        router.push(`/tagemage/epreuve/${sessionId}`)
+        router.push(lienBilanEpreuve(sessionId))
       }
     } catch (e) {
       // On garde l'état intact et on rouvre la porte : `cloture` repasse à

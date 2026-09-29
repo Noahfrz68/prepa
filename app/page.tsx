@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { etatExamens } from '@/core/db/queries'
 import { dernierScoreSurAnnales, historiqueScores, scoreEstime } from '@/core/db/scores'
 import { jourLisible } from '@/app/_composants/dates'
+import { lienBilanEpreuve } from '@/app/_composants/liens'
 import { LIBELLE_NATURE } from '@/core/stats/nature'
 import {
   JOURS_AVANT_RAPPEL,
@@ -289,7 +290,7 @@ function CarteExamen({
               (surAnnales ? (
                 <>
                   {' '}Sur annales :{' '}
-                  <Link href={`/tagemage/epreuve/${surAnnales.sessionId}`} className="text-texte hover:underline">
+                  <Link href={lienBilanEpreuve(surAnnales.sessionId)} className="text-texte hover:underline">
                     <span className="chiffres">{surAnnales.score}</span> / {maximum}
                   </Link>{' '}
                   ({jourLisible(surAnnales.jour)}) — le repère comparable à l’épreuve réelle.

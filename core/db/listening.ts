@@ -1,5 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { db } from './queries'
 import {
   accentsDisponibles,
@@ -124,17 +122,6 @@ export async function synthetiserEnAttente(limite = 20): Promise<ResultatLot> {
   }
 
   return { synthetises, echecs }
-}
-
-export function cheminAudio(hash: string): string | null {
-  const l = db()
-    .prepare(`SELECT chemin_fichier FROM media WHERE hash_script = ?`)
-    .get(hash) as { chemin_fichier: string | null } | undefined
-
-  if (!l?.chemin_fichier) return null
-
-  const complet = path.join(process.cwd(), 'data', l.chemin_fichier)
-  return fs.existsSync(complet) ? complet : null
 }
 
 /* ------------------------------------------------------------- import -- */

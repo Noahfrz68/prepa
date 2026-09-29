@@ -1,4 +1,4 @@
-import { getDb } from './client'
+import { getDb } from '@/core/db/client'
 import { skillsTageMage } from '@/exams/tagemage'
 import { skillsToeic } from '@/exams/toeic'
 

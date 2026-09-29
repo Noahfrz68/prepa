@@ -28,6 +28,8 @@ export default defineConfig([
   globalIgnores([
     '.next/**',
     'out/**',
+    // Le site statique de la version iPhone (npm run iphone:build).
+    'out-iphone/**',
     'build/**',
     'next-env.d.ts',
     'node_modules/**',

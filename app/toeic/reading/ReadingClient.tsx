@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NB_PROPOSITIONS } from '@/core/scoring/toeic'
+import { lienBilanReading } from '@/app/_composants/liens'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
 
@@ -224,7 +225,7 @@ export default function ReadingClient({ part, taille }: { part: string; taille: 
         body: JSON.stringify({ sessionId: serie.sessionId, tentatives }),
       })
 
-      router.push(`/toeic/reading/${serie.sessionId}`)
+      router.push(lienBilanReading(serie.sessionId))
     },
     [router, serie],
   )
