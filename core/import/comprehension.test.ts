@@ -195,20 +195,37 @@ function fabriquerZip(entrees: Array<{ nom: string; contenu: string; compresse: 
 }
 
 describe('lireZip', () => {
-  it('lit les entrées stockées et compressées', () => {
+  it('lit les entrées stockées et compressées', async () => {
     const archive = fabriquerZip([
       { nom: 'dossier/brut.md', contenu: 'texte non compressé', compresse: false },
       { nom: 'dossier/serre.md', contenu: SERIE, compresse: true },
     ])
 
-    const { fichiers, avertissements } = lireZip(archive)
+    const { fichiers, avertissements } = await lireZip(archive)
+    const texte = new TextDecoder()
     expect(avertissements).toEqual([])
     expect(fichiers.map((f) => f.nom)).toEqual(['dossier/brut.md', 'dossier/serre.md'])
-    expect(fichiers[0].contenu.toString('utf8')).toBe('texte non compressé')
-    expect(fichiers[1].contenu.toString('utf8')).toBe(SERIE)
+    expect(texte.decode(fichiers[0].contenu)).toBe('texte non compressé')
+    expect(texte.decode(fichiers[1].contenu)).toBe(SERIE)
   })
 
-  it('refuse une archive sans répertoire central', () => {
-    expect(() => lireZip(Buffer.from('ceci n’est pas une archive'))).toThrow(/répertoire central/)
+  it('lit une archive qui n’occupe qu’une partie de son tampon', async () => {
+    const archive = fabriquerZip([{ nom: 'a.md', contenu: SERIE, compresse: true }])
+    const decale = new Uint8Array(archive.length + 7)
+    decale.set(archive, 7)
+    const { fichiers } = await lireZip(decale.subarray(7))
+    expect(new TextDecoder().decode(fichiers[0].contenu)).toBe(SERIE)
+  })
+
+  it('signale une entrée compressée corrompue au lieu d’échouer', async () => {
+    const archive = fabriquerZip([{ nom: 'abime.md', contenu: SERIE, compresse: true }])
+    archive.fill(0xff, 40, 60) // au milieu des données compressées
+    const { fichiers, avertissements } = await lireZip(archive)
+    expect(fichiers).toEqual([])
+    expect(avertissements[0]).toMatch(/abime\.md : décompression impossible/)
+  })
+
+  it('refuse une archive sans répertoire central', async () => {
+    await expect(lireZip(Buffer.from('ceci n’est pas une archive'))).rejects.toThrow(/répertoire central/)
   })
 })

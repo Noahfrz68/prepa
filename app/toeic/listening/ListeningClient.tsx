@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LIBELLE_ACCENT, SECONDES_REPONSE, type Accent } from '@/exams/toeic/listening'
+import { useSourceMedia } from '@/app/_composants/media'
 
 const LETTRES = ['A', 'B', 'C', 'D'] as const
 
@@ -57,6 +58,9 @@ export default function ListeningClient({ part, groupes }: { part: string; group
 
   const groupe = serie?.groupes[iGroupe]
   const item = groupe?.items[iItem]
+  // Sur l'iPhone, l'audio se lit d'abord dans le stockage du téléphone :
+  // `undefined` tant que ce n'est pas fait, `null` s'il n'y est pas.
+  const srcAudio = useSourceMedia(groupe ? `/api/audio/${groupe.hash}` : null)
 
   /* ------------------------------------------------------- démarrage -- */
 
@@ -134,21 +138,28 @@ export default function ListeningClient({ part, groupes }: { part: string; group
 
   /* ------------------------------------------------------------ écoute -- */
 
+  const finAudio = useCallback(() => {
+    setPhase('reponse')
+    setIItem(0)
+    debutItem.current = Date.now()
+  }, [])
+
   useEffect(() => {
-    if (phase !== 'ecoute' || !audio.current) return
+    if (phase !== 'ecoute' || srcAudio === undefined) return
+    // Audio absent de l'appareil : même issue qu'un audio illisible — la
+    // série passe aux questions, comme sur une erreur de lecture (onError).
+    if (srcAudio === null) {
+      void Promise.resolve().then(finAudio)
+      return
+    }
+    if (!audio.current) return
     audio.current.play().catch(() => {
       // Lecture refusée par le navigateur : on n'insiste pas, on passe aux
       // questions. Mieux vaut une série gâchée qu'un blocage silencieux.
       setPhase('reponse')
       debutItem.current = Date.now()
     })
-  }, [phase, iGroupe])
-
-  const finAudio = useCallback(() => {
-    setPhase('reponse')
-    setIItem(0)
-    debutItem.current = Date.now()
-  }, [])
+  }, [phase, iGroupe, srcAudio, finAudio])
 
   /* --------------------------------------------------------- réponses -- */
 
@@ -350,10 +361,10 @@ export default function ListeningClient({ part, groupes }: { part: string; group
       )}
 
       {/* L'audio ne se joue qu'une fois : aucun contrôle, aucun rejeu. */}
-      {phase === 'ecoute' && (
+      {phase === 'ecoute' && srcAudio && (
         <audio
           ref={audio}
-          src={`/api/audio/${groupe.hash}`}
+          src={srcAudio}
           onEnded={finAudio}
           onError={finAudio}
           className="hidden"

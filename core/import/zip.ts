@@ -1,17 +1,19 @@
-import { inflateRawSync } from 'node:zlib'
 import { ErreurRequete } from '@/core/erreurs'
 
 /**
  * Lecteur d'archives ZIP minimal.
  *
- * Node ne sait pas lire un ZIP, et ajouter une dépendance pour parcourir un
- * répertoire central de quelques dizaines d'entrées serait disproportionné.
- * On lit donc l'archive à la main : c'est un format simple et figé depuis
- * trente ans, et cela n'expose l'application à aucun code tiers.
+ * Ni Node ni le navigateur ne savent lire un ZIP, et ajouter une dépendance
+ * pour parcourir un répertoire central de quelques dizaines d'entrées serait
+ * disproportionné. On lit donc l'archive à la main : c'est un format simple et
+ * figé depuis trente ans, et cela n'expose l'application à aucun code tiers.
  *
  * Ne gère que ce dont on a besoin : les entrées non chiffrées, stockées telles
  * quelles (méthode 0) ou compressées en deflate (méthode 8). Tout le reste est
  * signalé plutôt qu'ignoré en silence.
+ *
+ * Écrit sur les API communes au PC et à l'iPhone : octets bruts, DataView, et
+ * `DecompressionStream` pour le deflate (Node ≥ 21, Safari ≥ 16.4).
  */
 
 const SIGNATURE_FIN_CENTRAL = 0x06054b50
@@ -20,44 +22,51 @@ const SIGNATURE_ENTETE_LOCAL = 0x04034b50
 
 export interface FichierZip {
   nom: string
-  contenu: Buffer
+  contenu: Uint8Array
 }
 
 /** Retrouve la fin du répertoire central, en partant de la fin de l'archive. */
-function positionFinCentral(donnees: Buffer): number {
+function positionFinCentral(vue: DataView): number {
   // Le commentaire d'archive peut faire jusqu'à 65 535 octets : au-delà, il ne
   // s'agit plus d'un ZIP lisible par ce format d'en-tête.
-  const debut = Math.max(0, donnees.length - 65_535 - 22)
-  for (let i = donnees.length - 22; i >= debut; i--) {
-    if (donnees.readUInt32LE(i) === SIGNATURE_FIN_CENTRAL) return i
+  const debut = Math.max(0, vue.byteLength - 65_535 - 22)
+  for (let i = vue.byteLength - 22; i >= debut; i--) {
+    if (vue.getUint32(i, true) === SIGNATURE_FIN_CENTRAL) return i
   }
   return -1
 }
 
-export function lireZip(donnees: Buffer): { fichiers: FichierZip[]; avertissements: string[] } {
+async function inflate(brut: Uint8Array): Promise<Uint8Array> {
+  const flux = new Blob([brut as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+  return new Uint8Array(await new Response(flux).arrayBuffer())
+}
+
+export async function lireZip(donnees: Uint8Array): Promise<{ fichiers: FichierZip[]; avertissements: string[] }> {
   const avertissements: string[] = []
   const fichiers: FichierZip[] = []
+  const vue = new DataView(donnees.buffer, donnees.byteOffset, donnees.byteLength)
+  const texte = new TextDecoder('utf-8')
 
-  const fin = positionFinCentral(donnees)
+  const fin = donnees.length >= 22 ? positionFinCentral(vue) : -1
   if (fin < 0) throw new ErreurRequete('Archive illisible : répertoire central introuvable.')
 
-  const nbEntrees = donnees.readUInt16LE(fin + 10)
-  let position = donnees.readUInt32LE(fin + 16)
+  const nbEntrees = vue.getUint16(fin + 10, true)
+  let position = vue.getUint32(fin + 16, true)
 
   for (let n = 0; n < nbEntrees; n++) {
-    if (donnees.readUInt32LE(position) !== SIGNATURE_ENTREE_CENTRAL) {
+    if (position + 46 > donnees.length || vue.getUint32(position, true) !== SIGNATURE_ENTREE_CENTRAL) {
       throw new ErreurRequete(`Archive corrompue : entrée ${n + 1} illisible.`)
     }
 
-    const methode = donnees.readUInt16LE(position + 10)
-    const drapeaux = donnees.readUInt16LE(position + 8)
-    const tailleCompressee = donnees.readUInt32LE(position + 20)
-    const longueurNom = donnees.readUInt16LE(position + 28)
-    const longueurExtra = donnees.readUInt16LE(position + 30)
-    const longueurCommentaire = donnees.readUInt16LE(position + 32)
-    const decalageLocal = donnees.readUInt32LE(position + 42)
+    const methode = vue.getUint16(position + 10, true)
+    const drapeaux = vue.getUint16(position + 8, true)
+    const tailleCompressee = vue.getUint32(position + 20, true)
+    const longueurNom = vue.getUint16(position + 28, true)
+    const longueurExtra = vue.getUint16(position + 30, true)
+    const longueurCommentaire = vue.getUint16(position + 32, true)
+    const decalageLocal = vue.getUint32(position + 42, true)
 
-    const nom = donnees.toString('utf8', position + 46, position + 46 + longueurNom)
+    const nom = texte.decode(donnees.subarray(position + 46, position + 46 + longueurNom))
     position += 46 + longueurNom + longueurExtra + longueurCommentaire
 
     // Les répertoires n'ont pas de contenu ; le drapeau 0 indique le chiffrement.
@@ -67,7 +76,7 @@ export function lireZip(donnees: Buffer): { fichiers: FichierZip[]; avertissemen
       continue
     }
 
-    if (donnees.readUInt32LE(decalageLocal) !== SIGNATURE_ENTETE_LOCAL) {
+    if (decalageLocal + 30 > donnees.length || vue.getUint32(decalageLocal, true) !== SIGNATURE_ENTETE_LOCAL) {
       avertissements.push(`${nom} : en-tête local introuvable, entrée ignorée.`)
       continue
     }
@@ -76,14 +85,14 @@ export function lireZip(donnees: Buffer): { fichiers: FichierZip[]; avertissemen
     // différer de celles du répertoire central : ce sont celles-là qui donnent
     // la position réelle des données.
     const debutDonnees =
-      decalageLocal + 30 + donnees.readUInt16LE(decalageLocal + 26) + donnees.readUInt16LE(decalageLocal + 28)
+      decalageLocal + 30 + vue.getUint16(decalageLocal + 26, true) + vue.getUint16(decalageLocal + 28, true)
     const brut = donnees.subarray(debutDonnees, debutDonnees + tailleCompressee)
 
     if (methode === 0) {
-      fichiers.push({ nom, contenu: Buffer.from(brut) })
+      fichiers.push({ nom, contenu: brut.slice() })
     } else if (methode === 8) {
       try {
-        fichiers.push({ nom, contenu: inflateRawSync(brut) })
+        fichiers.push({ nom, contenu: await inflate(brut) })
       } catch (e) {
         avertissements.push(`${nom} : décompression impossible (${(e as Error).message}).`)
       }

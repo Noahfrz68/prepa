@@ -33,7 +33,11 @@ const iphone: NextConfig = {
   // `/plan/` → out-iphone/plan/index.html : ce que GitHub Pages sait servir.
   trailingSlash: true,
   pageExtensions: ['iphone.tsx'],
-  distDir: 'out-iphone',
+  // En export, `distDir` est le dossier du site produit (Next écrit alors ses
+  // fichiers intermédiaires dans .next : scripts/iphone.mjs y met le build du
+  // PC à l'abri). En développement, un dossier à part, pour ne pas croiser le
+  // serveur de dev du PC.
+  distDir: process.env.PREPA_EXPORT === '1' ? 'out-iphone' : '.next-iphone',
   env: {
     NEXT_PUBLIC_CIBLE: 'iphone',
     NEXT_PUBLIC_CHEMIN_BASE: CHEMIN_BASE,
@@ -44,6 +48,10 @@ const iphone: NextConfig = {
       '@/core/db/client': './core/db/client-navigateur.ts',
       // Piper est un programme du PC : l'iPhone n'a pas de moteur de synthèse.
       '@/core/audio/moteurs': './core/audio/moteurs-navigateur.ts',
+      // Figures et audios : IndexedDB au lieu de data/.
+      '@/core/fichiers/stockage': './core/fichiers/stockage-navigateur.ts',
+      // Découpe des figures : canvas au lieu de sharp.
+      '@/core/import/figures': './core/import/figures-navigateur.ts',
     },
   },
 }

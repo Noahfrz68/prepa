@@ -42,6 +42,13 @@ export function enregistrerBase(): Promise<void> {
   return courante?.enregistrer() ?? Promise.resolve()
 }
 
+/** La base entière, en octets : le même fichier SQLite que sur le PC. */
+export async function copieBase(): Promise<Uint8Array> {
+  if (!courante) throw new Error('La base n’est pas encore ouverte.')
+  await courante.enregistrer()
+  return courante.base.exporter()
+}
+
 /* Les sauvegardes quotidiennes sont propres au PC : sur l'iPhone, la copie de
    sûreté est le fichier de synchronisation. Les mêmes exports, vides. */
 

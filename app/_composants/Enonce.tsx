@@ -9,6 +9,7 @@
  */
 
 import { CaseSeule, FigureLogique } from './Figure'
+import ImageMedia from './ImageMedia'
 import type { Case, Figure } from '@/core/figures/types'
 
 interface Source {
@@ -69,9 +70,8 @@ export function EnonceQuestion({ enonce, figure, imageHash, annale, className = 
         <div
           className={`mt-3 overflow-hidden rounded-lg border border-bord bg-white ${seule ? '' : 'mx-auto w-fit max-w-full'}`}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/image/${imageHash}`}
+          <ImageMedia
+            hash={imageHash}
             alt={seule ? enonce : 'Figure de l’énoncé'}
             className={seule ? 'w-full' : 'block max-w-full'}
           />
@@ -111,9 +111,8 @@ export function EnonceRappel({ enonce, figure, imageHash, annale, className = 'm
         <div
           className={`mt-2 overflow-hidden rounded-lg border border-bord bg-white ${seule ? '' : 'w-fit max-w-full'}`}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/image/${imageHash}`}
+          <ImageMedia
+            hash={imageHash}
             alt={seule ? enonce : 'Figure de l’énoncé'}
             className={seule ? 'w-full' : 'block max-w-full'}
           />

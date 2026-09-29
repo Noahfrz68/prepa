@@ -28,16 +28,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ erreur: 'Fichier trop volumineux (20 Mo maximum).' }, { status: 400 })
     }
 
-    const donnees = Buffer.from(await fichier.arrayBuffer())
+    const donnees = new Uint8Array(await fichier.arrayBuffer())
+    const utf8 = new TextDecoder('utf-8')
     const avertissements: string[] = []
     const sources: Array<{ nom: string; contenu: string }> = []
 
     if (/\.zip$/i.test(fichier.name)) {
-      const archive = lireZip(donnees)
+      const archive = await lireZip(donnees)
       avertissements.push(...archive.avertissements)
       for (const f of archive.fichiers) {
         if (!estMarkdown(f.nom)) continue
-        sources.push({ nom: f.nom.split('/').pop() ?? f.nom, contenu: f.contenu.toString('utf8') })
+        sources.push({ nom: f.nom.split('/').pop() ?? f.nom, contenu: utf8.decode(f.contenu) })
       }
       if (sources.length === 0) {
         return NextResponse.json(
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
         )
       }
     } else if (estMarkdown(fichier.name)) {
-      sources.push({ nom: fichier.name, contenu: donnees.toString('utf8') })
+      sources.push({ nom: fichier.name, contenu: utf8.decode(donnees) })
     } else {
       return NextResponse.json(
         { erreur: `Format non pris en charge : ${fichier.name}. Attendu : .md, .txt ou .zip.` },

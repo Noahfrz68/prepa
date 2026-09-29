@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { poster } from '@/app/_composants/reseau'
+import ImageMedia from '@/app/_composants/ImageMedia'
 
 const LETTRES = ['A', 'B', 'C', 'D', 'E'] as const
 
@@ -689,8 +690,7 @@ export default function AtelierClient({
               // Sans la figure, la relecture d'une question graphique
               // reviendrait à valider à l'aveugle.
               <div className="mt-3 overflow-hidden rounded-lg border border-bord bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/image/${item.imageHash}`} alt={item.enonce} className="w-full" />
+                <ImageMedia hash={item.imageHash} alt={item.enonce} className="w-full" />
               </div>
             )}
 

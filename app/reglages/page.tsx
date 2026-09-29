@@ -3,12 +3,16 @@ import { etatChaine, fournisseurActif } from '@/core/ia/fournisseurs'
 import { historiqueMemoire } from '@/core/ia/tuteur'
 import ChoixTheme from '@/app/_composants/ChoixTheme'
 import RangerSauvegardes from './RangerSauvegardes'
+import LienExport from './LienExport'
 import { dossierSauvegardesExternes, listeSauvegardes } from '@/core/db/client'
 import { jourLisible } from '@/app/_composants/dates'
 import { decimal } from '@/app/_composants/nombres'
 import { momentLisible } from '@/app/_composants/dates'
 
 export const dynamic = 'force-dynamic'
+
+/** Version iPhone (voir next.config.ts) : pas de data/, pas de sauvegardes quotidiennes. */
+const IPHONE = process.env.NEXT_PUBLIC_CIBLE === 'iphone'
 
 export default function PageReglages() {
   const chaine = etatChaine()
@@ -109,73 +113,82 @@ export default function PageReglages() {
 
       <section className="mb-8">
         <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">Mes données</h2>
-        <p className="mb-3 text-sm leading-relaxed text-doux">
-          Toute ta progression tient dans un fichier. Une copie est faite chaque jour dans{' '}
-          <code className="text-texte">data/sauvegardes/</code> (les 14 dernières sont gardées) ;
-          l’export en fait une de plus, à ranger où tu veux.
-        </p>
+        {IPHONE ? (
+          <p className="mb-3 text-sm leading-relaxed text-doux">
+            Toute ta progression est rangée dans ce téléphone, et n’en sort pas. Supprimer l’app de
+            l’écran d’accueil l’efface : l’export en garde une copie, à enregistrer dans Fichiers.
+          </p>
+        ) : (
+          <p className="mb-3 text-sm leading-relaxed text-doux">
+            Toute ta progression tient dans un fichier. Une copie est faite chaque jour dans{' '}
+            <code className="text-texte">data/sauvegardes/</code> (les 14 dernières sont gardées) ;
+            l’export en fait une de plus, à ranger où tu veux.
+          </p>
+        )}
         <div className="flex flex-wrap gap-3">
-          <a
+          <LienExport
             href="/api/export?format=sqlite"
-            download
             className="rounded-lg border border-bord bg-carte px-4 py-2 text-sm hover:border-accent"
           >
             Exporter la base (.db)
-          </a>
-          <a
+          </LienExport>
+          <LienExport
             href="/api/export?format=json"
-            download
             className="rounded-lg border border-bord bg-carte px-4 py-2 text-sm hover:border-accent"
           >
             Exporter en JSON
-          </a>
+          </LienExport>
         </div>
-        <div className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4 text-sm">
-          <p className="font-medium">
-            Sauvegardes présentes{' '}
-            <span className="chiffres text-doux">
-              {sauvegardes.length} · {decimal(sauvegardes.reduce((a, x) => a + x.octets, 0) / 1_048_576)} Mo
-            </span>
-          </p>
-          <ul className="mt-2 space-y-0.5 text-xs text-doux">
-            {sauvegardes.slice(0, 8).map((x) => (
-              <li key={x.nom} className="flex justify-between gap-4">
-                <span>
-                  {x.nom}
-                  {!x.quotidienne && <span className="ml-2 text-blanc">copie nommée</span>}
+        {!IPHONE && (
+          <>
+            <div className="mt-4 rounded-xl border border-bord bg-carte px-5 py-4 text-sm">
+              <p className="font-medium">
+                Sauvegardes présentes{' '}
+                <span className="chiffres text-doux">
+                  {sauvegardes.length} · {decimal(sauvegardes.reduce((a, x) => a + x.octets, 0) / 1_048_576)} Mo
                 </span>
-                <span className="chiffres">
-                  {jourLisible(x.le)} · {decimal(x.octets / 1_048_576)} Mo
-                </span>
-              </li>
-            ))}
-            {sauvegardes.length > 8 && <li>… et {sauvegardes.length - 8} autres</li>}
-          </ul>
-          <RangerSauvegardes />
-          <p className="mt-4 text-xs leading-relaxed text-doux">
-            {externe ? (
-              <>
-                Copie hors de ce disque : chaque sauvegarde quotidienne est recopiée dans{' '}
-                <code className="text-texte">{externe}</code>.
-              </>
-            ) : (
-              <>
-                Toutes les sauvegardes sont sur le même disque que la base : une panne emporterait les
-                deux. Pour en garder une copie ailleurs (dossier OneDrive, clé USB), indique un dossier
-                dans <code className="text-texte">PREPA_SAUVEGARDES_EXTERNES</code>, dans{' '}
-                <code className="text-texte">.env.local</code>, puis relance l’application.
-              </>
-            )}
-          </p>
-        </div>
+              </p>
+              <ul className="mt-2 space-y-0.5 text-xs text-doux">
+                {sauvegardes.slice(0, 8).map((x) => (
+                  <li key={x.nom} className="flex justify-between gap-4">
+                    <span>
+                      {x.nom}
+                      {!x.quotidienne && <span className="ml-2 text-blanc">copie nommée</span>}
+                    </span>
+                    <span className="chiffres">
+                      {jourLisible(x.le)} · {decimal(x.octets / 1_048_576)} Mo
+                    </span>
+                  </li>
+                ))}
+                {sauvegardes.length > 8 && <li>… et {sauvegardes.length - 8} autres</li>}
+              </ul>
+              <RangerSauvegardes />
+              <p className="mt-4 text-xs leading-relaxed text-doux">
+                {externe ? (
+                  <>
+                    Copie hors de ce disque : chaque sauvegarde quotidienne est recopiée dans{' '}
+                    <code className="text-texte">{externe}</code>.
+                  </>
+                ) : (
+                  <>
+                    Toutes les sauvegardes sont sur le même disque que la base : une panne emporterait les
+                    deux. Pour en garder une copie ailleurs (dossier OneDrive, clé USB), indique un dossier
+                    dans <code className="text-texte">PREPA_SAUVEGARDES_EXTERNES</code>, dans{' '}
+                    <code className="text-texte">.env.local</code>, puis relance l’application.
+                  </>
+                )}
+              </p>
+            </div>
 
-        <p className="mt-3 text-xs leading-relaxed text-doux">
-          La base se restaure en remplaçant <code className="text-texte">data/app.db</code> par la
-          copie, application arrêtée (et en supprimant{' '}
-          <code className="text-texte">app.db-wal</code> et{' '}
-          <code className="text-texte">app.db-shm</code> s’ils existent). Le JSON sert à relire ou analyser ailleurs ; il ne contient
-          pas les images.
-        </p>
+            <p className="mt-3 text-xs leading-relaxed text-doux">
+              La base se restaure en remplaçant <code className="text-texte">data/app.db</code> par la
+              copie, application arrêtée (et en supprimant{' '}
+              <code className="text-texte">app.db-wal</code> et{' '}
+              <code className="text-texte">app.db-shm</code> s’ils existent). Le JSON sert à relire ou analyser ailleurs ; il ne contient
+              pas les images.
+            </p>
+          </>
+        )}
       </section>
 
       <section>

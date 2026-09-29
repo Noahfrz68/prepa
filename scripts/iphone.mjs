@@ -21,20 +21,75 @@ if (!args) {
   process.exit(1)
 }
 
-// SQLite en WebAssembly, servi tel quel à côté des pages (non versionné).
+// Servis tels quels à côté des pages (non versionnés) : SQLite en
+// WebAssembly, et le worker de pdfjs pour lire les PDF importés.
 fs.copyFileSync(
   path.join('node_modules', 'sql.js', 'dist', 'sql-wasm-browser.wasm'),
   path.join('public', 'sql-wasm.wasm'),
 )
+fs.copyFileSync(
+  path.join('node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs'),
+  path.join('public', 'pdf.worker.min.mjs'),
+)
 
-const r = spawnSync('npx', args, {
-  stdio: 'inherit',
-  shell: true,
-  env: { ...process.env, PREPA_CIBLE: 'iphone' },
-})
+const lancer = () =>
+  spawnSync('npx', args, {
+    stdio: 'inherit',
+    shell: true,
+    env: { ...process.env, PREPA_CIBLE: 'iphone', PREPA_EXPORT: commande === 'build' ? '1' : '' },
+  })
 
-if (commande === 'build' && r.status === 0) aplatirSegments(path.resolve('out-iphone'))
+let r
+if (commande === 'build') {
+  r = aLAbriDuBuildPc(lancer)
+  if (r.status === 0) aplatirSegments(path.resolve('out-iphone'))
+} else {
+  r = lancer()
+}
 process.exit(r.status ?? 1)
+
+/**
+ * En export statique, Next écrit ses fichiers intermédiaires dans .next, quel
+ * que soit `distDir` (next/dist/build : « config.distDir = '.next' ») — là
+ * même où se trouve le build du PC. Sans précaution, un `next start` après un
+ * build iPhone servait la version iPhone.
+ *
+ * On met donc le build du PC de côté pendant le build iPhone, puis on efface
+ * ce que ce dernier a laissé et on remet le build du PC en place. Le serveur de
+ * dev du PC (.next/dev) et le cache (.next/cache) ne sont pas touchés.
+ */
+function aLAbriDuBuildPc(fn) {
+  const DOSSIER = '.next'
+  const ABRI = '.next-pc-abri'
+  const INTOUCHABLES = new Set(['dev', 'cache'])
+  const entrees = (d) => (fs.existsSync(d) ? fs.readdirSync(d).filter((e) => !INTOUCHABLES.has(e)) : [])
+
+  // Un abri laissé par un build interrompu : le build PC qu'il contient est
+  // le bon, on le remet avant toute chose.
+  if (fs.existsSync(ABRI)) restaurer()
+
+  fs.mkdirSync(ABRI)
+  try {
+    for (const e of entrees(DOSSIER)) fs.renameSync(path.join(DOSSIER, e), path.join(ABRI, e))
+  } catch (e) {
+    restaurer()
+    console.error(`[iphone] Impossible de mettre le build du PC de côté (${e.message}).`)
+    console.error('[iphone] Un serveur du PC (npm run app / npm start) tient-il ces fichiers ? Arrête-le, puis relance.')
+    return { status: 1 }
+  }
+
+  try {
+    return fn()
+  } finally {
+    restaurer()
+  }
+
+  function restaurer() {
+    for (const e of entrees(DOSSIER)) fs.rmSync(path.join(DOSSIER, e), { recursive: true, force: true })
+    for (const e of entrees(ABRI)) fs.renameSync(path.join(ABRI, e), path.join(DOSSIER, e))
+    fs.rmSync(ABRI, { recursive: true, force: true })
+  }
+}
 
 /**
  * Next écrit les données de préchargement de chaque page dans des

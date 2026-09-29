@@ -19,4 +19,10 @@ describe('sha256Hex', () => {
       expect(sha256Hex(texte)).toBe(createHash('sha256').update(texte).digest('hex'))
     }
   })
+
+  it('hache des octets comme node:crypto — c’est la clé des figures importées', () => {
+    const octets = new Uint8Array(3000).map((_, i) => (i * 37 + 11) % 256)
+    expect(sha256Hex(octets)).toBe(createHash('sha256').update(octets).digest('hex'))
+    expect(sha256Hex(octets.subarray(5, 1205))).toBe(createHash('sha256').update(octets.subarray(5, 1205)).digest('hex'))
+  })
 })

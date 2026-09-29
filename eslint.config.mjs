@@ -28,8 +28,12 @@ export default defineConfig([
   globalIgnores([
     '.next/**',
     'out/**',
-    // Le site statique de la version iPhone (npm run iphone:build).
+    // Le site statique de la version iPhone (npm run iphone:build), et le
+    // worker pdfjs que son build copie dans public/.
     'out-iphone/**',
+    '.next-iphone/**',
+    '.next-pc-abri/**',
+    'public/pdf.worker.min.mjs',
     'build/**',
     'next-env.d.ts',
     'node_modules/**',

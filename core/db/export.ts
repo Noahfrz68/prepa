@@ -1,7 +1,8 @@
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { db } from './queries'
+
+// La copie SQLite dépend du moteur : sauvegarde SQLite sur le PC, base
+// sérialisée sur l'iPhone. Chacun la fournit par son module de connexion.
+export { copieBase } from '@/core/db/client'
 
 /**
  * « Exporter mes données » : toute la progression, hors de l'application.
@@ -18,17 +19,6 @@ import { db } from './queries'
 
 /** Tables internes ou binaires, laissées hors du JSON. */
 const HORS_JSON = new Set(['_migration', 'sqlite_sequence', 'media'])
-
-export async function copieBase(): Promise<Buffer> {
-  const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'prepa-export-'))
-  const cible = path.join(dossier, 'app.db')
-  try {
-    await db().backup(cible)
-    return fs.readFileSync(cible)
-  } finally {
-    fs.rmSync(dossier, { recursive: true, force: true })
-  }
-}
 
 export interface ExportJson {
   application: 'prepa'

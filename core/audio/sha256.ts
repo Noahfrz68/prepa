@@ -1,5 +1,6 @@
 /**
- * SHA-256 synchrone, en JavaScript pur, d'une chaîne encodée en UTF-8.
+ * SHA-256 synchrone, en JavaScript pur, d'octets ou d'une chaîne encodée en
+ * UTF-8.
  *
  * Le navigateur n'offre que `crypto.subtle.digest`, asynchrone ; or le hash
  * des scripts audio se calcule au milieu de code synchrone (hashScript). Il
@@ -19,8 +20,8 @@ const K = new Uint32Array([
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ])
 
-export function sha256Hex(texte: string): string {
-  const donnees = new TextEncoder().encode(texte)
+export function sha256Hex(entree: string | Uint8Array): string {
+  const donnees = typeof entree === 'string' ? new TextEncoder().encode(entree) : entree
   const longueurBits = donnees.length * 8
 
   // Remplissage : un bit 1, des zéros, puis la longueur sur 64 bits.

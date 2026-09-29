@@ -260,7 +260,8 @@ describe('parcours : un diagnostic sur papier', () => {
 
 describe('parcours : exporter ses données', () => {
   // La copie SQLite passe par l'API de sauvegarde de better-sqlite3, propre
-  // au PC ; l'export du navigateur viendra avec la synchronisation.
+  // au PC ; celle du navigateur (client-navigateur.ts) est éprouvée par
+  // moteurs.test.ts.
   it.skipIf(process.env.PREPA_MOTEUR === 'sqljs')('rend une copie SQLite complète et un JSON sans les images', async () => {
     const { db } = await import('./queries')
     const { copieBase, exportJson } = await import('./export')
@@ -268,7 +269,7 @@ describe('parcours : exporter ses données', () => {
     expect(tentatives).toBeGreaterThan(0)
 
     const copie = await copieBase()
-    expect(copie.subarray(0, 15).toString('latin1')).toBe('SQLite format 3')
+    expect(new TextDecoder().decode(copie.subarray(0, 15))).toBe('SQLite format 3')
 
     const json = exportJson()
     expect(json.tables.attempt).toHaveLength(tentatives)

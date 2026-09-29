@@ -1,31 +1,14 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { db } from '@/core/db/queries'
+import { lireFichier } from '@/core/fichiers/stockage'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
- * Chemin sur le disque de l'audio synthétisé pour ce script, s'il existe.
- * Ici plutôt que dans core/db/listening.ts : c'est la seule lecture du disque
- * du module, et le reste tourne aussi dans le navigateur (version iPhone).
- */
-function cheminAudio(hash: string): string | null {
-  const l = db()
-    .prepare(`SELECT chemin_fichier FROM media WHERE hash_script = ?`)
-    .get(hash) as { chemin_fichier: string | null } | undefined
-
-  if (!l?.chemin_fichier) return null
-
-  const complet = path.join(process.cwd(), 'data', l.chemin_fichier)
-  return fs.existsSync(complet) ? complet : null
-}
-
-/**
- * Sert un audio synthétisé depuis `data/audio/`.
- *
- * Next ne sert pas ce dossier : il est hors de `public/` à dessein, parce que
- * son contenu est une donnée de travail, pas un actif du projet.
+ * Sert un audio synthétisé : depuis `data/audio/` sur le PC (Next ne sert pas
+ * ce dossier, hors de `public/` à dessein : c'est une donnée de travail, pas un
+ * actif du projet), depuis le stockage du téléphone sur l'iPhone, où il arrive
+ * par la synchronisation.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params
@@ -34,10 +17,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
     return new Response('Identifiant invalide.', { status: 400 })
   }
 
-  const chemin = cheminAudio(hash)
-  if (!chemin) return new Response('Audio introuvable.', { status: 404 })
+  const l = db()
+    .prepare(`SELECT chemin_fichier FROM media WHERE hash_script = ?`)
+    .get(hash) as { chemin_fichier: string | null } | undefined
 
-  const donnees = fs.readFileSync(chemin)
+  if (!l?.chemin_fichier) return new Response('Audio introuvable.', { status: 404 })
+
+  const donnees = await lireFichier(l.chemin_fichier)
+  if (!donnees) return new Response('Audio introuvable.', { status: 404 })
+
   return new Response(new Uint8Array(donnees), {
     headers: {
       'Content-Type': 'audio/wav',

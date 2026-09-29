@@ -1,11 +1,13 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { db } from '@/core/db/queries'
+import { lireFichier } from '@/core/fichiers/stockage'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/** Sert une figure extraite d'un PDF, stockée hors de `public/`. */
+/**
+ * Sert une figure extraite d'un PDF, stockée hors de `public/` : dans data/
+ * sur le PC, dans le stockage du téléphone sur l'iPhone.
+ */
 export async function GET(_request: Request, { params }: { params: Promise<{ hash: string }> }) {
   const { hash } = await params
 
@@ -19,10 +21,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ has
 
   if (!l?.chemin_fichier) return new Response('Image introuvable.', { status: 404 })
 
-  const complet = path.join(process.cwd(), 'data', l.chemin_fichier)
-  if (!fs.existsSync(complet)) return new Response('Image introuvable.', { status: 404 })
+  const donnees = await lireFichier(l.chemin_fichier)
+  if (!donnees) return new Response('Image introuvable.', { status: 404 })
 
-  const donnees = fs.readFileSync(complet)
   return new Response(new Uint8Array(donnees), {
     headers: {
       'Content-Type': 'image/png',

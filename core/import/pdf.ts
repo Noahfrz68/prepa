@@ -508,6 +508,13 @@ export function parserPdf(texte: string): ResultatPdf {
 /** Extrait le texte d'un PDF. Isolé pour rester testable sans binaire. */
 export async function texteDuPdf(donnees: Uint8Array): Promise<string> {
   const { PDFParse } = await import('pdf-parse')
+  // Dans le navigateur (version iPhone), pdf-parse charge sa version web, qui
+  // demande l'adresse de son worker : c'est celui de pdfjs-dist, de la même
+  // version que le pdfjs qu'elle embarque, copié dans le site par
+  // scripts/iphone.mjs.
+  if (typeof window !== 'undefined') {
+    PDFParse.setWorker(`${process.env.NEXT_PUBLIC_CHEMIN_BASE ?? ''}/pdf.worker.min.mjs`)
+  }
   // pdfjs transfère le tampon à son worker, ce qui le détache : sans copie, un
   // second passage sur le même document (l'extraction des figures) échouerait.
   const parseur = new PDFParse({ data: donnees.slice() })

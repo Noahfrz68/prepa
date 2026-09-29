@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { migrer } from './migrer.mjs'
 
@@ -185,6 +186,22 @@ export function rangerSauvegardesNommees(jours: number, essai = true): string[] 
   const vieilles = listeSauvegardes().filter((s) => !s.quotidienne && s.le.getTime() < limite)
   if (!essai) for (const s of vieilles) fs.rmSync(path.join(SAUVEGARDES_DIR, s.nom), { force: true })
   return vieilles.map((s) => s.nom)
+}
+
+/**
+ * La base entière, en octets : un fichier SQLite complet, prêt à remplacer
+ * data/app.db. Copiée par l'API de sauvegarde de SQLite, cohérente même
+ * pendant une écriture.
+ */
+export async function copieBase(): Promise<Uint8Array> {
+  const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'prepa-export-'))
+  const cible = path.join(dossier, 'app.db')
+  try {
+    await getDb().backup(cible)
+    return fs.readFileSync(cible)
+  } finally {
+    fs.rmSync(dossier, { recursive: true, force: true })
+  }
 }
 
 export { DB_PATH }

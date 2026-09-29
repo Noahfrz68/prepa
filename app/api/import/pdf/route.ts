@@ -65,7 +65,7 @@ export async function POST(request: Request) {
           donnees,
           resultat.figures.map((f) => ({ section: f.section as SectionTageMage, numero: f.numero })),
         )
-        const r = insererFigures(resultat.figures, images)
+        const r = await insererFigures(resultat.figures, images)
         figuresInserees = r.inseres
 
         if (r.sansImage > 0) {

@@ -16,7 +16,10 @@
 # next.js
 /.next/
 /out-iphone/
+/.next-iphone/
+/.next-pc-abri/
 /public/sql-wasm.wasm
+/public/pdf.worker.min.mjs
 /out/
 
 # production
