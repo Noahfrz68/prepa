@@ -47,7 +47,8 @@ function item(b: Base, id: number) {
 
 describe('migrations embarquées', () => {
   it('migrations.gen.ts est à jour avec core/db/migrations/ (sinon : npm run migrations:gen)', () => {
-    expect(readFileSync(CHEMIN_MODULE, 'utf8')).toBe(contenuModuleMigrations())
+    // Le fichier lui-même peut être en \r\n (checkout Windows) : on compare le contenu.
+    expect(readFileSync(CHEMIN_MODULE, 'utf8').replace(/\r\n/g, '\n')).toBe(contenuModuleMigrations())
     expect(MIGRATIONS.map((m) => m.nom)).toEqual(lireMigrations().map((m) => m.nom))
   })
 })

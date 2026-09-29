@@ -10,8 +10,10 @@ import path from 'node:path'
 import { lireMigrations } from '../core/db/migrer.mjs'
 
 export function contenuModuleMigrations(racine = process.cwd()) {
+  // Fins de ligne ramenées à \n : git les écrit en \r\n sous Windows et en \n
+  // sous Linux, et le module doit être le même partout (vérifié en CI).
   const lignes = lireMigrations(racine).map(
-    ({ nom, sql }) => `  { nom: ${JSON.stringify(nom)}, sql: ${JSON.stringify(sql)} },`,
+    ({ nom, sql }) => `  { nom: ${JSON.stringify(nom)}, sql: ${JSON.stringify(sql.replace(/\r\n/g, '\n'))} },`,
   )
   return [
     '// Généré par scripts/generer-migrations.mjs — ne pas modifier à la main.',
