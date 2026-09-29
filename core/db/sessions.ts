@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { Base } from './base'
 import { db } from './queries'
 import { COUPURE_TOLEREE_MS } from '@/exams/tagemage/epreuve'
 
@@ -28,7 +28,7 @@ export interface Rangement {
   interrompues: number[]
 }
 
-export function rangerSessionsAbandonnees(d: Database.Database = db()): Rangement {
+export function rangerSessionsAbandonnees(d: Base = db()): Rangement {
   const res: Rangement = { supprimees: [], interrompues: [] }
 
   const candidates = d
@@ -74,7 +74,7 @@ export function rangerSessionsAbandonnees(d: Database.Database = db()): Rangemen
 export function ajouterTempsCorrection(
   sessionId: number,
   ms: number,
-  d: Database.Database = db(),
+  d: Base = db(),
 ): void {
   const borne = Math.max(0, Math.min(30 * 60 * 1000, Math.round(Number(ms) || 0)))
   d.prepare(
@@ -84,7 +84,7 @@ export function ajouterTempsCorrection(
 }
 
 /** Abandon explicite d'une session par l'utilisateur (bouton « Abandonner »). */
-export function abandonnerSession(sessionId: number, d: Database.Database = db()): void {
+export function abandonnerSession(sessionId: number, d: Base = db()): void {
   d.transaction(() => {
     const vide = d
       .prepare(
@@ -112,7 +112,7 @@ export interface EtatSession {
   reprenable: boolean
 }
 
-export function etatSession(sessionId: number, d: Database.Database = db()): EtatSession {
+export function etatSession(sessionId: number, d: Base = db()): EtatSession {
   const s = d
     .prepare(
       `SELECT type, fin, interrompue, debut >= datetime('now', ?) AS recente
@@ -159,7 +159,7 @@ export function etatSession(sessionId: number, d: Database.Database = db()): Eta
  * perd son statut de conditions réelles. Seule une épreuve encore ouverte
  * est concernée ; une coupure est bornée au délai de reprise (12 h).
  */
-export function ajouterCoupure(sessionId: number, ms: number, d: Database.Database = db()): void {
+export function ajouterCoupure(sessionId: number, ms: number, d: Base = db()): void {
   const borne = Math.max(0, Math.min(DELAI_ABANDON_HEURES * 3600_000, Math.round(Number(ms) || 0)))
   d.prepare(
     `UPDATE exam_session

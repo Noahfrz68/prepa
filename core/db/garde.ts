@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { Base } from './base'
 import { ErreurRequete } from '@/core/erreurs'
 
 /**
@@ -29,7 +29,7 @@ export function tempsBorne(ms: number): number {
  * rien ne l'empêchait, et une réponse arrivée après la clôture changeait un
  * bilan déjà calculé et un score déjà enregistré.
  */
-export function verifierSessionOuverte(d: Database.Database, sessionId: number): void {
+export function verifierSessionOuverte(d: Base, sessionId: number): void {
   const s = d.prepare(`SELECT fin, interrompue FROM exam_session WHERE id = ?`).get(sessionId) as
     | { fin: string | null; interrompue: number }
     | undefined

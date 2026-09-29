@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { Base } from './base'
 import { db } from './queries'
 
 /**
@@ -15,7 +15,7 @@ import { db } from './queries'
  * questions par sous-test n'en couvre pas tous les types. Chaque annale
  * importée affine la répartition, sans rien à régler à la main.
  */
-export function poidsDesTypes(examId = 'tagemage', d: Database.Database = db()): Map<string, number> {
+export function poidsDesTypes(examId = 'tagemage', d: Base = db()): Map<string, number> {
   const lignes = d
     .prepare(
       `SELECT s.id,

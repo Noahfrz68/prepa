@@ -101,6 +101,16 @@ afterAll(async () => {
   rmSync(dossier, { recursive: true, force: true })
 })
 
+describe.runIf(process.env.PREPA_MOTEUR === 'sqljs')('parcours : moteur du navigateur', () => {
+  it('tourne bien sur sql.js, pas sur better-sqlite3', async () => {
+    const { db } = await import('./queries')
+    const d = db()
+    expect(d).toBe((globalThis as { __prepaDb?: unknown }).__prepaDb)
+    expect('exporter' in d).toBe(true)
+    expect('backup' in d).toBe(false)
+  })
+})
+
 describe('parcours : une série d’entraînement', () => {
   let sessionId: number
   let items: ItemServi[]
@@ -249,7 +259,9 @@ describe('parcours : un diagnostic sur papier', () => {
 })
 
 describe('parcours : exporter ses données', () => {
-  it('rend une copie SQLite complète et un JSON sans les images', async () => {
+  // La copie SQLite passe par l'API de sauvegarde de better-sqlite3, propre
+  // au PC ; l'export du navigateur viendra avec la synchronisation.
+  it.skipIf(process.env.PREPA_MOTEUR === 'sqljs')('rend une copie SQLite complète et un JSON sans les images', async () => {
     const { db } = await import('./queries')
     const { copieBase, exportJson } = await import('./export')
     const tentatives = (db().prepare(`SELECT COUNT(*) AS n FROM attempt`).get() as { n: number }).n
