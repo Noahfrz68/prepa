@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const BASE = process.env.NEXT_PUBLIC_CHEMIN_BASE ?? ''
 const CLE_CONSEIL = 'prepa:conseil-installation-vu'
@@ -21,18 +21,20 @@ const CLE_CONSEIL = 'prepa:conseil-installation-vu'
 export default function MiseAJour() {
   const [enAttente, setEnAttente] = useState<ServiceWorker | null>(null)
   const [conseil, setConseil] = useState(false)
+  const miseAJourDemandee = useRef(false)
 
   useEffect(() => {
     // En développement, un service worker mettrait en cache un code qui change.
     if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return
 
-    let recharge = false
     let intervalle: ReturnType<typeof setInterval> | undefined
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (recharge) return
-      recharge = true
-      window.location.reload()
-    })
+    // Rechargement seulement après « Mettre à jour » : à la première visite,
+    // le service worker prend aussi le contrôle de la page (controllerchange),
+    // et recharger alors coupait la toute première série.
+    const surChangement = () => {
+      if (miseAJourDemandee.current) window.location.reload()
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', surChangement)
 
     navigator.serviceWorker
       .register(`${BASE}/sw.js`, { scope: `${BASE}/` })
@@ -52,7 +54,10 @@ export default function MiseAJour() {
         intervalle = setInterval(() => void inscription.update().catch(() => {}), 60 * 60 * 1000)
       })
       .catch((e) => console.error('[hors ligne] service worker non enregistré :', e))
-    return () => clearInterval(intervalle)
+    return () => {
+      clearInterval(intervalle)
+      navigator.serviceWorker.removeEventListener('controllerchange', surChangement)
+    }
   }, [])
 
   useEffect(() => {
@@ -89,7 +94,10 @@ export default function MiseAJour() {
           <span>Une nouvelle version de l’app est prête.</span>
           <button
             type="button"
-            onClick={() => enAttente.postMessage('activer')}
+            onClick={() => {
+              miseAJourDemandee.current = true
+              enAttente.postMessage('activer')
+            }}
             className="shrink-0 rounded-lg bg-accent px-3 py-1.5 font-medium text-fond"
           >
             Mettre à jour
