@@ -40,11 +40,26 @@ export interface BaseNavigateur {
   fermer(): Promise<void>
 }
 
+let sqlJs: ReturnType<typeof initSqlJs> | null = null
+
+/** sql.js, chargé une fois : le WebAssembly se compile une seule fois par page. */
+function chargerSqlJs(urlWasm?: string): ReturnType<typeof initSqlJs> {
+  sqlJs ??= initSqlJs(urlWasm ? { locateFile: () => urlWasm } : undefined)
+  sqlJs.catch(() => (sqlJs = null))
+  return sqlJs
+}
+
+/** Une autre base, reçue en octets, ouverte en mémoire (rien n'est enregistré). */
+export async function ouvrirCopieNavigateur(octets: Uint8Array, urlWasm?: string): Promise<BaseSqlJs> {
+  const SQL = await chargerSqlJs(urlWasm)
+  return adapterSqlJs(new SQL.Database(octets))
+}
+
 export async function ouvrirBaseNavigateur(options: OptionsNavigateur): Promise<BaseNavigateur> {
   const { stockage, urlWasm, delaiMs = 400, surErreur = (e) => console.error('[db] enregistrement impossible :', e) } =
     options
 
-  const SQL = await initSqlJs(urlWasm ? { locateFile: () => urlWasm } : undefined)
+  const SQL = await chargerSqlJs(urlWasm)
   const octets = await stockage.lire()
 
   let minuterie: ReturnType<typeof setTimeout> | null = null

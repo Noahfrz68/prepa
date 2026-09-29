@@ -1,5 +1,5 @@
 import type { Base } from './base'
-import { ouvrirBaseNavigateur, stockageIndexedDb, type BaseNavigateur } from './navigateur'
+import { ouvrirBaseNavigateur, ouvrirCopieNavigateur, stockageIndexedDb, type BaseNavigateur } from './navigateur'
 
 /**
  * Connexion à la base, version iPhone : remplace client.ts dans le build
@@ -40,6 +40,11 @@ export function getDb(): Base {
 /** Enregistre tout de suite ce qui est en attente (avant un export, par exemple). */
 export function enregistrerBase(): Promise<void> {
   return courante?.enregistrer() ?? Promise.resolve()
+}
+
+/** Une autre base, reçue en octets (le fichier de synchronisation du PC), ouverte en mémoire. */
+export async function ouvrirCopie(octets: Uint8Array): Promise<Base> {
+  return ouvrirCopieNavigateur(octets, urlWasm)
 }
 
 /** La base entière, en octets : le même fichier SQLite que sur le PC. */

@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { migrer } from './migrer.mjs'
+import type { Base } from './base'
 
 const DB_DIR = path.join(process.cwd(), 'data')
 /**
@@ -202,6 +203,15 @@ export async function copieBase(): Promise<Uint8Array> {
   } finally {
     fs.rmSync(dossier, { recursive: true, force: true })
   }
+}
+
+/**
+ * Une autre base, reçue en octets (le fichier de synchronisation de l'iPhone),
+ * ouverte en mémoire à côté de la base de l'application. Rien n'est écrit sur
+ * le disque.
+ */
+export async function ouvrirCopie(octets: Uint8Array): Promise<Base> {
+  return new Database(Buffer.from(octets.buffer, octets.byteOffset, octets.byteLength))
 }
 
 export { DB_PATH }

@@ -146,8 +146,10 @@ export function reconstruireCarte(cardId: number, aujourdhui = new Date().toISOS
 
   const journal = d
     .prepare(
+      // Par date, pas par id : après une synchronisation, une révision faite
+      // plus tôt sur l'autre appareil peut avoir reçu un id plus grand ici.
       `SELECT su, date(created_at) AS jour FROM vocab_revision
-        WHERE card_id = ? ORDER BY id`,
+        WHERE card_id = ? ORDER BY created_at, id`,
     )
     .all(cardId) as Array<{ su: number; jour: string }>
 

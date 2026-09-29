@@ -4,6 +4,8 @@ import { historiqueMemoire } from '@/core/ia/tuteur'
 import ChoixTheme from '@/app/_composants/ChoixTheme'
 import RangerSauvegardes from './RangerSauvegardes'
 import LienExport from './LienExport'
+import Synchronisation from './Synchronisation'
+import { historiqueSynchronisations } from '@/core/sync/paquet'
 import { dossierSauvegardesExternes, listeSauvegardes } from '@/core/db/client'
 import { jourLisible } from '@/app/_composants/dates'
 import { decimal } from '@/app/_composants/nombres'
@@ -20,6 +22,7 @@ export default function PageReglages() {
   const memoires = historiqueMemoire('tagemage', 5)
   const sauvegardes = listeSauvegardes()
   const externe = dossierSauvegardesExternes()
+  const derniereSynchro = historiqueSynchronisations(10).find((s) => s.sens === 'import') ?? null
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
@@ -109,6 +112,20 @@ export default function PageReglages() {
           <kbd className="kbd">?</kbd> affiche les raccourcis clavier de la page.
         </p>
         <ChoixTheme />
+      </section>
+
+      <section className="mb-8" id="synchronisation">
+        <h2 className="mb-1 text-sm uppercase tracking-widest text-doux">
+          Synchronisation avec {IPHONE ? 'le PC' : 'l’iPhone'}
+        </h2>
+        <p className="mb-3 text-sm leading-relaxed text-doux">
+          Chaque appareil garde sa propre base : un fichier les réunit, dans un sens puis dans l’autre. Rien ne
+          passe par Internet.{' '}
+          {derniereSynchro
+            ? `Dernière fusion : ${momentLisible(derniereSynchro.le)}, avec ${derniereSynchro.appareil === 'iphone' ? 'l’iPhone' : 'le PC'}.`
+            : 'Aucune fusion pour l’instant.'}
+        </p>
+        <Synchronisation />
       </section>
 
       <section className="mb-8">

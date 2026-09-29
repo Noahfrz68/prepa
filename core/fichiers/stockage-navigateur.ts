@@ -55,3 +55,12 @@ export async function fichierExiste(chemin: string): Promise<boolean> {
   const n = await operation<number>('readonly', (m) => m.count(verifier(chemin)))
   return n > 0
 }
+
+/** Les fichiers présents sous ces dossiers (`media`, `audio`…), en chemins relatifs. */
+export async function listerFichiers(dossiers: string[]): Promise<string[]> {
+  const cles = await operation<IDBValidKey[]>('readonly', (m) => m.getAllKeys())
+  return cles
+    .map(String)
+    .filter((c) => dossiers.some((d) => c.startsWith(d.replace(/\/+$/, '') + '/')))
+    .sort()
+}

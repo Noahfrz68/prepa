@@ -49,6 +49,7 @@ const ROUTES: Record<string, () => Promise<Module>> = {
   // Les sauvegardes quotidiennes sont propres au PC : listes vides ici.
   sauvegardes: () => import('@/app/api/sauvegardes/route'),
   session: () => import('@/app/api/session/route'),
+  sync: () => import('@/app/api/sync/route'),
   'toeic/serie/lot': () => import('@/app/api/toeic/serie/lot/route'),
   'toeic/serie/start': () => import('@/app/api/toeic/serie/start/route'),
   'vocab/carte': () => import('@/app/api/vocab/carte/route'),

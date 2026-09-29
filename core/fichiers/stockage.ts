@@ -12,7 +12,11 @@ import path from 'node:path'
  * à l'autre retrouve son fichier.
  */
 
-const RACINE = path.join(process.cwd(), 'data')
+/**
+ * `PREPA_FICHIERS` désigne un autre dossier : les tests s'en servent, comme de
+ * `PREPA_DB` pour la base, pour ne jamais écrire dans les vraies données.
+ */
+const RACINE = path.resolve(process.env.PREPA_FICHIERS?.trim() || path.join(process.cwd(), 'data'))
 
 /** Refuse tout chemin qui sortirait de data/. */
 function complet(chemin: string): string {
@@ -34,4 +38,19 @@ export async function ecrireFichier(chemin: string, octets: Uint8Array): Promise
 
 export async function fichierExiste(chemin: string): Promise<boolean> {
   return fs.existsSync(complet(chemin))
+}
+
+/** Les fichiers présents sous ces dossiers (`media`, `audio`…), en chemins relatifs. */
+export async function listerFichiers(dossiers: string[]): Promise<string[]> {
+  const chemins: string[] = []
+  for (const d of dossiers) {
+    const racine = complet(d)
+    if (!fs.existsSync(racine)) continue
+    for (const e of fs.readdirSync(racine, { withFileTypes: true, recursive: true })) {
+      if (!e.isFile()) continue
+      const absolu = path.join(e.parentPath, e.name)
+      chemins.push(path.relative(RACINE, absolu).split(path.sep).join('/'))
+    }
+  }
+  return chemins.sort()
 }
