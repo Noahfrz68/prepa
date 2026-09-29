@@ -9,6 +9,7 @@
  * (GitHub Pages : https://<compte>.github.io/<dépôt>/).
  */
 import { spawnSync } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -42,11 +43,87 @@ const lancer = () =>
 let r
 if (commande === 'build') {
   r = aLAbriDuBuildPc(lancer)
-  if (r.status === 0) aplatirSegments(path.resolve('out-iphone'))
+  if (r.status === 0) {
+    const site = path.resolve('out-iphone')
+    aplatirSegments(site)
+    ecrireManifeste(site)
+    ecrireServiceWorker(site)
+    // Sans lui, GitHub Pages passerait le site à Jekyll, qui ignore les
+    // dossiers commençant par « _ » — dont _next/, tout le code de l'app.
+    fs.writeFileSync(path.join(site, '.nojekyll'), '')
+  }
 } else {
   r = lancer()
 }
 process.exit(r.status ?? 1)
+
+/**
+ * Le manifeste de l'app installée : nom, icônes, couleurs, et l'adresse où
+ * elle démarre — sous le sous-chemin du site publié.
+ */
+function ecrireManifeste(site) {
+  const base = process.env.PREPA_CHEMIN_BASE ?? ''
+  const manifeste = {
+    name: 'Prépa — TAGE MAGE & TOEIC',
+    short_name: 'Prépa',
+    description: 'Instrument de mesure et coach de stratégie de score.',
+    lang: 'fr',
+    start_url: `${base}/`,
+    scope: `${base}/`,
+    display: 'standalone',
+    background_color: '#0f1115',
+    theme_color: '#0f1115',
+    icons: [
+      { src: `${base}/icones/icone-192.png`, sizes: '192x192', type: 'image/png' },
+      { src: `${base}/icones/icone-512.png`, sizes: '512x512', type: 'image/png' },
+      { src: `${base}/icones/icone-512.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  }
+  fs.writeFileSync(path.join(site, 'manifest.webmanifest'), JSON.stringify(manifeste, null, 2))
+}
+
+/**
+ * Le service worker : tout le site est mis en cache à l'installation, pour
+ * que l'app s'ouvre et fonctionne sans réseau — dans le métro, en avion, en
+ * salle d'examen.
+ *
+ * Sa version est l'empreinte des fichiers du site : un nouveau build change
+ * sw.js, le navigateur installe la nouvelle version en arrière-plan, et l'app
+ * la propose (app/_iphone/MiseAJour.tsx) au lieu de s'interrompre en pleine
+ * série.
+ */
+function ecrireServiceWorker(site) {
+  const base = process.env.PREPA_CHEMIN_BASE ?? ''
+  const fichiers = []
+  const parcourir = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name)
+      if (e.isDirectory()) parcourir(p)
+      else if (e.name !== 'sw.js' && e.name !== '.nojekyll' && !e.name.endsWith('.map')) fichiers.push(p)
+    }
+  }
+  parcourir(site)
+
+  const empreinte = crypto.createHash('sha256')
+  const adresses = []
+  for (const f of fichiers.sort()) {
+    const relatif = path.relative(site, f).split(path.sep).join('/')
+    empreinte.update(relatif).update(fs.readFileSync(f))
+    // Une page s'appelle par son dossier (`/plan/`), pas par `plan/index.html`.
+    adresses.push(`${base}/${relatif.replace(/(^|\/)index\.html$/, '$1')}`)
+  }
+  const version = empreinte.digest('hex').slice(0, 16)
+
+  const modele = fs.readFileSync(path.join('scripts', 'sw.modele.js'), 'utf8')
+  fs.writeFileSync(
+    path.join(site, 'sw.js'),
+    modele
+      .replace('__VERSION__', version)
+      .replace('__BASE__', JSON.stringify(base))
+      .replace('__ADRESSES__', JSON.stringify(adresses)),
+  )
+  console.log(`[iphone] service worker ${version} : ${adresses.length} fichiers mis en cache`)
+}
 
 /**
  * En export statique, Next écrit ses fichiers intermédiaires dans .next, quel

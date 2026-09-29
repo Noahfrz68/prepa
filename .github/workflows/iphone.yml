@@ -1,0 +1,64 @@
+# Publie la version iPhone sur GitHub Pages à chaque envoi sur main.
+#
+# Le site est statique : tout tourne dans le téléphone, les données y restent
+# (IndexedDB) et ne passent jamais par GitHub. Seul le code est publié.
+#
+# Une fois : Settings → Pages → Source : « GitHub Actions ».
+
+name: Publier la version iPhone
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Rien n'est publié si un test échoue.
+      - run: npm test
+
+      # Le site vit sous https://<compte>.github.io/<dépôt>/ — sauf le dépôt
+      # <compte>.github.io, servi à la racine.
+      - name: Sous-chemin du site
+        run: |
+          if [[ "${{ github.event.repository.name }}" == *.github.io ]]; then
+            echo "PREPA_CHEMIN_BASE=" >> "$GITHUB_ENV"
+          else
+            echo "PREPA_CHEMIN_BASE=/${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+          fi
+
+      - run: npm run iphone:build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out-iphone
+
+  publier:
+    needs: construire
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publication.outputs.page_url }}
+    steps:
+      - id: publication
+        uses: actions/deploy-pages@v4

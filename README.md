@@ -1,7 +1,8 @@
 # Prépa — TAGE MAGE & TOEIC
 
 Application locale de préparation aux examens. Mono-utilisateur, sans compte, sans service
-en ligne, sans coût. Toutes les données restent sur cette machine, dans `data/app.db`.
+en ligne, sans coût. Toutes les données restent sur cette machine, dans `data/app.db` — et,
+pour la version iPhone (voir plus bas), dans le téléphone.
 
 Ce n'est pas une bibliothèque d'exercices : c'est **un instrument de mesure et un coach de
 stratégie de score**.
@@ -37,6 +38,10 @@ relancer `npm run app` recompile.
 | `node scripts/verifier-contraintes.mjs --purge` | **Vide la banque, les sessions et les tentatives** |
 | `node scripts/donnees-demo.mjs --generer` | Remplit la base de tentatives **fictives** pour explorer l'écran de stratégie |
 | `node scripts/donnees-demo.mjs --purge` | Retire uniquement les données de démonstration |
+| `npm run iphone:dev` | Version iPhone en développement, sur le port 3001 |
+| `npm run iphone:build` | Construit le site de la version iPhone dans `out-iphone/` |
+| `npm run iphone:servir` | Sert `out-iphone/` comme le ferait GitHub Pages, sur le port 3002 |
+| `npm run migrations:gen` | Recopie les migrations dans `core/db/migrations.gen.ts` (à relancer après en avoir ajouté une) |
 
 > Les données de démonstration sont marquées et purgeables séparément. Purge-les avant de te
 > fier à ta propre calibration : des tentatives fictives fausseraient tous les indicateurs.
@@ -428,6 +433,36 @@ transcription. Livrer une note sur ces critères serait livrer un chiffre invent
 Les textes de compréhension originaux de ce dépôt sont dans `contenu/comprehension/`, au
 format Markdown de l'import (`## TEXTE`, questions, `# CORRIGÉ`). Ils entrent en `à relire`
 comme tout import.
+
+## La version iPhone
+
+La même application, installée sur l'iPhone et utilisable **partout, PC éteint, sans réseau**.
+Aucun serveur : c'est un site statique, publié sur GitHub Pages, où tout tourne dans le
+téléphone. Seul le code est public ; les données ne quittent jamais les appareils.
+
+- **Base dans le téléphone** — SQLite compilé en WebAssembly (sql.js), enregistré dans le
+  stockage du navigateur (IndexedDB). Un adaptateur lui donne exactement la sémantique de
+  better-sqlite3 : les mêmes requêtes tournent sur les deux, et chaque test de la base est joué
+  sur les deux moteurs.
+- **Mêmes pages, même API** — chaque page du PC est rejouée côté navigateur une fois la base
+  ouverte (`app/_iphone/`), et les appels `/api/…` sont servis sur place par les mêmes routes.
+  Seule la synthèse vocale (Piper) reste au PC : l'iPhone lit les audios synchronisés.
+- **Hors ligne** — un service worker garde tout le site en cache ; une nouvelle version est
+  proposée, jamais imposée en pleine série.
+- **Installer** — ouvrir le site dans Safari, Partager → « Sur l'écran d'accueil ». Installée,
+  l'app garde ses données ; ouverte dans Safari, iOS peut les effacer après une semaine sans visite.
+
+**Synchronisation PC ↔ iPhone**, par fichier, dans Réglages : on prépare le fichier sur un
+appareil, on l'importe sur l'autre (Fichiers, iCloud Drive, mail, câble), puis dans l'autre sens.
+L'import **fusionne** : chaque ligne a un identifiant commun aux deux appareils, la
+modification la plus récente l'emporte, une suppression se propage sans que la ligne
+ressuscite, et une même question créée des deux côtés n'en fait plus qu'une. Figures et
+audios ne voyagent que s'ils manquent à l'autre appareil. Une copie de la base est faite avant
+chaque import. On peut donc s'entraîner des deux côtés entre deux synchronisations.
+
+**Publication** — `.github/workflows/iphone.yml` joue les tests, construit le site et le publie
+sur GitHub Pages à chaque envoi sur `main` (une fois : Settings → Pages → Source :
+« GitHub Actions »).
 
 ## Raccourcis clavier du drill
 
