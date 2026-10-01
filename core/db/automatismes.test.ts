@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Base } from './base'
 import { MOTEURS, baseDeTest } from './moteurs-test'
-import { enregistrerPartie, recordDe, statsAutomatismes, type PartieEnvoyee } from './automatismes'
+import { enregistrerPartie, etatsFaits, recordDe, statsAutomatismes, type PartieEnvoyee } from './automatismes'
 import { QUESTIONS_SERIE } from '@/core/automatismes'
 
 /**
@@ -114,6 +114,66 @@ describe.each(MOTEURS)('$nom', (moteur) => {
     expect(s.get('puissances')!.aRevoir).toBe(2) // 12 (lent) et 13 (faux)
     expect(s.get('puissances')!.parties).toBe(2)
     expect(s.get('lettres')).toMatchObject({ parties: 0, aRevoir: 0, reussite: null })
+  })
+
+  describe('état des faits, pour la répétition', () => {
+    const r = (cle: string, juste: boolean, lent = false) => ({ jeu: 'puissances', cle, reponse: null, juste, tempsMs: 1000, lent })
+    /** Une partie datée, pour ordonner l'historique sans dépendre de l'horloge. */
+    const jouerLe = (le: string, reponses: ReturnType<typeof r>[]) => {
+      const p = partie({ reponses })
+      enregistrerPartie(p, db)
+      db.prepare('UPDATE automatisme_partie SET le = ? WHERE uid = ?').run(le, p.uid)
+    }
+
+    it('compte les réponses justes et rapides d’affilée depuis la dernière', () => {
+      jouerLe('2026-09-01T10:00:00.000Z', [r('carre:11', false), r('carre:12', true), r('carre:13', true)])
+      jouerLe('2026-09-02T10:00:00.000Z', [r('carre:11', true), r('carre:12', true), r('carre:13', true, true)])
+      jouerLe('2026-09-03T10:00:00.000Z', [r('carre:11', true), r('carre:12', true)])
+
+      const e = etatsFaits(db)
+      // 11 : faux, juste, juste → série de 2.
+      expect(e['carre:11']).toEqual({ serie: 2, aRevoir: false, vuLe: Date.parse('2026-09-03T10:00:00.000Z') })
+      // 12 : trois justes → maîtrisé (la série ne lit que les 3 dernières).
+      expect(e['carre:12'].serie).toBe(3)
+      // 13 : la dernière réponse était lente → à revoir.
+      expect(e['carre:13']).toMatchObject({ serie: 0, aRevoir: true })
+      expect(e['carre:14']).toBeUndefined()
+    })
+
+    it('départage deux réponses d’une même partie par leur ordre', () => {
+      jouerLe('2026-09-01T10:00:00.000Z', [r('carre:11', true), r('carre:11', false)])
+      expect(etatsFaits(db)['carre:11'].aRevoir).toBe(true)
+    })
+  })
+
+  describe('Mélange', () => {
+    it('s’enregistre avec ses propres records, ses réponses gardant leur jeu', () => {
+      const p = partie({
+        jeu: 'melange',
+        reponses: [
+          { jeu: 'lettres', cle: 'rang:P', reponse: '16', juste: true, tempsMs: 900, lent: false },
+          { jeu: 'puissances', cle: 'carre:17', reponse: '279', juste: false, tempsMs: 3000, lent: false },
+        ],
+      })
+      expect(enregistrerPartie(p, db).nouveauRecord).toBe(true)
+      expect(recordDe('melange', 'chrono', db)?.justes).toBe(1)
+      expect(recordDe('lettres', 'chrono', db)).toBeNull()
+
+      const s = statsAutomatismes(['melange', 'lettres', 'puissances'], db)
+      // Les statistiques par jeu viennent des questions, d'où qu'elles soient jouées.
+      expect(s.get('lettres')).toMatchObject({ parties: 0, reussite: 1 })
+      expect(s.get('puissances')).toMatchObject({ parties: 0, reussite: 0, aRevoir: 1 })
+      // Le Mélange résume l'ensemble.
+      expect(s.get('melange')).toMatchObject({ parties: 1, reussite: 0.5, tempsMoyenMs: 1950, aRevoir: 1 })
+    })
+
+    it('refuse une réponse rangée sous « melange » : elle doit garder son jeu', () => {
+      const p = partie({
+        jeu: 'melange',
+        reponses: [{ jeu: 'melange', cle: 'rang:P', reponse: '16', juste: true, tempsMs: 900, lent: false }],
+      })
+      expect(() => enregistrerPartie(p, db)).toThrow()
+    })
   })
 
   it('calcule la réussite sur les 30 derniers jours seulement', () => {

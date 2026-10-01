@@ -50,13 +50,22 @@ function parDizaine(a: number, b: number): string {
   return `${a} × ${b} = ${a} × ${d} + ${a} × ${u} = ${nombre(a * d)} + ${nombre(a * u)} = ${nombre(a * b)}.`
 }
 
-const PRODUIRE: Record<Genre, (a: Alea) => Question> = {
-  table(a) {
-    let x: number, y: number
-    do {
-      x = a.entier(6, 19)
-      y = a.entier(6, 19)
-    } while (x < 10 && y < 10 && a.chance(0.6))
+/**
+ * `fixe` impose les paramètres du fait à reproduire (répétition) : les deux
+ * facteurs d'une table, le diviseur, le taux, les deux variations.
+ */
+const TAUX = [5, 10, 15, 20, 25, 30, 40, 50, 75, 12.5]
+const VARIATIONS = [10, 20, 25, 50]
+
+const PRODUIRE: Record<Genre, (a: Alea, fixe?: number[]) => Question> = {
+  table(a, fixe) {
+    let [x, y] = fixe ?? [0, 0]
+    if (!fixe) {
+      do {
+        x = a.entier(6, 19)
+        y = a.entier(6, 19)
+      } while (x < 10 && y < 10 && a.chance(0.6))
+    }
     const [p, g] = x <= y ? [x, y] : [y, x]
     return question(
       `table:${p}×${g}`,
@@ -112,8 +121,8 @@ const PRODUIRE: Record<Genre, (a: Alea) => Question> = {
     return question('produit', `${x} × ${y} ?`, x * y, `${x} × ${y} = ${nombre(x * y)}`, parDizaine(x, y))
   },
 
-  division(a) {
-    const d = a.entier(3, 19)
+  division(a, fixe) {
+    const d = fixe?.[0] ?? a.entier(3, 19)
     const q = a.entier(7, 60)
     const n = d * q
     const u = q % 10
@@ -124,8 +133,8 @@ const PRODUIRE: Record<Genre, (a: Alea) => Question> = {
     return question(`division:${d}`, `${nombre(n)} ÷ ${d} ?`, q, `${nombre(n)} ÷ ${d} = ${q}`, astuce)
   },
 
-  pourcentage(a) {
-    const p = a.choix([5, 10, 15, 20, 25, 30, 40, 50, 75, 12.5])
+  pourcentage(a, fixe) {
+    const p = fixe?.[0] ?? a.choix(TAUX)
     let n: number
     do n = a.chance(0.5) ? 20 * a.entier(2, 40) : 8 * a.entier(5, 60)
     while (!Number.isInteger((p * n) / 100))
@@ -154,9 +163,9 @@ const PRODUIRE: Record<Genre, (a: Alea) => Question> = {
     )
   },
 
-  successives(a) {
-    const t1 = a.choix([10, 20, 25, 50]) * (a.chance(0.5) ? 1 : -1)
-    const t2 = a.choix([10, 20, 25, 50]) * (a.chance(0.5) ? 1 : -1)
+  successives(a, fixe) {
+    const t1 = fixe?.[0] ?? a.choix(VARIATIONS) * (a.chance(0.5) ? 1 : -1)
+    const t2 = fixe?.[1] ?? a.choix(VARIATIONS) * (a.chance(0.5) ? 1 : -1)
     const total = ((100 + t1) * (100 + t2)) / 100 - 100
     const coef = (t: number) => court(1 + t / 100)
     const lu = variation(total)
@@ -183,4 +192,25 @@ export const calcul: Jeu = {
   description: 'Tables, × 5, × 11, × 25, divisions, pourcentages, hausses successives.',
   seuilLentMs: 5000,
   produire: (a) => PRODUIRE[a.choix(GENRES)](a),
+  produireCle(a, cle) {
+    const [genre, param = ''] = cle.split(':')
+    const n = param.split(/[×/]/).map(Number)
+    const entre = (x: number, min: number, max: number) => Number.isInteger(x) && x >= min && x <= max
+    switch (genre) {
+      case 'x5':
+      case 'x25':
+      case 'x11':
+      case 'produit':
+        return param ? null : PRODUIRE[genre](a)
+      case 'table':
+        return n.length === 2 && n.every((x) => entre(x, 6, 19)) ? PRODUIRE.table(a, n) : null
+      case 'division':
+        return n.length === 1 && entre(n[0], 3, 19) ? PRODUIRE.division(a, n) : null
+      case 'pourcentage':
+        return n.length === 1 && TAUX.includes(n[0]) ? PRODUIRE.pourcentage(a, n) : null
+      case 'successives':
+        return n.length === 2 && n.every((t) => VARIATIONS.includes(Math.abs(t))) ? PRODUIRE.successives(a, n) : null
+    }
+    return null
+  },
 }

@@ -1,18 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { aleaDepuis, type Alea } from '@/core/generation/alea'
 import {
   DUREE_CHRONO_MS,
   FORMATS,
   QUESTIONS_SERIE,
-  jeu as jeuDe,
-  questionSuivante,
+  apresReponse,
+  choisirQuestion,
+  descriptionDe,
+  jeuxDe,
+  nomDe,
   seuilLent,
   verifier,
   type FormatPartie,
-  type JeuId,
+  type EtatsFaits,
+  type PartieJeuId,
   type Question,
 } from '@/core/automatismes'
 import type { MeilleurScore, ResultatPartie } from '@/core/db/automatismes'
@@ -52,12 +56,17 @@ export default function JeuClient({
   jeuId,
   format,
   record,
+  etats,
 }: {
-  jeuId: JeuId
+  jeuId: PartieJeuId
   format: FormatPartie
   record: MeilleurScore | null
+  etats: EtatsFaits
 }) {
-  const j = jeuDe(jeuId)!
+  const jeux = useMemo(() => jeuxDe(jeuId), [jeuId])
+  // Copie locale, tenue à jour à chaque réponse : un fait raté revient dans
+  // la même partie, sans attendre le prochain affichage de la page.
+  const etatsFaits = useRef<EtatsFaits>({ ...etats })
   const [etape, setEtape] = useState<Etape>('pret')
   const [question, setQuestion] = useState<Question | null>(null)
   const [saisie, setSaisie] = useState('')
@@ -79,7 +88,7 @@ export default function JeuClient({
 
   const poserQuestion = useCallback(
     (deja: Reponse[]) => {
-      const q = questionSuivante(j, alea.current!, deja.map((r) => r.question.cle))
+      const q = choisirQuestion(jeux, alea.current!, deja.map((r) => r.question.cle), etatsFaits.current, Date.now())
       setQuestion(q)
       setSaisie('')
       const t = performance.now()
@@ -87,7 +96,7 @@ export default function JeuClient({
       setMaintenant(t)
       setEtape('question')
     },
-    [j],
+    [jeux],
   )
 
   const commencer = useCallback(() => {
@@ -159,6 +168,7 @@ export default function JeuClient({
       const tempsMs = performance.now() - debutQuestion
       const juste = verifier(question.attendu, texte)
       const r: Reponse = { question, saisie: texte.trim(), juste, tempsMs, lent: juste && tempsMs > seuilLent(question) }
+      etatsFaits.current[question.cle] = apresReponse(etatsFaits.current[question.cle], juste, r.lent, Date.now())
       const liste = [...reponses, r]
       const total = jeuMs + tempsMs
       setReponses(liste)
@@ -225,7 +235,7 @@ export default function JeuClient({
       </Link>
 
       <header className="mt-6 mb-6 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">{j.nom}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{nomDe(jeuId)}</h1>
         <span className="text-sm text-doux">
           {FORMATS[format].libelle} · {FORMATS[format].but}
         </span>
@@ -234,7 +244,7 @@ export default function JeuClient({
       {etape === 'pret' && (
         <section className="rounded-xl border border-bord bg-carte px-5 py-6">
           <p className="text-sm leading-relaxed text-doux">
-            {j.description}{' '}
+            {descriptionDe(jeuId)}{' '}
             {format === 'chrono'
               ? 'Réponds au plus grand nombre en 60 secondes de jeu.'
               : `${QUESTIONS_SERIE} questions, le plus vite possible.`}{' '}
@@ -432,7 +442,7 @@ function Bilan({
   renvoyer,
 }: {
   format: FormatPartie
-  jeuId: JeuId
+  jeuId: PartieJeuId
   reponses: Reponse[]
   dureeMs: number
   envoi: Envoi | null
@@ -528,7 +538,7 @@ function Bilan({
   )
 }
 
-function Actions({ rejouer, jeuId, autre }: { rejouer: () => void; jeuId: JeuId; autre: FormatPartie }) {
+function Actions({ rejouer, jeuId, autre }: { rejouer: () => void; jeuId: PartieJeuId; autre: FormatPartie }) {
   return (
     <div className="mt-5 flex flex-wrap items-center gap-3">
       <button

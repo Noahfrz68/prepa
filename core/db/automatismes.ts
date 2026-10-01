@@ -2,7 +2,17 @@ import type { Base } from './base'
 import { db } from './queries'
 import { tempsBorne } from './garde'
 import { ErreurRequete } from '@/core/erreurs'
-import { estFormat, jeu, QUESTIONS_SERIE, type FormatPartie, type JeuId } from '@/core/automatismes'
+import {
+  estFormat,
+  estJeuPartie,
+  jeu,
+  MELANGE,
+  QUESTIONS_SERIE,
+  type EtatsFaits,
+  type FormatPartie,
+  type PartieJeuId,
+} from '@/core/automatismes'
+import { SERIE_MAITRISE } from '@/core/automatismes/poids'
 
 /**
  * Les parties d'automatismes : enregistrement, records, faits à revoir.
@@ -68,7 +78,7 @@ export function recordDe(jeuId: string, format: FormatPartie, d: Base = db()): M
 
 function valider(p: PartieEnvoyee): asserts p is PartieEnvoyee & { format: FormatPartie } {
   if (typeof p?.uid !== 'string' || !UID.test(p.uid)) throw new ErreurRequete('Partie sans identifiant valide.', 400)
-  if (!jeu(p.jeu)) throw new ErreurRequete(`Jeu inconnu : ${String(p.jeu)}.`, 400)
+  if (!estJeuPartie(p.jeu)) throw new ErreurRequete(`Jeu inconnu : ${String(p.jeu)}.`, 400)
   if (!estFormat(p.format)) throw new ErreurRequete(`Format de partie inconnu : ${String(p.format)}.`, 400)
   if (!Array.isArray(p.reponses) || p.reponses.length === 0) {
     throw new ErreurRequete('Partie vide : aucune réponse à enregistrer.', 400)
@@ -146,12 +156,12 @@ const vide = (): StatsJeu => ({
   aRevoir: 0,
 })
 
-export function statsAutomatismes(ids: readonly JeuId[], d: Base = db()): Map<JeuId, StatsJeu> {
-  const stats = new Map<JeuId, StatsJeu>(ids.map((id) => [id, vide()]))
+export function statsAutomatismes(ids: readonly PartieJeuId[], d: Base = db()): Map<PartieJeuId, StatsJeu> {
+  const stats = new Map<PartieJeuId, StatsJeu>(ids.map((id) => [id, vide()]))
 
   const parties = d
     .prepare(`SELECT jeu, COUNT(*) AS n, MAX(le) AS derniere FROM automatisme_partie GROUP BY jeu`)
-    .all() as Array<{ jeu: JeuId; n: number; derniere: string }>
+    .all() as Array<{ jeu: PartieJeuId; n: number; derniere: string }>
   for (const p of parties) {
     const s = stats.get(p.jeu)
     if (s) Object.assign(s, { parties: p.n, dernierePartie: p.derniere })
@@ -160,12 +170,12 @@ export function statsAutomatismes(ids: readonly JeuId[], d: Base = db()): Map<Je
   // Par jeu de la QUESTION : un mélange nourrit les statistiques de chaque jeu.
   const recentes = d
     .prepare(
-      `SELECT r.jeu, AVG(r.juste) AS reussite, AVG(r.temps_ms) AS temps
+      `SELECT r.jeu, AVG(r.juste) AS reussite, AVG(r.temps_ms) AS temps, COUNT(*) AS n
          FROM automatisme_reponse r JOIN automatisme_partie p ON p.uid = r.partie_uid
         WHERE p.le >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')
         GROUP BY r.jeu`,
     )
-    .all() as Array<{ jeu: JeuId; reussite: number; temps: number }>
+    .all() as Array<{ jeu: PartieJeuId; reussite: number; temps: number; n: number }>
   for (const r of recentes) {
     const s = stats.get(r.jeu)
     if (s) Object.assign(s, { reussite: r.reussite, tempsMoyenMs: r.temps })
@@ -180,14 +190,60 @@ export function statsAutomatismes(ids: readonly JeuId[], d: Base = db()): Map<Je
        ) WHERE rang = 1 AND (juste = 0 OR lent = 1)
        GROUP BY jeu`,
     )
-    .all() as Array<{ jeu: JeuId; n: number }>
+    .all() as Array<{ jeu: PartieJeuId; n: number }>
   for (const r of aRevoir) {
     const s = stats.get(r.jeu)
     if (s) s.aRevoir = r.n
+  }
+
+  // Le Mélange puise dans tous les jeux : sa réussite et ses faits à revoir
+  // sont ceux de l'ensemble, quelle que soit la partie qui les a joués.
+  const melange = stats.get(MELANGE.id)
+  if (melange) {
+    const n = recentes.reduce((t, r) => t + r.n, 0)
+    if (n > 0) {
+      melange.reussite = recentes.reduce((t, r) => t + r.reussite * r.n, 0) / n
+      melange.tempsMoyenMs = recentes.reduce((t, r) => t + r.temps * r.n, 0) / n
+    }
+    melange.aRevoir = aRevoir.reduce((t, r) => t + r.n, 0)
   }
 
   for (const [id, s] of stats) {
     if (s.parties > 0) s.records = { chrono: recordDe(id, 'chrono', d), serie: recordDe(id, 'serie', d) }
   }
   return stats
+}
+
+/**
+ * L'état de chaque fait déjà rencontré, pour la répétition (poids.ts) : sa
+ * dernière réponse, et combien de réponses justes et rapides la précèdent
+ * d'affilée. Il suffit de lire les SERIE_MAITRISE dernières réponses de
+ * chaque fait.
+ */
+export function etatsFaits(d: Base = db()): EtatsFaits {
+  const lignes = d
+    .prepare(
+      `SELECT cle, juste, lent, le FROM (
+         SELECT r.cle, r.juste, r.lent, p.le,
+                ROW_NUMBER() OVER (PARTITION BY r.cle ORDER BY p.le DESC, r.ordre DESC) AS rang
+           FROM automatisme_reponse r JOIN automatisme_partie p ON p.uid = r.partie_uid
+       ) WHERE rang <= ? ORDER BY cle, rang`,
+    )
+    .all(SERIE_MAITRISE) as Array<{ cle: string; juste: number; lent: number; le: string }>
+
+  const etats: EtatsFaits = {}
+  let enCours: string | null = null
+  let interrompue = false
+  for (const l of lignes) {
+    const bonne = l.juste === 1 && l.lent === 0
+    if (l.cle !== enCours) {
+      enCours = l.cle
+      interrompue = !bonne
+      etats[l.cle] = { serie: bonne ? 1 : 0, aRevoir: !bonne, vuLe: Date.parse(l.le) }
+    } else if (!interrompue) {
+      if (bonne) etats[l.cle].serie++
+      else interrompue = true
+    }
+  }
+  return etats
 }

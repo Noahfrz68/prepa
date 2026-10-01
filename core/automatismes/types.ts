@@ -57,4 +57,11 @@ export interface Jeu {
   /** Au-delà, une réponse juste compte comme « trop lente » : à revoir. */
   seuilLentMs: number
   produire(a: Alea): Question
+  /**
+   * Une question sur un fait précis, pour la répétition : c'est ainsi qu'un
+   * fait raté revient, même rare au tirage (une table parmi cent). Une clé
+   * de catégorie (`x5`, `decomposition`) donne une autre question du même
+   * genre. Null si la clé n'est pas de ce jeu.
+   */
+  produireCle(a: Alea, cle: string): Question | null
 }

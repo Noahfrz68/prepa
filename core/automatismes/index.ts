@@ -4,9 +4,12 @@ import { fractions } from './jeux/fractions'
 import { lettres } from './jeux/lettres'
 import { premiers } from './jeux/premiers'
 import { puissances } from './jeux/puissances'
+import { poidsFait, tirerPondere, type EtatsFaits } from './poids'
 import type { Jeu, JeuId, Question } from './types'
 
 export type { Attendu, Jeu, JeuId, Question, Saisie } from './types'
+export type { EtatFait, EtatsFaits } from './poids'
+export { apresReponse } from './poids'
 export { verifier } from './reponses'
 
 /**
@@ -53,6 +56,93 @@ export function questionSuivante(j: Jeu, a: Alea, recentes: readonly string[]): 
   const precedente = recentes.at(-1)
   for (let essai = 0; essai < 20 && q.cle === precedente; essai++) q = j.produire(a)
   return q
+}
+
+/** Candidats tirés au hasard avant d'en retenir un. */
+export const CANDIDATS = 30
+
+/** Faits à revoir proposés à chaque question, les plus récemment ratés d'abord. */
+export const REPRISES_MAX = 15
+
+/**
+ * La question suivante, pondérée par la répétition (poids.ts).
+ *
+ * Deux sortes de candidats : des questions tirées au hasard dans les jeux
+ * donnés (un seul, ou tous pour le Mélange), et une question ciblée pour
+ * chaque fait à revoir — sans elle, un fait rare au tirage (une table parmi
+ * cent) ne reviendrait presque jamais. On en retient un selon le poids de son
+ * fait. Les faits à revoir pèsent au plus autant que tout le reste : une
+ * question sur deux au maximum est une reprise, la partie reste une partie.
+ * Les faits des `ECART_MIN` dernières questions sont écartés.
+ */
+export function choisirQuestion(
+  jeux: readonly Jeu[],
+  a: Alea,
+  recentes: readonly string[],
+  etats: EtatsFaits,
+  maintenant: number,
+): Question {
+  const evites = new Set(recentes.slice(-ECART_MIN))
+  const candidats: Question[] = []
+  for (let essai = 0; essai < CANDIDATS * 3 && candidats.length < CANDIDATS; essai++) {
+    const q = a.choix(jeux).produire(a)
+    if (!evites.has(q.cle)) candidats.push(q)
+  }
+
+  const aReprendre = Object.entries(etats)
+    .filter(([cle, e]) => e.aRevoir && !evites.has(cle))
+    .sort(([, x], [, y]) => y.vuLe - x.vuLe)
+    .slice(0, REPRISES_MAX)
+  for (const [cle] of aReprendre) {
+    for (const j of jeux) {
+      const q = j.produireCle(a, cle)
+      if (q) {
+        candidats.push(q)
+        break
+      }
+    }
+  }
+
+  if (candidats.length === 0) return questionSuivante(a.choix(jeux), a, recentes)
+
+  const poids = candidats.map((q) => poidsFait(etats[q.cle], maintenant))
+  const reprise = candidats.map((q) => etats[q.cle]?.aRevoir === true)
+  const total = (garder: boolean) => poids.reduce((t, p, i) => (reprise[i] === garder ? t + p : t), 0)
+  const repris = total(true)
+  const reste = total(false)
+  if (repris > reste && reste > 0) {
+    const f = reste / repris
+    for (let i = 0; i < poids.length; i++) if (reprise[i]) poids[i] *= f
+  }
+  return tirerPondere(a, candidats, poids)
+}
+
+/* ------------------------------------------------------------ mélange -- */
+
+/** Le Mélange : tous les jeux à la fois. Il a ses propres records. */
+export const MELANGE = {
+  id: 'melange',
+  nom: 'Mélange',
+  description: 'Les cinq jeux mêlés, ce qui est à revoir en priorité. L’échauffement idéal avant une série.',
+} as const
+
+/** Ce qu'on joue dans une partie : un jeu, ou le Mélange. */
+export type PartieJeuId = JeuId | typeof MELANGE.id
+
+export function estJeuPartie(id: unknown): id is PartieJeuId {
+  return id === MELANGE.id || (typeof id === 'string' && PAR_ID.has(id as JeuId))
+}
+
+export function jeuxDe(id: PartieJeuId): Jeu[] {
+  return id === MELANGE.id ? JEUX : [PAR_ID.get(id)!]
+}
+
+export function nomDe(id: PartieJeuId): string {
+  return id === MELANGE.id ? MELANGE.nom : PAR_ID.get(id)!.nom
+}
+
+export function descriptionDe(id: PartieJeuId): string {
+  return id === MELANGE.id ? MELANGE.description : PAR_ID.get(id)!.description
 }
 
 /** Une série de n questions d'un jeu, d'un seul tirage. */

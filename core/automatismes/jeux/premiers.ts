@@ -24,8 +24,7 @@ function plusPetitDiviseur(n: number): number {
   return n
 }
 
-function premier(a: Alea): Question {
-  const n = a.chance(0.5) ? a.choix(PREMIERS) : a.choix(PIEGES)
+function premier(n: number): Question {
   const oui = estPremier(n)
   const p = plusPetitDiviseur(n)
   const limite = Math.floor(Math.sqrt(n))
@@ -85,8 +84,10 @@ function critere(n: number, d: number): string {
   return verdict
 }
 
-function divisibilite(a: Alea): Question {
-  const d = a.choix([2, 3, 3, 4, 4, 5, 6, 6, 8, 8, 9, 9, 11, 11, 25])
+/** Les diviseurs testés ; les critères les moins évidents reviennent plus souvent. */
+const DIVISEURS = [2, 3, 3, 4, 4, 5, 6, 6, 8, 8, 9, 9, 11, 11, 25]
+
+function divisibilite(a: Alea, d: number): Question {
   const oui = a.chance(0.5)
   let n: number
   do {
@@ -158,8 +159,16 @@ export const premiers: Jeu = {
   seuilLentMs: 5000,
   produire(a) {
     const genre = a.entier(0, 9)
-    if (genre <= 3) return premier(a)
-    if (genre <= 7) return divisibilite(a)
+    if (genre <= 3) return premier(a.chance(0.5) ? a.choix(PREMIERS) : a.choix(PIEGES))
+    if (genre <= 7) return divisibilite(a, a.choix(DIVISEURS))
     return decomposition(a)
+  },
+  produireCle(a, cle) {
+    const [genre, param] = cle.split(':')
+    const n = Number(param)
+    if (genre === 'premier') return CANDIDATS.includes(n) ? premier(n) : null
+    if (genre === 'divisible') return DIVISEURS.includes(n) ? divisibilite(a, n) : null
+    if (genre === 'decomposition') return decomposition(a)
+    return null
   },
 }

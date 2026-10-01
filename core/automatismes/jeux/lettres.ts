@@ -28,47 +28,58 @@ export const lettres: Jeu = {
   description: 'A = 1 … Z = 26, dans les deux sens, et à rebours.',
   seuilLentMs: 5000,
   produire(a): Question {
-    const r = a.entier(1, 26)
-    const l = lettre(r)
     const genre = a.entier(0, 4)
+    return question(genre <= 1 ? 'rang' : genre <= 3 ? 'lettre' : 'rebours', a.entier(1, 26))
+  },
+  produireCle(_a, cle) {
+    const [genre, param] = cle.split(':')
+    const r = genre === 'lettre' ? Number(param) : rang(param ?? '')
+    if (!(r >= 1 && r <= 26) || !['rang', 'lettre', 'rebours'].includes(genre)) return null
+    return question(genre as Genre, r)
+  },
+}
 
-    if (genre <= 1) {
-      return {
-        jeu: 'lettres',
-        cle: `rang:${l}`,
-        enonce: `Rang de ${l} ?`,
-        attendu: { genre: 'nombre', valeur: r },
-        saisie: 'nombre',
-        reponse: String(r),
-        solution: `${l} = ${r}`,
-        astuce: repere(r),
-        table: TABLE,
-      }
-    }
-    if (genre <= 3) {
-      return {
-        jeu: 'lettres',
-        cle: `lettre:${r}`,
-        enonce: `Lettre de rang ${r} ?`,
-        attendu: { genre: 'lettre', valeur: l },
-        saisie: 'texte',
-        reponse: l,
-        solution: `${r} = ${l}`,
-        astuce: repere(r),
-        table: TABLE,
-      }
-    }
-    const inverse = 27 - r
+type Genre = 'rang' | 'lettre' | 'rebours'
+
+function question(genre: Genre, r: number): Question {
+  const l = lettre(r)
+
+  if (genre === 'rang') {
     return {
       jeu: 'lettres',
-      cle: `rebours:${l}`,
-      enonce: `Rang de ${l} à rebours (Z = 1) ?`,
-      attendu: { genre: 'nombre', valeur: inverse },
+      cle: `rang:${l}`,
+      enonce: `Rang de ${l} ?`,
+      attendu: { genre: 'nombre', valeur: r },
       saisie: 'nombre',
-      reponse: String(inverse),
-      solution: `${l} à rebours = ${inverse}`,
-      astuce: `À rebours, rang → 27 − rang : ${l} = ${rang(l)}, donc 27 − ${rang(l)} = ${inverse}. C'est aussi le rang de sa symétrique, ${lettre(inverse)}.`,
+      reponse: String(r),
+      solution: `${l} = ${r}`,
+      astuce: repere(r),
       table: TABLE,
     }
-  },
+  }
+  if (genre === 'lettre') {
+    return {
+      jeu: 'lettres',
+      cle: `lettre:${r}`,
+      enonce: `Lettre de rang ${r} ?`,
+      attendu: { genre: 'lettre', valeur: l },
+      saisie: 'texte',
+      reponse: l,
+      solution: `${r} = ${l}`,
+      astuce: repere(r),
+      table: TABLE,
+    }
+  }
+  const inverse = 27 - r
+  return {
+    jeu: 'lettres',
+    cle: `rebours:${l}`,
+    enonce: `Rang de ${l} à rebours (Z = 1) ?`,
+    attendu: { genre: 'nombre', valeur: inverse },
+    saisie: 'nombre',
+    reponse: String(inverse),
+    solution: `${l} à rebours = ${inverse}`,
+    astuce: `À rebours, rang → 27 − rang : ${l} = ${rang(l)}, donc 27 − ${rang(l)} = ${inverse}. C'est aussi le rang de sa symétrique, ${lettre(inverse)}.`,
+    table: TABLE,
+  }
 }

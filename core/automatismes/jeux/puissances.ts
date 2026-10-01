@@ -48,6 +48,18 @@ function astuceRacine(n: number): string {
   )
 }
 
+type Genre = 'carre' | 'racine' | 'cube' | 'racine3' | 'deux' | 'log2'
+
+/** Bornes de n pour chaque genre. */
+const BORNES: Record<Genre, [number, number]> = {
+  carre: [1, 30],
+  racine: [1, 30],
+  cube: [1, 12],
+  racine3: [1, 12],
+  deux: [1, 12],
+  log2: [1, 12],
+}
+
 export const puissances: Jeu = {
   id: 'puissances',
   nom: 'Carrés, cubes, puissances',
@@ -56,93 +68,105 @@ export const puissances: Jeu = {
   produire(a): Question {
     const genre = a.entier(0, 9)
     const direct = a.chance(0.5)
-
     if (genre <= 4) {
       // Les carrés de 1 à 10 sont des tables : on les tire moins souvent.
       const n = a.chance(0.2) ? a.entier(2, 10) : a.entier(11, 30)
-      const c = n * n
-      return direct
-        ? {
-            jeu: 'puissances',
-            cle: `carre:${n}`,
-            enonce: `${n}² ?`,
-            attendu: { genre: 'nombre', valeur: c },
-            saisie: 'nombre',
-            reponse: nombre(c),
-            solution: `${n}² = ${nombre(c)}`,
-            astuce: astuceCarre(n),
-            table: TABLE,
-          }
-        : {
-            jeu: 'puissances',
-            cle: `racine:${n}`,
-            enonce: `${nombre(c)} est le carré de ?`,
-            attendu: { genre: 'nombre', valeur: n },
-            saisie: 'nombre',
-            reponse: String(n),
-            solution: `${nombre(c)} = ${n}²`,
-            astuce: n > 10 && n % 5 !== 0 ? astuceRacine(n) : astuceCarre(n),
-            table: TABLE,
-          }
+      return question(direct ? 'carre' : 'racine', n)
     }
+    if (genre <= 7) return question(direct ? 'cube' : 'racine3', a.entier(2, 12))
+    return question(direct ? 'deux' : 'log2', a.entier(1, 12))
+  },
+  produireCle(_a, cle) {
+    const [genre, param] = cle.split(':')
+    const n = Number(param)
+    const bornes = BORNES[genre as Genre]
+    if (!bornes || !Number.isInteger(n) || n < bornes[0] || n > bornes[1]) return null
+    return question(genre as Genre, n)
+  },
+}
 
-    if (genre <= 7) {
-      const n = a.entier(2, 12)
-      const c = n ** 3
-      const astuce = `${n}³ = ${n}² × ${n} = ${n * n} × ${n} = ${nombre(c)}.`
-      return direct
-        ? {
-            jeu: 'puissances',
-            cle: `cube:${n}`,
-            enonce: `${n}³ ?`,
-            attendu: { genre: 'nombre', valeur: c },
-            saisie: 'nombre',
-            reponse: nombre(c),
-            solution: `${n}³ = ${nombre(c)}`,
-            astuce,
-            table: TABLE,
-          }
-        : {
-            jeu: 'puissances',
-            cle: `racine3:${n}`,
-            enonce: `${nombre(c)} est le cube de ?`,
-            attendu: { genre: 'nombre', valeur: n },
-            saisie: 'nombre',
-            reponse: String(n),
-            solution: `${nombre(c)} = ${n}³`,
-            astuce,
-            table: TABLE,
-          }
-    }
-
-    const n = a.entier(1, 12)
-    const p = 2 ** n
-    const astuce =
-      n >= 10
-        ? `2¹⁰ = 1 024, puis on double : 2${exposant(n)} = ${nombre(p)}.`
-        : `On double depuis 2 : 2, 4, 8, 16, 32, 64, 128, 256, 512 → 2${exposant(n)} = ${nombre(p)}.`
-    return direct
+function question(genre: Genre, n: number): Question {
+  if (genre === 'carre' || genre === 'racine') {
+    const c = n * n
+    return genre === 'carre'
       ? {
           jeu: 'puissances',
-          cle: `deux:${n}`,
-          enonce: `2${exposant(n)} ?`,
-          attendu: { genre: 'nombre', valeur: p },
+          cle: `carre:${n}`,
+          enonce: `${n}² ?`,
+          attendu: { genre: 'nombre', valeur: c },
           saisie: 'nombre',
-          reponse: nombre(p),
-          solution: `2${exposant(n)} = ${nombre(p)}`,
+          reponse: nombre(c),
+          solution: `${n}² = ${nombre(c)}`,
+          astuce: astuceCarre(n),
+          table: TABLE,
+        }
+      : {
+          jeu: 'puissances',
+          cle: `racine:${n}`,
+          enonce: `${nombre(c)} est le carré de ?`,
+          attendu: { genre: 'nombre', valeur: n },
+          saisie: 'nombre',
+          reponse: String(n),
+          solution: `${nombre(c)} = ${n}²`,
+          astuce: n > 10 && n % 5 !== 0 ? astuceRacine(n) : astuceCarre(n),
+          table: TABLE,
+        }
+  }
+
+  if (genre === 'cube' || genre === 'racine3') {
+    const c = n ** 3
+    const astuce = `${n}³ = ${n}² × ${n} = ${n * n} × ${n} = ${nombre(c)}.`
+    return genre === 'cube'
+      ? {
+          jeu: 'puissances',
+          cle: `cube:${n}`,
+          enonce: `${n}³ ?`,
+          attendu: { genre: 'nombre', valeur: c },
+          saisie: 'nombre',
+          reponse: nombre(c),
+          solution: `${n}³ = ${nombre(c)}`,
           astuce,
           table: TABLE,
         }
       : {
           jeu: 'puissances',
-          cle: `log2:${n}`,
-          enonce: `${nombre(p)} = 2 puissance ?`,
+          cle: `racine3:${n}`,
+          enonce: `${nombre(c)} est le cube de ?`,
           attendu: { genre: 'nombre', valeur: n },
           saisie: 'nombre',
           reponse: String(n),
-          solution: `${nombre(p)} = 2${exposant(n)}`,
+          solution: `${nombre(c)} = ${n}³`,
           astuce,
           table: TABLE,
         }
-  },
+  }
+
+  const p = 2 ** n
+  const astuce =
+    n >= 10
+      ? `2¹⁰ = 1 024, puis on double : 2${exposant(n)} = ${nombre(p)}.`
+      : `On double depuis 2 : 2, 4, 8, 16, 32, 64, 128, 256, 512 → 2${exposant(n)} = ${nombre(p)}.`
+  return genre === 'deux'
+    ? {
+        jeu: 'puissances',
+        cle: `deux:${n}`,
+        enonce: `2${exposant(n)} ?`,
+        attendu: { genre: 'nombre', valeur: p },
+        saisie: 'nombre',
+        reponse: nombre(p),
+        solution: `2${exposant(n)} = ${nombre(p)}`,
+        astuce,
+        table: TABLE,
+      }
+    : {
+        jeu: 'puissances',
+        cle: `log2:${n}`,
+        enonce: `${nombre(p)} = 2 puissance ?`,
+        attendu: { genre: 'nombre', valeur: n },
+        saisie: 'nombre',
+        reponse: String(n),
+        solution: `${nombre(p)} = 2${exposant(n)}`,
+        astuce,
+        table: TABLE,
+      }
 }
