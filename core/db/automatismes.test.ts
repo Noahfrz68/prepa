@@ -1,7 +1,17 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Base } from './base'
 import { MOTEURS, baseDeTest } from './moteurs-test'
-import { enregistrerPartie, etatsFaits, recordDe, statsAutomatismes, type PartieEnvoyee } from './automatismes'
+import {
+  enregistrerPartie,
+  etatDefi,
+  etatsFaits,
+  meilleurDefi,
+  recordDe,
+  serieDefi,
+  statsAutomatismes,
+  type PartieEnvoyee,
+} from './automatismes'
+import { defiDuJour, jourDecale, jourLocal } from '@/core/automatismes/defi'
 import { QUESTIONS_SERIE } from '@/core/automatismes'
 
 /**
@@ -173,6 +183,97 @@ describe.each(MOTEURS)('$nom', (moteur) => {
         reponses: [{ jeu: 'melange', cle: 'rang:P', reponse: '16', juste: true, tempsMs: 900, lent: false }],
       })
       expect(() => enregistrerPartie(p, db)).toThrow()
+    })
+  })
+
+  describe('défi du jour', () => {
+    const aujourdhui = jourLocal()
+
+    /** Le défi d'aujourd'hui, `justes` premières réponses justes. */
+    const defi = (justes: number, dureeMs = 60_000, jour = aujourdhui): PartieEnvoyee => ({
+      uid: `defi-${String(++n).padStart(4, '0')}`,
+      jeu: 'melange',
+      format: 'defi',
+      defiDu: jour,
+      dureeMs,
+      reponses: defiDuJour(jour).map((q, i) => ({
+        jeu: q.jeu,
+        cle: q.cle,
+        reponse: null,
+        juste: i < justes,
+        tempsMs: 3000,
+        lent: false,
+      })),
+    })
+
+    /** Un défi d'un autre jour, posé directement : la validation n'accepte que celui du jour. */
+    const defiPasse = (jour: string, justes = 7) =>
+      db
+        .prepare(
+          `INSERT INTO automatisme_partie (uid, jeu, format, defi_du, duree_ms, nb, justes)
+           VALUES (?, 'melange', 'defi', ?, 60000, 10, ?)`,
+        )
+        .run(`passe-${jour}-${++n}`, jour, justes)
+
+    it('compte la première partie du jour, pas les suivantes', () => {
+      const premier = enregistrerPartie(defi(6), db)
+      expect(premier.defi).toEqual({ premiere: true, serie: 1 })
+      expect(premier.nouveauRecord).toBe(true)
+
+      const rejoue = enregistrerPartie(defi(10, 30_000), db)
+      expect(rejoue.defi?.premiere).toBe(false)
+      // Un 10/10 rejoué ne bat pas le 6/10 du matin.
+      expect(rejoue.nouveauRecord).toBe(false)
+      expect(meilleurDefi(db)?.justes).toBe(6)
+      expect(etatDefi(aujourdhui, db).aujourdhui?.justes).toBe(6)
+    })
+
+    it('tient le meilleur défi sur les premières parties de chaque jour', () => {
+      defiPasse(jourDecale(aujourdhui, -3), 9)
+      defiPasse(jourDecale(aujourdhui, -2), 4)
+      expect(enregistrerPartie(defi(8), db).nouveauRecord).toBe(false)
+      expect(meilleurDefi(db)?.justes).toBe(9)
+      expect(etatDefi(aujourdhui, db)).toMatchObject({ jours: 3, aujourdhui: { justes: 8 } })
+    })
+
+    it('compte les jours d’affilée, sans casser la série tant qu’aujourd’hui reste à faire', () => {
+      for (const k of [1, 2, 3, 5]) defiPasse(jourDecale(aujourdhui, -k))
+      // Hier, avant-hier, il y a trois jours ; le trou d'il y a quatre jours arrête.
+      expect(serieDefi(aujourdhui, db)).toBe(3)
+      enregistrerPartie(defi(5), db)
+      expect(serieDefi(aujourdhui, db)).toBe(4)
+      // Le lendemain, avant d'avoir joué : la série tient toujours.
+      expect(serieDefi(jourDecale(aujourdhui, 1), db)).toBe(4)
+      // Deux jours plus tard sans jouer : elle est tombée.
+      expect(serieDefi(jourDecale(aujourdhui, 2), db)).toBe(0)
+    })
+
+    it('refuse un défi qui n’est pas celui du jour', () => {
+      const mauvais: PartieEnvoyee[] = [
+        { ...defi(5), jeu: 'calcul' },
+        { ...defi(5), defiDu: undefined },
+        { ...defi(5), defiDu: '2020-01-01' },
+        { ...defi(5), reponses: defi(5).reponses.slice(0, 9) },
+        { ...defi(5), reponses: [...defi(5).reponses].reverse() },
+        // Le défi d'un autre jour, rendu sous la date d'aujourd'hui.
+        { ...defi(5, 60_000, jourDecale(aujourdhui, -1)), defiDu: aujourdhui },
+      ]
+      for (const p of mauvais) expect(() => enregistrerPartie(p, db), JSON.stringify(p).slice(0, 90)).toThrow()
+      expect((db.prepare('SELECT COUNT(*) AS n FROM automatisme_partie').get() as { n: number }).n).toBe(0)
+    })
+
+    it('accepte le défi d’hier, commencé avant minuit', () => {
+      expect(enregistrerPartie(defi(5, 60_000, jourDecale(aujourdhui, -1)), db).defi?.premiere).toBe(true)
+    })
+
+    it('ne compte pas un défi comme une partie de Mélange', () => {
+      enregistrerPartie(defi(5), db)
+      const s = statsAutomatismes(['melange'], db).get('melange')!
+      expect(s.parties).toBe(0)
+      expect(s.records.chrono).toBeNull()
+      // Mais ses réponses nourrissent la répétition et les statistiques.
+      expect(Object.keys(etatsFaits(db))).toHaveLength(10)
+      expect(s.reussite).toBeCloseTo(0.5)
     })
   })
 

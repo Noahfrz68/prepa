@@ -10,6 +10,8 @@ import { reussiteAFroidParSection } from '@/core/stats/queries'
 import { tauxAFroid } from '@/core/stats/afroid'
 import { planDeLaSemaine } from '@/core/db/semaine'
 import { prochaineSeance } from '@/app/plan/prochaine'
+import { etatDefi } from '@/core/db/automatismes'
+import CarteDefi from './automatismes/CarteDefi'
 import { SECONDES_PAR_QUESTION, SECTIONS } from '@/exams/tagemage'
 import { SEUIL_FIABILITE } from '@/core/stats/calculs'
 import {
@@ -41,6 +43,7 @@ export default function HubTageMage() {
   )
   // La même séance que l'accueil : la première tâche non faite du plan.
   const prochaine = total > 0 ? prochaineSeance(planDeLaSemaine().taches) : null
+  const defi = etatDefi()
   // Un texte long de sept questions validé remplace le texte de cinq : la
   // carte annonce ce que le diagnostic servira vraiment.
   const questionsComprehension =
@@ -118,6 +121,11 @@ export default function HubTageMage() {
           <span className="text-accent">Ouvrir l’atelier →</span>
         </Link>
       )}
+
+      {/* Le défi d'automatismes ne demande aucune banque : il s'affiche toujours. */}
+      <div className="mb-4">
+        <CarteDefi etat={defi} compacte />
+      </div>
 
       {prochaine && (
         <Link

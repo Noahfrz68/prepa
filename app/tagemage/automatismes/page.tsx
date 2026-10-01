@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { FORMATS, JEUX, MELANGE, type FormatPartie, type PartieJeuId } from '@/core/automatismes'
-import { statsAutomatismes, type StatsJeu } from '@/core/db/automatismes'
+import { etatDefi, statsAutomatismes, type StatsJeu } from '@/core/db/automatismes'
 import { decimal } from '@/app/_composants/nombres'
 import { jourLisible } from '@/app/_composants/dates'
 import { chronoLisible, lienJeu, scoreLisible } from './format'
+import CarteDefi from './CarteDefi'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,7 @@ const FORMATS_PARTIE = Object.keys(FORMATS) as FormatPartie[]
  */
 export default function PageAutomatismes() {
   const stats = statsAutomatismes([MELANGE.id, ...JEUX.map((j) => j.id)])
+  const defi = etatDefi()
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-14">
@@ -35,6 +37,10 @@ export default function PageAutomatismes() {
           la partie même ; ce qui est su revient de plus en plus rarement.
         </p>
       </header>
+
+      <div className="mb-3">
+        <CarteDefi etat={defi} />
+      </div>
 
       <div className="mb-3">
         <Carte id={MELANGE.id} nom={MELANGE.nom} description={MELANGE.description} s={stats.get(MELANGE.id)!} misEnAvant />

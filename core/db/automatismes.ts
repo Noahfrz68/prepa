@@ -13,6 +13,7 @@ import {
   type PartieJeuId,
 } from '@/core/automatismes'
 import { SERIE_MAITRISE } from '@/core/automatismes/poids'
+import { defiDuJour, estJour, jourDecale, jourLocal, QUESTIONS_DEFI } from '@/core/automatismes/defi'
 
 /**
  * Les parties d'automatismes : enregistrement, records, faits à revoir.
@@ -35,9 +36,14 @@ export interface PartieEnvoyee {
   uid: string
   jeu: string
   format: string
+  /** Le jour du défi (AAAA-MM-JJ), pour une partie au format « defi ». */
+  defiDu?: string
   dureeMs: number
   reponses: ReponseEnvoyee[]
 }
+
+/** Les formats enregistrés : ceux qu'on choisit, plus le défi du jour. */
+export type FormatEnregistre = FormatPartie | 'defi'
 
 export interface MeilleurScore {
   justes: number
@@ -52,6 +58,8 @@ export interface ResultatPartie {
   nouveauRecord: boolean
   /** La partie était déjà là : un envoi rejoué après une coupure. */
   dejaEnregistree: boolean
+  /** Pour un défi : était-ce la première partie du jour, et la série de jours qui en résulte. */
+  defi?: { premiere: boolean; serie: number }
 }
 
 /** Au-delà, ce n'est plus une partie mais un envoi aberrant. */
@@ -76,10 +84,13 @@ export function recordDe(jeuId: string, format: FormatPartie, d: Base = db()): M
   return r ? { justes: r.justes, nb: r.nb, dureeMs: r.duree_ms, le: r.le } : null
 }
 
-function valider(p: PartieEnvoyee): asserts p is PartieEnvoyee & { format: FormatPartie } {
+function valider(p: PartieEnvoyee): asserts p is PartieEnvoyee & { format: FormatEnregistre } {
   if (typeof p?.uid !== 'string' || !UID.test(p.uid)) throw new ErreurRequete('Partie sans identifiant valide.', 400)
   if (!estJeuPartie(p.jeu)) throw new ErreurRequete(`Jeu inconnu : ${String(p.jeu)}.`, 400)
-  if (!estFormat(p.format)) throw new ErreurRequete(`Format de partie inconnu : ${String(p.format)}.`, 400)
+  if (!estFormat(p.format) && p.format !== 'defi') {
+    throw new ErreurRequete(`Format de partie inconnu : ${String(p.format)}.`, 400)
+  }
+  if (p.format === 'defi') validerDefi(p)
   if (!Array.isArray(p.reponses) || p.reponses.length === 0) {
     throw new ErreurRequete('Partie vide : aucune réponse à enregistrer.', 400)
   }
@@ -95,20 +106,43 @@ function valider(p: PartieEnvoyee): asserts p is PartieEnvoyee & { format: Forma
   }
 }
 
+/**
+ * Un défi se vérifie contre le tirage du jour : mêmes faits, dans le même
+ * ordre. Le jour doit être aujourd'hui, à un jour près (fuseaux, partie
+ * commencée avant minuit).
+ */
+function validerDefi(p: PartieEnvoyee) {
+  if (p.jeu !== MELANGE.id) throw new ErreurRequete('Un défi se joue sur tous les jeux.', 400)
+  if (!estJour(p.defiDu)) throw new ErreurRequete('Défi sans date valide.', 400)
+  const aujourdhui = jourLocal()
+  if (p.defiDu < jourDecale(aujourdhui, -1) || p.defiDu > jourDecale(aujourdhui, 1)) {
+    throw new ErreurRequete(`Le défi du ${p.defiDu} n’est plus celui du jour.`, 400)
+  }
+  const attendues = defiDuJour(p.defiDu).map((q) => q.cle)
+  const recues = Array.isArray(p.reponses) ? p.reponses.map((r) => r?.cle) : []
+  if (recues.length !== QUESTIONS_DEFI || recues.some((c, i) => c !== attendues[i])) {
+    throw new ErreurRequete('Ces réponses ne sont pas celles du défi du jour.', 400)
+  }
+}
+
 export function enregistrerPartie(p: PartieEnvoyee, d: Base = db()): ResultatPartie {
   valider(p)
   const format = p.format
+  const defiDu = format === 'defi' ? p.defiDu! : null
   return d.transaction(() => {
-    const precedent = recordDe(p.jeu, format, d)
+    const precedent = format === 'defi' ? meilleurDefi(d) : recordDe(p.jeu, format, d)
+    const premiere =
+      defiDu !== null &&
+      !d.prepare(`SELECT 1 FROM automatisme_partie WHERE format = 'defi' AND defi_du = ?`).get(defiDu)
     const justes = p.reponses.filter((r) => r.juste).length
     const dureeMs = tempsBorne(p.dureeMs)
 
     const insertion = d
       .prepare(
-        `INSERT OR IGNORE INTO automatisme_partie (uid, jeu, format, duree_ms, nb, justes)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT OR IGNORE INTO automatisme_partie (uid, jeu, format, defi_du, duree_ms, nb, justes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(p.uid, p.jeu, format, dureeMs, p.reponses.length, justes)
+      .run(p.uid, p.jeu, format, defiDu, dureeMs, p.reponses.length, justes)
     if (insertion.changes === 0) return { precedent: null, nouveauRecord: false, dejaEnregistree: true }
 
     const reponse = d.prepare(
@@ -130,7 +164,16 @@ export function enregistrerPartie(p: PartieEnvoyee, d: Base = db()): ResultatPar
     })
 
     const cette: MeilleurScore = { justes, nb: p.reponses.length, dureeMs, le: '' }
-    return { precedent, nouveauRecord: meilleur(format, cette, precedent), dejaEnregistree: false }
+    if (defiDu !== null) {
+      // Un défi rejoué ne bat aucun record : seule la première partie du jour compte.
+      return {
+        precedent,
+        nouveauRecord: premiere && meilleur('serie', cette, precedent),
+        dejaEnregistree: false,
+        defi: { premiere, serie: serieDefi(defiDu, d) },
+      }
+    }
+    return { precedent, nouveauRecord: meilleur(format as FormatPartie, cette, precedent), dejaEnregistree: false }
   })()
 }
 
@@ -160,7 +203,10 @@ export function statsAutomatismes(ids: readonly PartieJeuId[], d: Base = db()): 
   const stats = new Map<PartieJeuId, StatsJeu>(ids.map((id) => [id, vide()]))
 
   const parties = d
-    .prepare(`SELECT jeu, COUNT(*) AS n, MAX(le) AS derniere FROM automatisme_partie GROUP BY jeu`)
+    // Les défis ont leur propre carte : ils ne comptent pas comme des parties du Mélange.
+    .prepare(
+      `SELECT jeu, COUNT(*) AS n, MAX(le) AS derniere FROM automatisme_partie WHERE format != 'defi' GROUP BY jeu`,
+    )
     .all() as Array<{ jeu: PartieJeuId; n: number; derniere: string }>
   for (const p of parties) {
     const s = stats.get(p.jeu)
@@ -246,4 +292,66 @@ export function etatsFaits(d: Base = db()): EtatsFaits {
     }
   }
   return etats
+}
+
+/* ---------------------------------------------------------------- défi -- */
+
+/** La première partie de chaque jour de défi : la seule qui compte. */
+const PREMIERES_DEFIS = `
+  SELECT defi_du, justes, nb, duree_ms, le FROM (
+    SELECT defi_du, justes, nb, duree_ms, le,
+           ROW_NUMBER() OVER (PARTITION BY defi_du ORDER BY le ASC, uid ASC) AS rang
+      FROM automatisme_partie WHERE format = 'defi'
+  ) WHERE rang = 1`
+
+type LigneDefi = { defi_du: string; justes: number; nb: number; duree_ms: number; le: string }
+const enScore = (l: LigneDefi): MeilleurScore => ({ justes: l.justes, nb: l.nb, dureeMs: l.duree_ms, le: l.le })
+
+/** Le meilleur défi : plus de justes, puis plus vite — premières parties du jour seulement. */
+export function meilleurDefi(d: Base = db()): MeilleurScore | null {
+  const l = d.prepare(`${PREMIERES_DEFIS} ORDER BY justes DESC, duree_ms ASC, le ASC LIMIT 1`).get() as
+    | LigneDefi
+    | undefined
+  return l ? enScore(l) : null
+}
+
+/**
+ * Jours de défi d'affilée jusqu'à `aujourdhui`. Le défi du jour pas encore
+ * fait n'interrompt rien : la série court jusqu'à hier, et ne tombe qu'au
+ * premier jour manqué.
+ */
+export function serieDefi(aujourdhui: string, d: Base = db()): number {
+  const lignes = d
+    .prepare(`SELECT DISTINCT defi_du FROM automatisme_partie WHERE format = 'defi'`)
+    .all() as Array<{ defi_du: string }>
+  const faits = new Set(lignes.map((l) => l.defi_du))
+  let jour = faits.has(aujourdhui) ? aujourdhui : jourDecale(aujourdhui, -1)
+  let n = 0
+  while (faits.has(jour)) {
+    n++
+    jour = jourDecale(jour, -1)
+  }
+  return n
+}
+
+export interface EtatDefi {
+  jour: string
+  /** La première partie d'aujourd'hui, null si le défi n'est pas encore fait. */
+  aujourdhui: MeilleurScore | null
+  serie: number
+  meilleur: MeilleurScore | null
+  /** Jours de défi au total. */
+  jours: number
+}
+
+export function etatDefi(jour: string = jourLocal(), d: Base = db()): EtatDefi {
+  const premieres = d.prepare(PREMIERES_DEFIS).all() as LigneDefi[]
+  const duJour = premieres.find((l) => l.defi_du === jour)
+  return {
+    jour,
+    aujourdhui: duJour ? enScore(duJour) : null,
+    serie: serieDefi(jour, d),
+    meilleur: meilleurDefi(d),
+    jours: premieres.length,
+  }
 }

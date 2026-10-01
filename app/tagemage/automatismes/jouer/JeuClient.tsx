@@ -19,7 +19,8 @@ import {
   type PartieJeuId,
   type Question,
 } from '@/core/automatismes'
-import type { MeilleurScore, ResultatPartie } from '@/core/db/automatismes'
+import { defiDuJour, QUESTIONS_DEFI } from '@/core/automatismes/defi'
+import type { FormatEnregistre, MeilleurScore, ResultatPartie } from '@/core/db/automatismes'
 import { poster } from '@/app/_composants/reseau'
 import { chronoLisible, lienJeu, scoreLisible } from '../format'
 
@@ -30,6 +31,9 @@ import { chronoLisible, lienJeu, scoreLisible } from '../format'
  * suivante est tirée dans le navigateur, la réponse vérifiée sur place. Deux
  * niveaux de correction — une ligne quand c'est juste, sans s'arrêter ; la
  * réponse et l'astuce quand c'est faux, chronomètre arrêté le temps de lire.
+ *
+ * Le défi du jour (`defi`) se joue ici aussi : ses dix questions sont fixées
+ * par la date, au lieu d'être choisies par la répétition.
  */
 
 type Etape = 'pret' | 'question' | 'correction' | 'fin'
@@ -57,13 +61,20 @@ export default function JeuClient({
   format,
   record,
   etats,
+  defi,
 }: {
   jeuId: PartieJeuId
-  format: FormatPartie
+  format: FormatEnregistre
   record: MeilleurScore | null
   etats: EtatsFaits
+  /** Pour le défi : son jour, et la première partie du jour si elle a déjà eu lieu. */
+  defi?: { jour: string; dejaFait: MeilleurScore | null }
 }) {
   const jeux = useMemo(() => jeuxDe(jeuId), [jeuId])
+  const jourDefi = defi?.jour
+  const questionsDefi = useMemo(() => (jourDefi ? defiDuJour(jourDefi) : null), [jourDefi])
+  // Nombre de questions d'une partie, null au chrono (la partie s'arrête au temps).
+  const nbQuestions = format === 'serie' ? QUESTIONS_SERIE : format === 'defi' ? QUESTIONS_DEFI : null
   // Copie locale, tenue à jour à chaque réponse : un fait raté revient dans
   // la même partie, sans attendre le prochain affichage de la page.
   const etatsFaits = useRef<EtatsFaits>({ ...etats })
@@ -88,7 +99,9 @@ export default function JeuClient({
 
   const poserQuestion = useCallback(
     (deja: Reponse[]) => {
-      const q = choisirQuestion(jeux, alea.current!, deja.map((r) => r.question.cle), etatsFaits.current, Date.now())
+      const q =
+        questionsDefi?.[deja.length] ??
+        choisirQuestion(jeux, alea.current!, deja.map((r) => r.question.cle), etatsFaits.current, Date.now())
       setQuestion(q)
       setSaisie('')
       const t = performance.now()
@@ -96,7 +109,7 @@ export default function JeuClient({
       setMaintenant(t)
       setEtape('question')
     },
-    [jeux],
+    [jeux, questionsDefi],
   )
 
   const commencer = useCallback(() => {
@@ -116,6 +129,7 @@ export default function JeuClient({
           uid: uid.current,
           jeu: jeuId,
           format,
+          defiDu: jourDefi,
           dureeMs: Math.round(dureeMs),
           reponses: liste.map((r) => ({
             jeu: r.question.jeu,
@@ -131,7 +145,7 @@ export default function JeuClient({
         setEnvoi({ etat: 'echec', message: (e as Error).message })
       }
     },
-    [jeuId, format],
+    [jeuId, format, jourDefi],
   )
 
   const terminer = useCallback(
@@ -177,7 +191,7 @@ export default function JeuClient({
       setJeuMs(total)
 
       if (format === 'chrono' && total >= DUREE_CHRONO_MS) return terminer(liste, DUREE_CHRONO_MS)
-      if (format === 'serie' && liste.length >= QUESTIONS_SERIE) {
+      if (nbQuestions !== null && liste.length >= nbQuestions) {
         if (juste) return terminer(liste, total)
         // La dernière erreur se lit aussi : la fin vient après la correction.
         return setEtape('correction')
@@ -185,13 +199,13 @@ export default function JeuClient({
       if (juste) poserQuestion(liste)
       else setEtape('correction')
     },
-    [etape, question, debutQuestion, reponses, jeuMs, format, terminer, poserQuestion],
+    [etape, question, debutQuestion, reponses, jeuMs, format, nbQuestions, terminer, poserQuestion],
   )
 
   const continuer = useCallback(() => {
-    if (format === 'serie' && reponses.length >= QUESTIONS_SERIE) terminer(reponses, jeuMs)
+    if (nbQuestions !== null && reponses.length >= nbQuestions) terminer(reponses, jeuMs)
     else poserQuestion(reponses)
-  }, [format, reponses, jeuMs, terminer, poserQuestion])
+  }, [nbQuestions, reponses, jeuMs, terminer, poserQuestion])
 
   // Entrée commence, continue après une correction, rejoue à la fin. Pas de
   // focus automatique sur ces boutons : l'Entrée qui valide une réponse
@@ -240,28 +254,42 @@ export default function JeuClient({
       </Link>
 
       <header className="mt-6 mb-6 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold tracking-tight">{nomDe(jeuId)}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{format === 'defi' ? 'Défi du jour' : nomDe(jeuId)}</h1>
         <span className="text-sm text-doux">
-          {FORMATS[format].libelle} · {FORMATS[format].but}
+          {format === 'defi'
+            ? `${QUESTIONS_DEFI} questions, les mêmes pour tous aujourd’hui`
+            : `${FORMATS[format].libelle} · ${FORMATS[format].but}`}
         </span>
       </header>
 
       {etape === 'pret' && (
         <section className="rounded-xl border border-bord bg-carte px-5 py-6">
           <p className="text-sm leading-relaxed text-doux">
-            {descriptionDe(jeuId)}{' '}
+            {format === 'defi'
+              ? `${QUESTIONS_DEFI} questions tirées dans tous les jeux, le plus vite possible. Seule la première partie du jour compte, pour le score comme pour la série de jours.`
+              : descriptionDe(jeuId)}{' '}
             {format === 'chrono'
               ? 'Réponds au plus grand nombre en 60 secondes de jeu.'
-              : `${QUESTIONS_SERIE} questions, le plus vite possible.`}{' '}
+              : format === 'serie'
+                ? `${QUESTIONS_SERIE} questions, le plus vite possible.`
+                : ''}{' '}
             Entrée valide ; une réponse vide compte comme « je ne sais pas » et affiche la correction.
           </p>
+          {defi?.dejaFait && (
+            <p className="mt-3 text-sm text-blanc">
+              Déjà fait aujourd’hui : {scoreLisible('defi', defi.dejaFait)}. Tu peux le rejouer pour t’entraîner ;
+              cette partie ne comptera pas.
+            </p>
+          )}
           <p className="mt-3 text-sm">
             {record ? (
               <>
                 Record : <span className="chiffres font-medium">{scoreLisible(format, record)}</span>
               </>
             ) : (
-              <span className="text-doux">Pas encore de record dans ce format.</span>
+              <span className="text-doux">
+                {format === 'defi' ? 'Premier défi : pas encore de record.' : 'Pas encore de record dans ce format.'}
+              </span>
             )}
           </p>
           <button
@@ -276,7 +304,7 @@ export default function JeuClient({
       {(etape === 'question' || etape === 'correction') && question && (
         <>
           <Compteur
-            format={format}
+            total={nbQuestions}
             justes={justes}
             nb={reponses.length}
             ecouleMs={ecouleMs}
@@ -409,33 +437,34 @@ export default function JeuClient({
 }
 
 function Compteur({
-  format,
+  total,
   justes,
   nb,
   ecouleMs,
   restantMs,
   pause,
 }: {
-  format: FormatPartie
+  /** Questions de la partie ; null au chrono. */
+  total: number | null
   justes: number
   nb: number
   ecouleMs: number
   restantMs: number
   pause: boolean
 }) {
-  const part = format === 'chrono' ? restantMs / DUREE_CHRONO_MS : nb / QUESTIONS_SERIE
+  const part = total === null ? restantMs / DUREE_CHRONO_MS : nb / total
   return (
     <div className="mb-3">
       <div className="flex items-baseline justify-between text-sm">
         <span className="chiffres">
-          {format === 'chrono' ? (
+          {total === null ? (
             <span className={`text-lg tabular-nums ${restantMs <= 10_000 ? 'text-faux' : ''}`}>
               {Math.ceil(restantMs / 1000)} s
             </span>
           ) : (
             <span className="text-lg tabular-nums">
               {/* Pendant une correction, la question corrigée est encore la courante. */}
-              {pause ? nb : Math.min(nb + 1, QUESTIONS_SERIE)} / {QUESTIONS_SERIE}
+              {pause ? nb : Math.min(nb + 1, total)} / {total}
             </span>
           )}
           {pause && <span className="ml-2 text-xs text-doux">en pause</span>}
@@ -443,7 +472,7 @@ function Compteur({
         <span className="chiffres text-doux">
           <span className="text-juste">✓ {justes}</span>
           {nb - justes > 0 && <span className="ml-3 text-faux">✗ {nb - justes}</span>}
-          {format === 'serie' && <span className="ml-3 tabular-nums">{chronoLisible(ecouleMs)}</span>}
+          {total !== null && <span className="ml-3 tabular-nums">{chronoLisible(ecouleMs)}</span>}
         </span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-carte-clair">
@@ -463,7 +492,7 @@ function Bilan({
   rejouer,
   renvoyer,
 }: {
-  format: FormatPartie
+  format: FormatEnregistre
   jeuId: PartieJeuId
   reponses: Reponse[]
   dureeMs: number
@@ -472,6 +501,7 @@ function Bilan({
   rejouer: () => void
   renvoyer: () => void
 }) {
+  // Après un défi, on propose le Mélange au chrono ; ailleurs, l'autre format du même jeu.
   const autre: FormatPartie = format === 'chrono' ? 'serie' : 'chrono'
 
   if (reponses.length === 0) {
@@ -505,12 +535,31 @@ function Bilan({
 
         <p className="mt-3 text-sm">
           {envoi?.etat === 'en_cours' && <span className="text-doux">Enregistrement…</span>}
+          {envoi?.etat === 'fait' && envoi.resultat.defi && (
+            <span className="mb-1 block">
+              {envoi.resultat.defi.premiere ? (
+                <>
+                  Série :{' '}
+                  <span className="chiffres font-medium">
+                    {envoi.resultat.defi.serie} jour{envoi.resultat.defi.serie > 1 ? 's' : ''} d’affilée
+                  </span>
+                  .
+                </>
+              ) : (
+                <span className="text-blanc">
+                  Partie d’entraînement : le défi était déjà fait aujourd’hui, seule la première partie compte.
+                </span>
+              )}
+            </span>
+          )}
           {envoi?.etat === 'fait' &&
             (envoi.resultat.nouveauRecord ? (
               <span className="font-medium text-juste">
                 {envoi.resultat.precedent
                   ? `Nouveau record ! Le précédent : ${scoreLisible(format, envoi.resultat.precedent)}.`
-                  : 'Premier score enregistré dans ce format.'}
+                  : format === 'defi'
+                    ? 'Premier défi enregistré.'
+                    : 'Premier score enregistré dans ce format.'}
               </span>
             ) : (
               <span className="text-doux">
