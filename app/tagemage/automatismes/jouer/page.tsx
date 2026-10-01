@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { estFormat, estJeuPartie, MELANGE } from '@/core/automatismes'
-import { etatDefi, etatsFaits, recordDe } from '@/core/db/automatismes'
+import { etatDefi, etatsFaits, jeuxConseilles, recordDe } from '@/core/db/automatismes'
 import JeuClient from './JeuClient'
 
 export const dynamic = 'force-dynamic'
@@ -30,6 +30,9 @@ export default async function PageJouer({
 
   if (!estJeuPartie(jeu) || !estFormat(format)) notFound()
 
+  // Le Mélange penche vers les jeux que désignent les erreurs réelles.
+  const poidsJeux = jeu === MELANGE.id ? Object.fromEntries(jeuxConseilles().map((c) => [c.jeu, 2])) : undefined
+
   return (
     <JeuClient
       key={`${jeu}-${format}`}
@@ -37,6 +40,7 @@ export default async function PageJouer({
       format={format}
       record={recordDe(jeu, format)}
       etats={etatsFaits()}
+      poidsJeux={poidsJeux}
     />
   )
 }

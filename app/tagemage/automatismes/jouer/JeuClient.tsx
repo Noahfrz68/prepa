@@ -16,6 +16,7 @@ import {
   verifier,
   type FormatPartie,
   type EtatsFaits,
+  type JeuId,
   type PartieJeuId,
   type Question,
 } from '@/core/automatismes'
@@ -62,6 +63,7 @@ export default function JeuClient({
   record,
   etats,
   defi,
+  poidsJeux,
 }: {
   jeuId: PartieJeuId
   format: FormatEnregistre
@@ -69,6 +71,8 @@ export default function JeuClient({
   etats: EtatsFaits
   /** Pour le défi : son jour, et la première partie du jour si elle a déjà eu lieu. */
   defi?: { jour: string; dejaFait: MeilleurScore | null }
+  /** Mélange : les jeux désignés par les erreurs réelles pèsent plus. */
+  poidsJeux?: Partial<Record<JeuId, number>>
 }) {
   const jeux = useMemo(() => jeuxDe(jeuId), [jeuId])
   const jourDefi = defi?.jour
@@ -101,7 +105,7 @@ export default function JeuClient({
     (deja: Reponse[]) => {
       const q =
         questionsDefi?.[deja.length] ??
-        choisirQuestion(jeux, alea.current!, deja.map((r) => r.question.cle), etatsFaits.current, Date.now())
+        choisirQuestion(jeux, alea.current!, deja.map((r) => r.question.cle), etatsFaits.current, Date.now(), poidsJeux)
       setQuestion(q)
       setSaisie('')
       const t = performance.now()
@@ -109,7 +113,7 @@ export default function JeuClient({
       setMaintenant(t)
       setEtape('question')
     },
-    [jeux, questionsDefi],
+    [jeux, questionsDefi, poidsJeux],
   )
 
   const commencer = useCallback(() => {

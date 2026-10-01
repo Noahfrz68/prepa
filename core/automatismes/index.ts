@@ -77,6 +77,9 @@ export const REPRISES_MAX = 15
  * fait. Les faits à revoir pèsent au plus autant que tout le reste : une
  * question sur deux au maximum est une reprise, la partie reste une partie.
  * Les faits des `ECART_MIN` dernières questions sont écartés.
+ *
+ * `poidsJeux` (Mélange) : un jeu de poids 2 fournit deux fois plus de
+ * candidats — ceux que désignent les erreurs réelles. 1 par défaut.
  */
 export function choisirQuestion(
   jeux: readonly Jeu[],
@@ -84,11 +87,13 @@ export function choisirQuestion(
   recentes: readonly string[],
   etats: EtatsFaits,
   maintenant: number,
+  poidsJeux: Partial<Record<JeuId, number>> = {},
 ): Question {
   const evites = new Set(recentes.slice(-ECART_MIN))
+  const poidsDesJeux = jeux.map((j) => poidsJeux[j.id] ?? 1)
   const candidats: Question[] = []
   for (let essai = 0; essai < CANDIDATS * 3 && candidats.length < CANDIDATS; essai++) {
-    const q = a.choix(jeux).produire(a)
+    const q = tirerPondere(a, jeux, poidsDesJeux).produire(a)
     if (!evites.has(q.cle)) candidats.push(q)
   }
 

@@ -1,6 +1,6 @@
 import { decimal } from '@/app/_composants/nombres'
 import type { FormatPartie } from '@/core/automatismes'
-import type { FormatEnregistre, MeilleurScore } from '@/core/db/automatismes'
+import type { Conseil, FormatEnregistre, MeilleurScore } from '@/core/db/automatismes'
 
 /** « 3,4 s » sous la minute, « 1 min 12 s » au-delà. */
 export function chronoLisible(ms: number): string {
@@ -21,3 +21,9 @@ export function lienJeu(jeu: string, format: FormatPartie): string {
 }
 
 export const LIEN_DEFI = '/tagemage/automatismes/jouer?defi=1'
+
+/** « 4 erreurs récentes en pourcentages et variations » */
+export function motifConseil(c: Conseil): string {
+  const n = c.motif.erreurs
+  return `${n} erreur${n > 1 ? 's' : ''} récente${n > 1 ? 's' : ''} en ${c.motif.libelle}`
+}

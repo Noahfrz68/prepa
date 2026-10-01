@@ -111,6 +111,17 @@ describe('choisirQuestion', () => {
     for (const n of parJeu.values()) expect(n).toBeGreaterThan(2000 / JEUX.length / 2)
   })
 
+  it('fait pencher le Mélange vers les jeux conseillés', () => {
+    const a = aleaDepuis(13)
+    let fractions = 0
+    for (let i = 0; i < 4000; i++) {
+      if (choisirQuestion(jeuxDe(MELANGE.id), a, [], {}, MAINTENANT, { fractions: 2 }).jeu === 'fractions') fractions++
+    }
+    // Poids 2 sur 9 au lieu de 1 sur 8.
+    expect(fractions / 4000).toBeGreaterThan(0.18)
+    expect(fractions / 4000).toBeLessThan(0.27)
+  })
+
   it('rejoue la même suite à graine égale', () => {
     const tirer = () => {
       const a = aleaDepuis(8)

@@ -10,10 +10,12 @@ import {
   QUESTIONS_SERIE,
   type EtatsFaits,
   type FormatPartie,
+  type JeuId,
   type PartieJeuId,
 } from '@/core/automatismes'
 import { SERIE_MAITRISE } from '@/core/automatismes/poids'
 import { defiDuJour, estJour, jourDecale, jourLocal, QUESTIONS_DEFI } from '@/core/automatismes/defi'
+import { CAUSES_DE_REFLEXE, JEUX_PAR_SOUS_TEST, SOUS_TESTS_DE_METHODE } from '@/core/automatismes/liens-sous-tests'
 
 /**
  * Les parties d'automatismes : enregistrement, records, faits à revoir.
@@ -354,4 +356,75 @@ export function etatDefi(jour: string = jourLocal(), d: Base = db()): EtatDefi {
     meilleur: meilleurDefi(d),
     jours: premieres.length,
   }
+}
+
+/* ----------------------------------------------- erreurs réelles -- */
+
+export interface Conseil {
+  jeu: JeuId
+  /** Poids des erreurs récentes qui y mènent (voir `jeuxConseilles`). */
+  poids: number
+  /** Le sous-test qui y mène le plus, et ses erreurs des 30 derniers jours. */
+  motif: { skillId: string; libelle: string; erreurs: number }
+}
+
+/** En dessous, pas de conseil : une erreur ancienne et isolée ne désigne rien. */
+export const SEUIL_CONSEIL = 1
+/** Combien de jeux sont mis en avant au plus. */
+export const CONSEILS_MAX = 2
+
+/** Une erreur de la semaine compte pleinement ; elle s'estompe ensuite. */
+function poidsAge(jours: number): number {
+  return jours < 7 ? 1 : jours < 14 ? 0.6 : 0.3
+}
+
+/**
+ * Les automatismes à travailler d'après les erreurs réelles des 30 derniers
+ * jours, en drill comme en épreuve : chaque réponse fausse ou sautée d'un
+ * sous-test relié à un jeu (JEUX_PAR_SOUS_TEST) pèse sur ce jeu, d'autant
+ * plus qu'elle est récente. Celles que le carnet attribue au calcul ou au
+ * temps comptent double : ce sont exactement celles qu'un réflexe évite.
+ * Une question non traitée faute de temps n'est pas une erreur ; dans un
+ * sous-test où la méthode domine (SOUS_TESTS_DE_METHODE), seule compte une
+ * erreur attribuée au calcul ou au temps.
+ */
+export function jeuxConseilles(d: Base = db()): Conseil[] {
+  const lignes = d
+    .prepare(
+      `SELECT i.skill_id, s.libelle, c.cause, julianday('now') - julianday(a.created_at) AS age
+         FROM attempt a
+         JOIN item i ON i.id = a.item_id
+         LEFT JOIN skill s ON s.id = i.skill_id
+         LEFT JOIN carnet_note c ON c.item_id = i.id
+        WHERE i.exam_id = 'tagemage' AND i.skill_id IS NOT NULL
+          AND a.est_correct = 0 AND IFNULL(a.motif_blanc, '') != 'non_traite'
+          AND a.created_at >= datetime('now', '-30 days')`,
+    )
+    .all() as Array<{ skill_id: string; libelle: string | null; cause: string | null; age: number }>
+
+  const parJeu = new Map<JeuId, { poids: number; sousTests: Map<string, { libelle: string; poids: number; n: number }> }>()
+  for (const l of lignes) {
+    const jeux = JEUX_PAR_SOUS_TEST[l.skill_id]
+    if (!jeux) continue
+    const reflexe = CAUSES_DE_REFLEXE.has(l.cause ?? '')
+    if (SOUS_TESTS_DE_METHODE.has(l.skill_id) && !reflexe) continue
+    const p = poidsAge(l.age) * (reflexe ? 2 : 1)
+    for (const j of jeux) {
+      const e = parJeu.get(j) ?? { poids: 0, sousTests: new Map() }
+      e.poids += p
+      const st = e.sousTests.get(l.skill_id) ?? { libelle: l.libelle ?? l.skill_id, poids: 0, n: 0 }
+      st.poids += p
+      st.n++
+      e.sousTests.set(l.skill_id, st)
+      parJeu.set(j, e)
+    }
+  }
+
+  const conseils: Conseil[] = []
+  for (const [jeu, e] of parJeu) {
+    if (e.poids < SEUIL_CONSEIL) continue
+    const [skillId, st] = [...e.sousTests].sort(([, x], [, y]) => y.poids - x.poids)[0]
+    conseils.push({ jeu, poids: e.poids, motif: { skillId, libelle: st.libelle, erreurs: st.n } })
+  }
+  return conseils.sort((x, y) => y.poids - x.poids).slice(0, CONSEILS_MAX)
 }

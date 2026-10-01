@@ -10,7 +10,9 @@ import { reussiteAFroidParSection } from '@/core/stats/queries'
 import { tauxAFroid } from '@/core/stats/afroid'
 import { planDeLaSemaine } from '@/core/db/semaine'
 import { prochaineSeance } from '@/app/plan/prochaine'
-import { etatDefi } from '@/core/db/automatismes'
+import { etatDefi, jeuxConseilles } from '@/core/db/automatismes'
+import { jeu as jeuDe } from '@/core/automatismes'
+import { lienJeu, motifConseil } from './automatismes/format'
 import CarteDefi from './automatismes/CarteDefi'
 import { SECONDES_PAR_QUESTION, SECTIONS } from '@/exams/tagemage'
 import { SEUIL_FIABILITE } from '@/core/stats/calculs'
@@ -44,6 +46,7 @@ export default function HubTageMage() {
   // La même séance que l'accueil : la première tâche non faite du plan.
   const prochaine = total > 0 ? prochaineSeance(planDeLaSemaine().taches) : null
   const defi = etatDefi()
+  const conseil = jeuxConseilles()[0]
   // Un texte long de sept questions validé remplace le texte de cinq : la
   // carte annonce ce que le diagnostic servira vraiment.
   const questionsComprehension =
@@ -125,6 +128,18 @@ export default function HubTageMage() {
       {/* Le défi d'automatismes ne demande aucune banque : il s'affiche toujours. */}
       <div className="mb-4">
         <CarteDefi etat={defi} compacte />
+        {conseil && (
+          <Link
+            href={lienJeu(conseil.jeu, 'chrono')}
+            className="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-xl border border-bord bg-carte px-5 py-3 text-sm transition hover:border-accent"
+          >
+            <span>
+              <span className="font-medium">Automatisme conseillé : {jeuDe(conseil.jeu)!.nom}</span>
+              <span className="text-doux"> · {motifConseil(conseil)}</span>
+            </span>
+            <span className="text-accent">60 secondes →</span>
+          </Link>
+        )}
       </div>
 
       {prochaine && (

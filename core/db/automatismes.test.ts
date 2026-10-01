@@ -5,6 +5,7 @@ import {
   enregistrerPartie,
   etatDefi,
   etatsFaits,
+  jeuxConseilles,
   meilleurDefi,
   recordDe,
   serieDefi,
@@ -13,6 +14,7 @@ import {
 } from './automatismes'
 import { defiDuJour, jourDecale, jourLocal } from '@/core/automatismes/defi'
 import { QUESTIONS_SERIE } from '@/core/automatismes'
+import { skillsTageMage } from '@/exams/tagemage'
 
 /**
  * Les parties d'automatismes, sur une base en mémoire et sur les deux
@@ -274,6 +276,90 @@ describe.each(MOTEURS)('$nom', (moteur) => {
       // Mais ses réponses nourrissent la répétition et les statistiques.
       expect(Object.keys(etatsFaits(db))).toHaveLength(10)
       expect(s.reussite).toBeCloseTo(0.5)
+    })
+  })
+
+  describe('jeux conseillés d’après les erreurs réelles', () => {
+    let item = 0
+
+    beforeEach(() => {
+      const s = db.prepare(
+        `INSERT OR IGNORE INTO skill (id, exam_id, section, libelle, poids_examen, ordre) VALUES (?, 'tagemage', ?, ?, 1, 0)`,
+      )
+      for (const k of skillsTageMage()) s.run(k.id, k.section, k.libelle)
+      db.prepare(`INSERT INTO exam_session (id, exam_id, type, sections) VALUES (1, 'tagemage', 'drill', '[]')`).run()
+    })
+
+    /** Une réponse à une question du sous-test donné, il y a `jours` jours. */
+    function reponse(
+      skill: string,
+      jours: number,
+      o: { juste?: boolean; saute?: boolean; motif?: string; cause?: string } = {},
+    ) {
+      const id = ++item
+      db.prepare(
+        `INSERT INTO item (id, exam_id, section, skill_id, type_item, enonce, options, bonne_reponse, source, statut)
+         VALUES (?, 'tagemage', 'calcul', ?, 'qcm', ?, '["a","b","c","d","e"]', 'A', 'genere', 'valide')`,
+      ).run(id, skill, `Q${id}`)
+      db.prepare(
+        `INSERT INTO attempt (session_id, item_id, est_correct, a_saute, motif_blanc, temps_ms, confiance, points_gagnes, created_at)
+         VALUES (1, ?, ?, ?, ?, 1000, 2, 0, datetime('now', ?))`,
+      ).run(id, o.juste ? 1 : 0, o.saute ? 1 : 0, o.motif ?? null, `-${jours} days`)
+      if (o.cause) db.prepare(`INSERT INTO carnet_note (item_id, cause) VALUES (?, ?)`).run(id, o.cause)
+    }
+
+    const POURCENTAGES = 'tm.calcul.pourcentages_et_variations'
+
+    it('ne conseille rien sans erreur', () => {
+      reponse(POURCENTAGES, 1, { juste: true })
+      expect(jeuxConseilles(db)).toEqual([])
+    })
+
+    it('désigne les jeux du sous-test raté, avec son motif', () => {
+      for (let i = 0; i < 3; i++) reponse(POURCENTAGES, 2)
+      const c = jeuxConseilles(db)
+      expect(c.map((x) => x.jeu).sort()).toEqual(['calcul', 'fractions'])
+      expect(c[0].motif).toEqual({ skillId: POURCENTAGES, libelle: 'pourcentages et variations', erreurs: 3 })
+    })
+
+    it('compte une question sautée, pas une question non traitée faute de temps', () => {
+      reponse('tm.calcul.arithmetique_et_divisibilite', 1, { saute: true })
+      reponse('tm.logique.suites_de_lettres', 1, { saute: true, motif: 'non_traite' })
+      expect(jeuxConseilles(db).map((x) => x.jeu)).toEqual(['premiers'])
+    })
+
+    it('oublie les erreurs de plus de 30 jours, et laisse s’estomper les anciennes', () => {
+      reponse(POURCENTAGES, 40)
+      reponse(POURCENTAGES, 40)
+      // Une seule erreur de 20 jours pèse 0,3 : pas assez pour un conseil.
+      reponse('tm.calcul.arithmetique_et_divisibilite', 20)
+      expect(jeuxConseilles(db)).toEqual([])
+    })
+
+    it('compte double une erreur que le carnet attribue au calcul ou au temps', () => {
+      // 10 jours : 0,6 — sous le seuil seule, au-dessus une fois doublée.
+      reponse('tm.calcul.arithmetique_et_divisibilite', 10)
+      expect(jeuxConseilles(db)).toEqual([])
+      reponse('tm.calcul.aires_et_volumes', 10, { cause: 'calcul' })
+      expect(jeuxConseilles(db).map((x) => x.jeu)).toEqual(['puissances'])
+    })
+
+    it('ne retient une erreur de méthode que si le carnet l’attribue au calcul', () => {
+      for (let i = 0; i < 5; i++) reponse('tm.calcul.systemes', 1)
+      expect(jeuxConseilles(db)).toEqual([])
+      reponse('tm.calcul.systemes', 1, { cause: 'temps' })
+      expect(jeuxConseilles(db)).toMatchObject([{ jeu: 'calcul', poids: 2, motif: { erreurs: 1 } }])
+    })
+
+    it('ignore les sous-tests sans automatisme, et garde les deux jeux les plus désignés', () => {
+      for (let i = 0; i < 5; i++) reponse('tm.comprehension.inference', 1)
+      for (let i = 0; i < 4; i++) reponse('tm.logique.suites_de_lettres', 1)
+      for (let i = 0; i < 2; i++) reponse('tm.calcul.arithmetique_et_divisibilite', 1)
+      reponse('tm.calcul.suites_et_progressions', 1)
+      const c = jeuxConseilles(db)
+      // lettres 4, suites 4 + 1 = 5, premiers 2.
+      expect(c.map((x) => x.jeu)).toEqual(['suites', 'lettres'])
+      expect(c[0].poids).toBeCloseTo(5)
     })
   })
 
