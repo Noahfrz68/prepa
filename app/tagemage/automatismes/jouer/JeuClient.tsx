@@ -167,7 +167,9 @@ export default function JeuClient({
       if (etape !== 'question' || !question) return
       const tempsMs = performance.now() - debutQuestion
       const juste = verifier(question.attendu, texte)
-      const r: Reponse = { question, saisie: texte.trim(), juste, tempsMs, lent: juste && tempsMs > seuilLent(question) }
+      // Une proposition se garde par son texte (« mardi »), pas par son numéro.
+      const lu = question.saisie === 'choix' ? (question.choix?.[Number(texte)] ?? '') : texte.trim()
+      const r: Reponse = { question, saisie: lu, juste, tempsMs, lent: juste && tempsMs > seuilLent(question) }
       etatsFaits.current[question.cle] = apresReponse(etatsFaits.current[question.cle], juste, r.lent, Date.now())
       const liste = [...reponses, r]
       const total = jeuMs + tempsMs
@@ -208,12 +210,15 @@ export default function JeuClient({
     return () => window.removeEventListener('keydown', touche)
   }, [etape, commencer, continuer])
 
-  // Oui / non au clavier : O et N.
+  // Au clavier : O et N pour oui / non, 1 à 7 pour une proposition.
   useEffect(() => {
-    if (etape !== 'question' || question?.saisie !== 'ouinon') return
+    if (etape !== 'question' || (question?.saisie !== 'ouinon' && question?.saisie !== 'choix')) return
     const touche = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
-      if (k === 'o' || k === 'y') repondre('oui')
+      if (question.saisie === 'choix') {
+        const i = Number(k) - 1
+        if (Number.isInteger(i) && i >= 0 && i < (question.choix?.length ?? 0)) repondre(String(i))
+      } else if (k === 'o' || k === 'y') repondre('oui')
       else if (k === 'n') repondre('non')
     }
     window.addEventListener('keydown', touche)
@@ -290,11 +295,28 @@ export default function JeuClient({
           </p>
 
           <section className="rounded-xl border border-bord bg-carte px-5 py-6">
-            <p className="chiffres text-3xl font-semibold tracking-tight">{question.enonce}</p>
+            <p
+              className={`chiffres font-semibold tracking-tight ${question.enonce.length > 40 ? 'text-xl leading-snug' : 'text-3xl'}`}
+            >
+              {question.enonce}
+            </p>
             {question.aide && <p className="mt-1 text-xs text-doux">{question.aide}</p>}
 
             {etape === 'question' &&
-              (question.saisie === 'ouinon' ? (
+              (question.saisie === 'choix' ? (
+                <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {question.choix!.map((c, i) => (
+                    <button
+                      key={c}
+                      onClick={() => repondre(String(i))}
+                      className="chiffres rounded-lg border border-bord px-3 py-3 text-left text-base font-medium transition hover:border-accent"
+                    >
+                      <span className="mr-2 text-xs text-doux">{i + 1}</span>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              ) : question.saisie === 'ouinon' ? (
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   {(['oui', 'non'] as const).map((v) => (
                     <button

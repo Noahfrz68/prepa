@@ -10,7 +10,15 @@ import type { Alea } from '@/core/generation/alea'
  * répétition et les records, pas sur un énoncé.
  */
 
-export type JeuId = 'calcul' | 'puissances' | 'fractions' | 'premiers' | 'lettres'
+export type JeuId =
+  | 'calcul'
+  | 'puissances'
+  | 'fractions'
+  | 'premiers'
+  | 'lettres'
+  | 'ordres'
+  | 'suites'
+  | 'calendrier'
 
 /** Ce qu'on attend, et comment le reconnaître dans une saisie libre. */
 export type Attendu =
@@ -22,12 +30,15 @@ export type Attendu =
   | { genre: 'ouinon'; valeur: boolean }
   /** Une décomposition : les facteurs premiers avec leur multiplicité. */
   | { genre: 'facteurs'; valeur: number }
+  /** L'indice de la bonne proposition dans `Question.choix`, à partir de 0. */
+  | { genre: 'choix'; valeur: number }
 
 /**
  * Le clavier à proposer : numérique, numérique avec signe (le pavé décimal de
- * l'iPhone n'a pas de « − »), texte, ou deux boutons.
+ * l'iPhone n'a pas de « − »), texte, deux boutons, ou une proposition à
+ * choisir (`Question.choix`).
  */
-export type Saisie = 'nombre' | 'relatif' | 'texte' | 'ouinon'
+export type Saisie = 'nombre' | 'relatif' | 'texte' | 'ouinon' | 'choix'
 
 export interface Question {
   jeu: JeuId
@@ -48,6 +59,8 @@ export interface Question {
   table?: string
   /** Seuil « trop lent » propre à cette question, s'il diffère de celui du jeu. */
   lentMs?: number
+  /** Les propositions, pour une saisie `choix`. */
+  choix?: string[]
 }
 
 export interface Jeu {

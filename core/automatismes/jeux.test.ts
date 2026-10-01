@@ -54,8 +54,72 @@ function recalcul(q: Question): number | string | boolean {
     case 'division': return nb[0] / nb[1]
     case 'pourcentage': return (nb[0] * nb[1]) / 100
     case 'successives': return ((100 + nb[0]) * (100 + nb[1])) / 100 - 100
+    case 'ordre': return plusProche(q, exactOrdre(param, nb))
+    case 'suite': return suivant(param, q.enonce, nb)
+    case 'calendrier': return jourAttendu(param, q.enonce, nb)
   }
   throw new Error(`Clé inconnue : ${q.cle}`)
+}
+
+/** La valeur exacte d'un calcul d'ordre de grandeur, lue dans l'énoncé. */
+function exactOrdre(genre: string, nb: number[]): number {
+  switch (genre) {
+    case 'produit': return nb[0] * nb[1]
+    case 'quotient': return nb[0] / nb[1]
+    case 'pourcentage': return (nb[0] * nb[1]) / 100
+    case 'racine': return Math.sqrt(nb[0])
+  }
+  throw new Error(genre)
+}
+
+/** L'indice de la proposition la plus proche, en rapport. */
+function plusProche(q: Question, exact: number): number {
+  const ecarts = q.choix!.map((c) => Math.abs(Math.log(Number(c.replace(/\s/g, '').replace(',', '.')) / exact)))
+  return ecarts.indexOf(Math.min(...ecarts))
+}
+
+/** Le terme suivant, recalculé depuis les termes affichés. */
+function suivant(genre: string, enonce: string, t: number[]): number | string {
+  if (genre.startsWith('lettres_')) {
+    const r = (enonce.match(/[A-Z]/g) ?? []).map((l) => ALPHABET.indexOf(l) + 1)
+    const x = {
+      lettres_saut: r[4] + (r[4] - r[3]),
+      lettres_croissant: r[4] + (r[4] - r[3]) + 1,
+      lettres_rebours: r[4] - (r[3] - r[4]),
+      lettres_alternee: r[4] + (r[1] - r[0]),
+    }[genre]!
+    return ALPHABET[x - 1]
+  }
+  switch (genre) {
+    case 'arithmetique': return t[4] + (t[4] - t[3])
+    case 'geometrique': return t[4] * (t[4] / t[3])
+    case 'ecart_croissant': return t[4] + (t[4] - t[3]) + (t[4] - t[3] - (t[3] - t[2]))
+    case 'alternee': return t[4] + (t[1] - t[0])
+    case 'fibonacci': return t[3] + t[4]
+    case 'entrelacees': return t[3] + (t[3] - t[1])
+    case 'puissances': {
+      const carres = t.every((x, i) => Math.sqrt(x) === Math.sqrt(t[0]) + i)
+      return carres ? (Math.sqrt(t[4]) + 1) ** 2 : (Math.round(Math.cbrt(t[4])) + 1) ** 3
+    }
+  }
+  throw new Error(genre)
+}
+
+const JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+/** Les dates « 3 février 2027 » d'un énoncé, en jours de la semaine (lundi = 0) selon le vrai calendrier. */
+function joursDesDates(enonce: string): number[] {
+  return [...enonce.matchAll(/(\d+|1er) ([a-zéû]+) (\d{4})/g)].map(([, j, m, an]) =>
+    (new Date(Date.UTC(Number(an), MOIS.indexOf(m), j === '1er' ? 1 : Number(j))).getUTCDay() + 6) % 7,
+  )
+}
+
+function jourAttendu(genre: string, enonce: string, nb: number[]): number {
+  if (genre === 'dates') return joursDesDates(enonce)[1]
+  const j = JOURS.indexOf(enonce.match(/sommes ([a-z]+)/)![1])
+  const k = nb.at(-1)!
+  return (((genre === 'dans' ? j + k : j - k) % 7) + 7) % 7
 }
 
 function valeurDe(at: Attendu): number | string | boolean {
@@ -73,6 +137,7 @@ function fausse(at: Attendu): string {
     case 'lettre': return at.valeur === 'A' ? 'B' : 'A'
     case 'ouinon': return at.valeur ? 'non' : 'oui'
     case 'facteurs': return `2 × ${at.valeur}`
+    case 'choix': return String(at.valeur + 1)
   }
 }
 
@@ -88,7 +153,7 @@ describe('automatismes — chaque question est juste', () => {
 
   it('accepte la réponse affichée, refuse une réponse fausse', () => {
     for (const q of toutes()) {
-      const affichee = q.reponse.replace(/^[≈×]\s*/, '')
+      const affichee = q.attendu.genre === 'choix' ? String(q.attendu.valeur) : q.reponse.replace(/^[≈×]\s*/, '')
       expect(verifier(q.attendu, affichee), `${q.enonce} → « ${q.reponse} »`).toBe(true)
       expect(verifier(q.attendu, fausse(q.attendu)), `${q.enonce} → ${fausse(q.attendu)}`).toBe(false)
     }
@@ -116,6 +181,36 @@ describe('automatismes — chaque question est juste', () => {
   it('montre la réponse dans la correction longue des faits à apprendre', () => {
     for (const q of toutes().filter((q) => /^(carre|cube|deux|rang|lettre|rebours|pourcentage|successives)/.test(q.cle))) {
       expect(q.astuce, q.cle).toContain(q.reponse)
+    }
+  })
+})
+
+describe('automatismes — jeux à propositions', () => {
+  it('ordres de grandeur : cinq valeurs distinctes, une seule à moins de 25 % de la valeur exacte', () => {
+    for (const q of TOUTES.get('ordres')!) {
+      expect(q.choix, q.enonce).toHaveLength(5)
+      expect(new Set(q.choix).size, q.enonce).toBe(5)
+      const [genre] = q.cle.split(':').slice(1)
+      const exact = exactOrdre(genre, nombresDe(q.enonce))
+      const proches = q.choix!.filter((c) => {
+        const v = Number(c.replace(/\s/g, '').replace(',', '.'))
+        return Math.abs(v / exact - 1) < 0.25
+      })
+      expect(proches, `${q.enonce} : ${q.choix!.join(' / ')}`).toEqual([q.reponse])
+    }
+  })
+
+  it('calendrier : le jour annoncé dans l’énoncé est le vrai', () => {
+    for (const q of TOUTES.get('calendrier')!.filter((x) => x.cle === 'calendrier:dates')) {
+      const annonce = JOURS.indexOf(q.enonce.match(/est un ([a-z]+)\./)![1])
+      expect(annonce, q.enonce).toBe(joursDesDates(q.enonce)[0])
+    }
+  })
+
+  it('suites : des termes positifs, et des lettres dans l’alphabet', () => {
+    for (const q of TOUTES.get('suites')!) {
+      if (q.attendu.genre === 'nombre') expect(q.attendu.valeur, q.enonce).toBeGreaterThan(0)
+      else expect(q.attendu.genre === 'lettre' && ALPHABET.includes(q.attendu.valeur), q.enonce).toBe(true)
     }
   })
 })

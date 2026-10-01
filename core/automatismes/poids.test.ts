@@ -100,7 +100,7 @@ describe('choisirQuestion', () => {
     for (let i = 0; i < 500; i++) expect(choisirQuestion(jeuxDe('lettres'), a, recentes, etats, MAINTENANT).cle).not.toBe('rang:P')
   })
 
-  it('pioche dans les cinq jeux pour le Mélange, à parts comparables', () => {
+  it('pioche dans tous les jeux pour le Mélange, à parts comparables', () => {
     const a = aleaDepuis(3)
     const parJeu = new Map<string, number>()
     for (let i = 0; i < 2000; i++) {

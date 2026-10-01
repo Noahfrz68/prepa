@@ -84,5 +84,7 @@ export function verifier(attendu: Attendu, saisie: string): boolean {
       return lireOuiNon(saisie) === attendu.valeur
     case 'facteurs':
       return lireFacteurs(saisie) === attendu.valeur
+    case 'choix':
+      return saisie.trim() === String(attendu.valeur)
   }
 }

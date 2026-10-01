@@ -1,9 +1,12 @@
 import type { Alea } from '@/core/generation/alea'
 import { calcul } from './jeux/calcul'
+import { calendrier } from './jeux/calendrier'
 import { fractions } from './jeux/fractions'
 import { lettres } from './jeux/lettres'
+import { ordres } from './jeux/ordres'
 import { premiers } from './jeux/premiers'
 import { puissances } from './jeux/puissances'
+import { suites } from './jeux/suites'
 import { poidsFait, tirerPondere, type EtatsFaits } from './poids'
 import type { Jeu, JeuId, Question } from './types'
 
@@ -32,7 +35,7 @@ export function estFormat(f: unknown): f is FormatPartie {
 }
 
 /** Dans l'ordre d'affichage : du plus utile au plus spécialisé. */
-export const JEUX: Jeu[] = [calcul, puissances, fractions, premiers, lettres]
+export const JEUX: Jeu[] = [calcul, puissances, fractions, premiers, lettres, ordres, suites, calendrier]
 
 const PAR_ID = new Map(JEUX.map((j) => [j.id, j]))
 
@@ -123,7 +126,7 @@ export function choisirQuestion(
 export const MELANGE = {
   id: 'melange',
   nom: 'Mélange',
-  description: 'Les cinq jeux mêlés, ce qui est à revoir en priorité. L’échauffement idéal avant une série.',
+  description: 'Tous les jeux mêlés, ce qui est à revoir en priorité. L’échauffement idéal avant une série.',
 } as const
 
 /** Ce qu'on joue dans une partie : un jeu, ou le Mélange. */
