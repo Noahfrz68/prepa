@@ -37,11 +37,13 @@ export function defiDuJour(jour: string): Question[] {
   // La date en nombre (20261001), brassée pour que deux jours voisins ne
   // donnent pas des tirages voisins.
   const a = aleaDepuis(Math.imul(Number(jour.replace(/-/g, '')), 2654435761) >>> 0)
-  const jeux = [...a.melanger(JEUX).slice(0, JEUX_MIN_DEFI)]
+  // Un jeu n'entre dans le défi qu'à sa date : les défis d'avant restent ceux qui ont été joués.
+  const disponibles = JEUX.filter((j) => !j.defiDepuis || j.defiDepuis <= jour)
+  const jeux = [...a.melanger(disponibles).slice(0, JEUX_MIN_DEFI)]
   // Deux questions au plus par jeu : au-delà, un jeu à peu de faits (le
   // calendrier en a trois) reposerait le même.
   while (jeux.length < QUESTIONS_DEFI) {
-    const j = a.choix(JEUX)
+    const j = a.choix(disponibles)
     if (jeux.filter((x) => x === j).length < 2) jeux.push(j)
   }
 

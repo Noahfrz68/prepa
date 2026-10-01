@@ -22,7 +22,8 @@ function normaliser(saisie: string): string {
 
 /** Un nombre : entier, décimal (virgule ou point), ou fraction « a/b ». */
 export function lireNombre(saisie: string): number | null {
-  const s = normaliser(saisie).replace(/%$/, '')
+  // « 12π » : les réponses en nombre de π se tapent avec ou sans le symbole.
+  const s = normaliser(saisie).replace(/[%π]$/, '')
   const f = /^([+-]?\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/.exec(s)
   if (f) {
     const d = Number(f[2])

@@ -117,9 +117,11 @@ describe('choisirQuestion', () => {
     for (let i = 0; i < 4000; i++) {
       if (choisirQuestion(jeuxDe(MELANGE.id), a, [], {}, MAINTENANT, { fractions: 2 }).jeu === 'fractions') fractions++
     }
-    // Poids 2 sur 9 au lieu de 1 sur 8.
-    expect(fractions / 4000).toBeGreaterThan(0.18)
-    expect(fractions / 4000).toBeLessThan(0.27)
+    // Poids 2 sur (n + 1) au lieu de 1 sur n.
+    const attendu = 2 / (JEUX.length + 1)
+    expect(fractions / 4000).toBeGreaterThan(attendu * 0.8)
+    expect(fractions / 4000).toBeLessThan(attendu * 1.2)
+    expect(attendu).toBeGreaterThan(1.5 / JEUX.length)
   })
 
   it('rejoue la même suite à graine égale', () => {

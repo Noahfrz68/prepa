@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defiDuJour, estJour, JEUX_MIN_DEFI, jourDecale, jourLocal, QUESTIONS_DEFI } from './defi'
 import { verifier } from './reponses'
+import { JEUX } from './index'
 
 describe('défi du jour', () => {
   it('donne les mêmes questions pour un même jour, sur n’importe quel appareil', () => {
@@ -41,5 +42,38 @@ describe('jours', () => {
     expect(jourLocal(new Date(2026, 0, 5, 0, 1))).toBe('2026-01-05')
     expect(estJour('2026-10-01')).toBe(true)
     for (const j of ['2026-13-01', '2026-1-1', '', null, 20261001]) expect(estJour(j), String(j)).toBe(false)
+  })
+})
+
+/**
+ * Les défis tels qu'ils ont été tirés avant l'ajout des triplets, des
+ * formules et des identités (relevés le 1er octobre 2026). Un jeu ajouté
+ * n'entre dans le défi qu'à sa date (`defiDepuis`) : ceux-là ne doivent plus
+ * jamais changer.
+ */
+const DEFIS_PASSES: Record<string, string[]> = {
+  '2026-09-28': ["17 ; 19 ; 24 ; 32 ; 43 ; ?", "6 ; 12 ; 24 ; 48 ; 96 ; ?", "63 est-il premier ?", "Le 10 août 2030 est un samedi. Quel jour est le 24 décembre 2030 ?", "1/50 = ? %", "1 439 est-il divisible par 6 ?", "143 ÷ 11 ?", "80 × 11 ?", "1/5 = ? %", "Rang de O ?"],
+  '2026-09-29': ["343 ÷ 7 ?", "Le 21 avril 2027 est un mercredi. Quel jour est le 15 juin 2027 ?", "4 440 ÷ 92 ≈ ?", "797 × 72 ≈ ?", "Lettre de rang 5 ?", "Rang de T à rebours (Z = 1) ?", "11 est-il premier ?", "10 ; 32 ; 15 ; 29 ; 20 ; ?", "14² ?", "4² ?"],
+  '2026-09-30': ["Le 28 septembre 2028 est un jeudi. Quel jour est le 14 octobre 2028 ?", "Nous sommes jeudi. Quel jour était-ce il y a 228 jours ?", "3 ; 9 ; 27 ; 81 ; 243 ; ?", "Rang de W ?", "14 × 8 ?", "−10 % puis +50 % : variation totale ?", "3/8 = ? %", "Rang de R ?", "4² ?", "67 est-il premier ?"],
+  '2026-10-01': ["64 est le carré de ?", "399 ÷ 7 ?", "Rang de B ?", "Le 13 avril 2026 est un lundi. Quel jour est le 1er août 2026 ?", "30,3 % de 7 028 ≈ ?", "19 ; 58 ; 21 ; 55 ; 23 ; ?", "Nous sommes jeudi. Quel jour serons-nous dans 302 jours ?", "62,5 % = quelle fraction ?", "1 331 est le cube de ?", "5 % = quelle fraction ?"],
+  '2026-10-02': ["405 × 21 ≈ ?", "Baisse de 75 % : coefficient ?", "8 ; 13 ; 19 ; 26 ; 34 ; ?", "Lettre de rang 18 ?", "√601 ≈ ?", "2³ ?", "Nous sommes vendredi. Quel jour était-ce il y a 95 jours ?", "1/5 en décimal ?", "Le 20 juillet 2029 est un vendredi. Quel jour est le 8 août 2029 ?", "2¹⁰ ?"],
+}
+
+describe('défis passés', () => {
+  it('restent identiques quand on ajoute des jeux', () => {
+    for (const [jour, enonces] of Object.entries(DEFIS_PASSES)) {
+      expect(defiDuJour(jour).map((q) => q.enonce), jour).toEqual(enonces)
+    }
+  })
+
+  it('n’accueillent un nouveau jeu qu’à partir de sa date d’entrée', () => {
+    for (const j of JEUX.filter((x) => x.defiDepuis)) {
+      for (let i = 1; i <= 60; i++) {
+        const avant = jourDecale(j.defiDepuis!, -i)
+        expect(defiDuJour(avant).some((q) => q.jeu === j.id), `${j.id} le ${avant}`).toBe(false)
+      }
+      const apres = Array.from({ length: 60 }, (_, i) => jourDecale(j.defiDepuis!, i))
+      expect(apres.some((jour) => defiDuJour(jour).some((q) => q.jeu === j.id)), j.id).toBe(true)
+    }
   })
 })

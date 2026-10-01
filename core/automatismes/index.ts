@@ -1,11 +1,14 @@
 import type { Alea } from '@/core/generation/alea'
 import { calcul } from './jeux/calcul'
 import { calendrier } from './jeux/calendrier'
+import { formules } from './jeux/formules'
 import { fractions } from './jeux/fractions'
+import { identites } from './jeux/identites'
 import { lettres } from './jeux/lettres'
 import { ordres } from './jeux/ordres'
 import { premiers } from './jeux/premiers'
 import { puissances } from './jeux/puissances'
+import { pythagore } from './jeux/pythagore'
 import { suites } from './jeux/suites'
 import { poidsFait, tirerPondere, type EtatsFaits } from './poids'
 import type { Jeu, JeuId, Question } from './types'
@@ -35,7 +38,13 @@ export function estFormat(f: unknown): f is FormatPartie {
 }
 
 /** Dans l'ordre d'affichage : du plus utile au plus spécialisé. */
-export const JEUX: Jeu[] = [calcul, puissances, fractions, premiers, lettres, ordres, suites, calendrier]
+// Les nouveaux jeux s'ajoutent EN FIN de liste : le défi tire dans cette
+// liste, et l'ordre des jeux déjà présents doit rester le même pour que les
+// défis passés ne changent pas (voir `defiDepuis`).
+export const JEUX: Jeu[] = [
+  calcul, puissances, fractions, premiers, lettres, ordres, suites, calendrier,
+  pythagore, formules, identites,
+]
 
 const PAR_ID = new Map(JEUX.map((j) => [j.id, j]))
 
