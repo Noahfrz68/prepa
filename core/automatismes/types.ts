@@ -1,0 +1,57 @@
+import type { Alea } from '@/core/generation/alea'
+
+/**
+ * Les automatismes : ce qui doit sortir sans calcul le jour de l'épreuve.
+ *
+ * Contrairement aux questions du drill, celles-ci ne sont jamais stockées :
+ * elles sont tirées à la volée, dans le navigateur, et ne vivent que le temps
+ * d'une partie. Ce qu'on garde, c'est le FAIT travaillé (`cle`) : « 17² »,
+ * « rang de P », « 91 est-il premier ». C'est sur lui que portent la
+ * répétition et les records, pas sur un énoncé.
+ */
+
+export type JeuId = 'calcul' | 'puissances' | 'fractions' | 'premiers' | 'lettres'
+
+/** Ce qu'on attend, et comment le reconnaître dans une saisie libre. */
+export type Attendu =
+  /** `tolerance` absolue : 14,3 et 14,29 valent 1/7 en pourcentage. */
+  | { genre: 'nombre'; valeur: number; tolerance?: number }
+  /** Une fraction exigée comme telle : « 3/8 », ou toute fraction égale. */
+  | { genre: 'fraction'; numerateur: number; denominateur: number }
+  | { genre: 'lettre'; valeur: string }
+  | { genre: 'ouinon'; valeur: boolean }
+  /** Une décomposition : les facteurs premiers avec leur multiplicité. */
+  | { genre: 'facteurs'; valeur: number }
+
+/** Le clavier à proposer : numérique, texte, ou deux boutons. */
+export type Saisie = 'nombre' | 'texte' | 'ouinon'
+
+export interface Question {
+  jeu: JeuId
+  /** Le fait travaillé, stable d'une partie à l'autre : `carre:17`, `rang:P`. */
+  cle: string
+  enonce: string
+  /** Indication de format, sous l'énoncé, quand elle n'est pas évidente. */
+  aide?: string
+  attendu: Attendu
+  saisie: Saisie
+  /** La réponse telle qu'on l'affiche : « 289 », « oui », « 2³ × 3² × 5 ». */
+  reponse: string
+  /** Correction courte, quand c'est juste : « 17² = 289 ». */
+  solution: string
+  /** Correction longue, quand c'est faux : le geste qui donne la réponse. */
+  astuce: string
+  /** Titre de la table du cours (TABLES) à revoir, s'il y en a une. */
+  table?: string
+  /** Seuil « trop lent » propre à cette question, s'il diffère de celui du jeu. */
+  lentMs?: number
+}
+
+export interface Jeu {
+  id: JeuId
+  nom: string
+  description: string
+  /** Au-delà, une réponse juste compte comme « trop lente » : à revoir. */
+  seuilLentMs: number
+  produire(a: Alea): Question
+}
