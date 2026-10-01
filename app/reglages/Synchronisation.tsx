@@ -25,6 +25,7 @@ const LIBELLES: Record<string, [string, string, boolean]> = {
   vocab_revision: ['révision', 'révisions', true],
   lecon_session: ['séance d’étude', 'séances d’étude', true],
   plan_tache: ['tâche du plan', 'tâches du plan', true],
+  automatisme_partie: ['partie d’automatismes', 'parties d’automatismes', true],
   media: ['média', 'médias', false],
 }
 

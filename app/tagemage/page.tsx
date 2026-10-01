@@ -10,6 +10,10 @@ import { reussiteAFroidParSection } from '@/core/stats/queries'
 import { tauxAFroid } from '@/core/stats/afroid'
 import { planDeLaSemaine } from '@/core/db/semaine'
 import { prochaineSeance } from '@/app/plan/prochaine'
+import { etatDefi, jeuxConseilles } from '@/core/db/automatismes'
+import { jeu as jeuDe } from '@/core/automatismes'
+import { lienJeu, motifConseil } from './automatismes/format'
+import CarteDefi from './automatismes/CarteDefi'
 import { SECONDES_PAR_QUESTION, SECTIONS } from '@/exams/tagemage'
 import { SEUIL_FIABILITE } from '@/core/stats/calculs'
 import {
@@ -41,6 +45,8 @@ export default function HubTageMage() {
   )
   // La même séance que l'accueil : la première tâche non faite du plan.
   const prochaine = total > 0 ? prochaineSeance(planDeLaSemaine().taches) : null
+  const defi = etatDefi()
+  const conseil = jeuxConseilles()[0]
   // Un texte long de sept questions validé remplace le texte de cinq : la
   // carte annonce ce que le diagnostic servira vraiment.
   const questionsComprehension =
@@ -67,7 +73,13 @@ export default function HubTageMage() {
             rien : case vide = manque à gagner, une croix au hasard vaut 0,8 point en moyenne.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/tagemage/automatismes"
+            className="rounded-lg border border-bord px-4 py-2.5 text-sm text-doux transition hover:border-accent hover:text-texte"
+          >
+            Automatismes →
+          </Link>
           <Link
             href="/plan"
             className="rounded-lg border border-bord px-4 py-2.5 text-sm text-doux transition hover:border-accent hover:text-texte"
@@ -112,6 +124,23 @@ export default function HubTageMage() {
           <span className="text-accent">Ouvrir l’atelier →</span>
         </Link>
       )}
+
+      {/* Le défi d'automatismes ne demande aucune banque : il s'affiche toujours. */}
+      <div className="mb-4">
+        <CarteDefi etat={defi} compacte />
+        {conseil && (
+          <Link
+            href={lienJeu(conseil.jeu, 'chrono')}
+            className="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 rounded-xl border border-bord bg-carte px-5 py-3 text-sm transition hover:border-accent"
+          >
+            <span>
+              <span className="font-medium">Automatisme conseillé : {jeuDe(conseil.jeu)!.nom}</span>
+              <span className="text-doux"> · {motifConseil(conseil)}</span>
+            </span>
+            <span className="text-accent">60 secondes →</span>
+          </Link>
+        )}
+      </div>
 
       {prochaine && (
         <Link

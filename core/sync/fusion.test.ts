@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Base } from '@/core/db/base'
 import { MOTEURS, baseDeTest } from '@/core/db/moteurs-test'
 import { fusionner } from './fusion'
+import { enregistrerPartie, recordDe, statsAutomatismes } from '@/core/db/automatismes'
 
 /**
  * La fusion de deux bases, sur les deux moteurs (le PC fusionne avec
@@ -271,6 +272,64 @@ describe.each(MOTEURS)('$nom', (moteur) => {
     fusionner(iphone, pc)
     expect(iphone.prepare(`SELECT volume_prevu_min FROM study_plan`).get()).toEqual({ volume_prevu_min: 300 })
     expect(iphone.prepare(`SELECT libelle FROM plan_tache`).all()).toEqual([{ libelle: 'Calcul' }])
+  })
+
+  describe('automatismes', () => {
+    /** Une partie de chrono : `justes` bonnes réponses sur les carrés de 11 à 11 + n − 1. */
+    const jouer = (b: Base, uidPartie: string, justes: number, n = 5) =>
+      enregistrerPartie(
+        {
+          uid: uidPartie,
+          jeu: 'puissances',
+          format: 'chrono',
+          dureeMs: 60_000,
+          reponses: Array.from({ length: n }, (_, i) => ({
+            jeu: 'puissances',
+            cle: `carre:${11 + i}`,
+            reponse: '1',
+            juste: i < justes,
+            tempsMs: 2000,
+            lent: false,
+          })),
+        },
+        b,
+      )
+
+    const parties = (b: Base) => ({
+      parties: b.prepare('SELECT uid, jeu, format, nb, justes, duree_ms, le FROM automatisme_partie ORDER BY uid').all(),
+      reponses: b
+        .prepare('SELECT partie_uid, ordre, cle, juste, temps_ms, lent FROM automatisme_reponse ORDER BY partie_uid, ordre')
+        .all(),
+    })
+
+    it('réunit les parties jouées de chaque côté, avec leurs réponses, sans doublon', async () => {
+      const { pc, iphone } = await deux()
+      jouer(pc, 'partie-commune', 3)
+      fusionner(iphone, pc)
+      jouer(pc, 'partie-pc', 4)
+      jouer(iphone, 'partie-iphone', 5)
+
+      const bilan = fusionner(iphone, pc)
+      expect(bilan.automatisme_partie).toEqual({ ajoutees: 1, modifiees: 0, supprimees: 0 })
+      expect(bilan.automatisme_reponse.ajoutees).toBe(5)
+      fusionner(pc, iphone)
+
+      expect(parties(iphone)).toEqual(parties(pc))
+      expect(parties(pc).parties).toHaveLength(3)
+      expect(parties(pc).reponses).toHaveLength(15)
+      // Les records et les faits à revoir se recalculent pareil des deux côtés.
+      expect(statsAutomatismes(['puissances'], iphone)).toEqual(statsAutomatismes(['puissances'], pc))
+      expect(recordDe('puissances', 'chrono', iphone)?.justes).toBe(5)
+    })
+
+    it('ne change rien à une seconde fusion', async () => {
+      const { pc, iphone } = await deux()
+      jouer(pc, 'partie-pc', 2)
+      fusionner(iphone, pc)
+      const bilan = fusionner(iphone, pc)
+      expect(bilan.automatisme_partie).toBeUndefined()
+      expect(bilan.automatisme_reponse).toBeUndefined()
+    })
   })
 
   it('ne laisse rien si la fusion échoue', async () => {
