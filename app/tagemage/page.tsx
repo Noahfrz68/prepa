@@ -67,7 +67,13 @@ export default function HubTageMage() {
             rien : case vide = manque à gagner, une croix au hasard vaut 0,8 point en moyenne.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/tagemage/automatismes"
+            className="rounded-lg border border-bord px-4 py-2.5 text-sm text-doux transition hover:border-accent hover:text-texte"
+          >
+            Automatismes →
+          </Link>
           <Link
             href="/plan"
             className="rounded-lg border border-bord px-4 py-2.5 text-sm text-doux transition hover:border-accent hover:text-texte"

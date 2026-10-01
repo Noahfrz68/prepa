@@ -105,6 +105,14 @@ describe('automatismes — chaque question est juste', () => {
     }
   })
 
+  // Le pavé décimal de l'iPhone n'a pas de « − » : une réponse négative y
+  // serait impossible à taper.
+  it('propose un clavier avec signe dès qu’une réponse peut être négative', () => {
+    for (const q of toutes()) {
+      if (q.attendu.genre === 'nombre' && q.attendu.valeur < 0) expect(q.saisie, q.enonce).toBe('relatif')
+    }
+  })
+
   it('montre la réponse dans la correction longue des faits à apprendre', () => {
     for (const q of toutes().filter((q) => /^(carre|cube|deux|rang|lettre|rebours|pourcentage|successives)/.test(q.cle))) {
       expect(q.astuce, q.cle).toContain(q.reponse)

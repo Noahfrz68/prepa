@@ -124,7 +124,7 @@ export const fractions: Jeu = {
       enonce: `Après ${variation(u)}, quelle variation ramène au départ ?`,
       aide: 'Avec son signe (+ ou −), en %',
       attendu: { genre: 'nombre', valeur: r, tolerance: ronde ? undefined : TOLERANCE_ARRONDI },
-      saisie: 'nombre',
+      saisie: 'relatif',
       reponse: ronde ? lu : `≈ ${lu}`,
       solution: `${variation(u)} s'annule par ${lu}`,
       astuce:

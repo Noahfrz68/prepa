@@ -23,8 +23,11 @@ export type Attendu =
   /** Une décomposition : les facteurs premiers avec leur multiplicité. */
   | { genre: 'facteurs'; valeur: number }
 
-/** Le clavier à proposer : numérique, texte, ou deux boutons. */
-export type Saisie = 'nombre' | 'texte' | 'ouinon'
+/**
+ * Le clavier à proposer : numérique, numérique avec signe (le pavé décimal de
+ * l'iPhone n'a pas de « − »), texte, ou deux boutons.
+ */
+export type Saisie = 'nombre' | 'relatif' | 'texte' | 'ouinon'
 
 export interface Question {
   jeu: JeuId

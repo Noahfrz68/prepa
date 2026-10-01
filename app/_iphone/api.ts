@@ -20,6 +20,7 @@ type Gestionnaire = (r: Request, ctx: { params: Promise<Record<string, string>> 
 
 const ROUTES: Record<string, () => Promise<Module>> = {
   atelier: () => import('@/app/api/atelier/route'),
+  'automatismes/partie': () => import('@/app/api/automatismes/partie/route'),
   // Audios : produits par Piper sur le PC, arrivés par la synchronisation.
   'audio/[hash]': () => import('@/app/api/audio/[hash]/route'),
   'audio/synthese': () => import('@/app/api/audio/synthese/route'),

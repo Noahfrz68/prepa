@@ -172,6 +172,7 @@ const PRODUIRE: Record<Genre, (a: Alea) => Question> = {
         TABLE_COEFS,
       ),
       aide: 'Avec son signe (+ ou −), en %',
+      saisie: 'relatif',
     }
   },
 }

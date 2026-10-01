@@ -9,6 +9,25 @@ import type { Jeu, JeuId, Question } from './types'
 export type { Attendu, Jeu, JeuId, Question, Saisie } from './types'
 export { verifier } from './reponses'
 
+/**
+ * Deux formats de partie : contre la montre (combien en 60 s) et en série
+ * (combien de temps pour 20). Le chronomètre ne compte que le temps de jeu :
+ * il s'arrête pendant la lecture d'une correction.
+ */
+export type FormatPartie = 'chrono' | 'serie'
+
+export const DUREE_CHRONO_MS = 60_000
+export const QUESTIONS_SERIE = 20
+
+export const FORMATS: Record<FormatPartie, { libelle: string; but: string }> = {
+  chrono: { libelle: '60 secondes', but: 'le plus de bonnes réponses' },
+  serie: { libelle: `${QUESTIONS_SERIE} questions`, but: 'le plus de justes, puis le plus vite' },
+}
+
+export function estFormat(f: unknown): f is FormatPartie {
+  return f === 'chrono' || f === 'serie'
+}
+
 /** Dans l'ordre d'affichage : du plus utile au plus spécialisé. */
 export const JEUX: Jeu[] = [calcul, puissances, fractions, premiers, lettres]
 
