@@ -30,7 +30,7 @@ function premierParCrible(n: number): boolean {
 }
 
 /** La valeur attendue, recalculée sans passer par le générateur. */
-function recalcul(q: Question): number | string | boolean {
+function recalcul(q: Question): number | string | boolean | typeof SANS_RECALCUL {
   const [genre, param] = q.cle.split(':')
   const n = Number(param)
   const nb = nombresDe(q.enonce)
@@ -57,6 +57,10 @@ function recalcul(q: Question): number | string | boolean {
     case 'ordre': return plusProche(q, exactOrdre(param, nb))
     case 'suite': return suivant(param, q.enonce, nb)
     case 'calendrier': return jourAttendu(param, q.enonce, nb)
+    case 'pythagore': return pythagoreAttendu(q.enonce, nb)
+    case 'identite': return param.startsWith('carre') ? nb[0] ** 2 : param === 'conjugues' ? nb[0] * nb[1] : optionEgale(q)
+    // Les formules ont leur fichier de tests : on y recalcule chaque application depuis ses données.
+    case 'formule': case 'appli': return SANS_RECALCUL
   }
   throw new Error(`Clé inconnue : ${q.cle}`)
 }
@@ -122,6 +126,38 @@ function jourAttendu(genre: string, enonce: string, nb: number[]): number {
   return (((genre === 'dans' ? j + k : j - k) % 7) + 7) % 7
 }
 
+/** Marque les clés recalculées ailleurs. */
+const SANS_RECALCUL = Symbol('sans recalcul')
+
+/** Triplets : hypoténuse, côté manquant, ou « est-il rectangle ». */
+function pythagoreAttendu(enonce: string, nb: number[]): number | boolean {
+  if (enonce.startsWith('Un triangle de côtés')) {
+    const [x, y, z] = [...nb].sort((a, b) => a - b)
+    return x * x + y * y === z * z
+  }
+  if (enonce.includes('hypoténuse ?')) return Math.sqrt(nb[0] ** 2 + nb[1] ** 2)
+  return Math.sqrt(nb[0] ** 2 - nb[1] ** 2)
+}
+
+/** Une expression en x, telle qu'écrite (« (2x − 3)² », « 4x² + 12x + 9 »), évaluée en x. */
+export function evaluer(expr: string, x: number): number {
+  const js = expr
+    .replace(/ = \?$/, '')
+    .replace(/−/g, '-')
+    .replace(/²/g, '**2')
+    .replace(/(\d|\))(?=[x(])/g, '$1*')
+  return new Function('x', `return ${js}`)(x) as number
+}
+
+/** L'indice de l'unique proposition égale à l'énoncé, comparées en deux points. */
+function optionEgale(q: Question): number {
+  const egales = q.choix!.map((c, i) =>
+    [1.37, -2.11].every((x) => Math.abs(evaluer(c, x) - evaluer(q.enonce, x)) < 1e-9) ? i : -1,
+  ).filter((i) => i >= 0)
+  if (egales.length !== 1) throw new Error(`${q.enonce} : ${egales.length} propositions égales (${q.choix!.join(' | ')})`)
+  return egales[0]
+}
+
 function valeurDe(at: Attendu): number | string | boolean {
   switch (at.genre) {
     case 'fraction': return at.numerateur / at.denominateur
@@ -146,6 +182,7 @@ describe('automatismes — chaque question est juste', () => {
     for (const q of TOUTES.get(id as never)!) {
       const v = valeurDe(q.attendu)
       const r = recalcul(q)
+      if (r === SANS_RECALCUL) continue
       if (typeof r === 'number') expect(v as number, `${q.cle} · ${q.enonce}`).toBeCloseTo(r, 9)
       else expect(v, `${q.cle} · ${q.enonce}`).toBe(r)
     }

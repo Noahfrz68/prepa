@@ -17,24 +17,24 @@ export const JEUX_PAR_SOUS_TEST: Record<string, JeuId[]> = {
   'tm.calcul.pourcentages_et_variations': ['fractions', 'calcul'],
   'tm.calcul.proportionnalite_et_ratios': ['fractions', 'calcul'],
   'tm.calcul.equations_du_1er_degre': ['calcul'],
-  'tm.calcul.equations_du_2nd_degre': ['puissances'],
+  'tm.calcul.equations_du_2nd_degre': ['identites', 'formules'],
   'tm.calcul.systemes': ['calcul'],
   'tm.calcul.arithmetique_et_divisibilite': ['premiers'],
-  'tm.calcul.geometrie_plane': ['puissances'],
-  'tm.calcul.aires_et_volumes': ['puissances'],
-  'tm.calcul.moyennes_et_medianes': ['calcul', 'ordres'],
-  'tm.calcul.probabilites': ['fractions'],
-  'tm.calcul.denombrement': ['calcul'],
-  'tm.calcul.vitesses_debits_et_melanges': ['calcul', 'ordres'],
-  'tm.calcul.suites_et_progressions': ['suites'],
+  'tm.calcul.geometrie_plane': ['pythagore', 'formules'],
+  'tm.calcul.aires_et_volumes': ['formules', 'puissances'],
+  'tm.calcul.moyennes_et_medianes': ['formules', 'calcul'],
+  'tm.calcul.probabilites': ['formules', 'fractions'],
+  'tm.calcul.denombrement': ['formules'],
+  'tm.calcul.vitesses_debits_et_melanges': ['formules', 'ordres'],
+  'tm.calcul.suites_et_progressions': ['formules', 'suites'],
 
   // Conditions minimales : le réflexe sert à voir vite ce qui se calcule.
   'tm.conditions_minimales.cm_pourcentages_et_variations': ['fractions'],
   'tm.conditions_minimales.cm_proportionnalite_et_ratios': ['fractions'],
   'tm.conditions_minimales.cm_equations_et_systemes': ['calcul'],
   'tm.conditions_minimales.cm_arithmetique_et_divisibilite': ['premiers'],
-  'tm.conditions_minimales.cm_geometrie': ['puissances'],
-  'tm.conditions_minimales.cm_statistiques_et_probabilites': ['fractions'],
+  'tm.conditions_minimales.cm_geometrie': ['pythagore', 'formules'],
+  'tm.conditions_minimales.cm_statistiques_et_probabilites': ['formules', 'fractions'],
 
   // Logique
   'tm.logique.suites_numeriques': ['suites', 'puissances'],
@@ -53,12 +53,12 @@ export const JEUX_PAR_SOUS_TEST: Record<string, JeuId[]> = {
  * Sous-tests où l'erreur vient surtout de la méthode : rater un système
  * d'équations ne dit pas que le calcul mental manque. Leurs erreurs ne
  * désignent un automatisme que si le carnet les attribue au calcul ou au
- * temps.
+ * temps. (Le dénombrement n'y est pas : une erreur y vient souvent d'une
+ * formule mal sue, et les formules flash la travaillent.)
  */
 export const SOUS_TESTS_DE_METHODE = new Set([
   'tm.calcul.equations_du_1er_degre',
   'tm.calcul.systemes',
-  'tm.calcul.denombrement',
   'tm.conditions_minimales.cm_equations_et_systemes',
   'tm.logique.operations_codees',
 ])

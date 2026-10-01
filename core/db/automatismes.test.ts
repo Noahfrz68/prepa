@@ -341,7 +341,7 @@ describe.each(MOTEURS)('$nom', (moteur) => {
       reponse('tm.calcul.arithmetique_et_divisibilite', 10)
       expect(jeuxConseilles(db)).toEqual([])
       reponse('tm.calcul.aires_et_volumes', 10, { cause: 'calcul' })
-      expect(jeuxConseilles(db).map((x) => x.jeu)).toEqual(['puissances'])
+      expect(jeuxConseilles(db).map((x) => x.jeu).sort()).toEqual(['formules', 'puissances'])
     })
 
     it('ne retient une erreur de méthode que si le carnet l’attribue au calcul', () => {

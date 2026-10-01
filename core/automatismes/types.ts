@@ -19,6 +19,9 @@ export type JeuId =
   | 'ordres'
   | 'suites'
   | 'calendrier'
+  | 'pythagore'
+  | 'formules'
+  | 'identites'
 
 /** Ce qu'on attend, et comment le reconnaître dans une saisie libre. */
 export type Attendu =
@@ -69,6 +72,12 @@ export interface Jeu {
   description: string
   /** Au-delà, une réponse juste compte comme « trop lente » : à revoir. */
   seuilLentMs: number
+  /**
+   * Premier jour (AAAA-MM-JJ) où le jeu entre dans le défi du jour. Un jeu
+   * ajouté changerait sinon le tirage des défis déjà joués, et deux appareils
+   * pas encore à la même version n'auraient plus le même défi.
+   */
+  defiDepuis?: string
   produire(a: Alea): Question
   /**
    * Une question sur un fait précis, pour la répétition : c'est ainsi qu'un
