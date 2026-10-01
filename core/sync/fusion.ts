@@ -88,6 +88,7 @@ class Fusion {
     this.fusionRevisions()
     this.fusionEcrit()
     this.fusionMemoire()
+    this.fusionAutomatismes()
     return this.bilan
   }
 
@@ -506,6 +507,30 @@ class Fusion {
   private fusionMemoire() {
     for (const m of this.tous('coach_memory')) {
       if (!this.L.prepare('SELECT 1 FROM coach_memory WHERE uid = ?').get(m.uid as string)) this.inserer('coach_memory', m)
+    }
+  }
+
+  /* ------------------------------------------------------ automatismes -- */
+
+  /**
+   * Les parties d'automatismes ne changent jamais une fois jouées : celles
+   * qui manquent s'ajoutent, avec leurs réponses. Les réponses désignent leur
+   * partie par son uid, pas par un id local : rien à traduire. Records, faits
+   * à revoir et série du défi se recalculent d'eux-mêmes depuis ces lignes.
+   */
+  private fusionAutomatismes() {
+    for (const p of this.tous('automatisme_partie')) {
+      if (!this.L.prepare('SELECT 1 FROM automatisme_partie WHERE uid = ?').get(p.uid as string)) {
+        this.inserer('automatisme_partie', p)
+      }
+    }
+    const cols = this.colonnes('automatisme_reponse').filter((c) => c !== 'id')
+    const inserer = this.L.prepare(
+      `INSERT INTO automatisme_reponse (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})
+       ON CONFLICT (partie_uid, ordre) DO NOTHING`,
+    )
+    for (const r of this.tous('automatisme_reponse')) {
+      if (inserer.run(cols.map((c) => r[c] as never)).changes > 0) this.compte('automatisme_reponse').ajoutees++
     }
   }
 }

@@ -83,12 +83,14 @@ if (purgeDemandee) {
     db.prepare(`DELETE FROM coach_memory`).run()
     db.prepare(`DELETE FROM media`).run()
     db.prepare(`DELETE FROM production`).run()
+    db.prepare(`DELETE FROM automatisme_reponse`).run()
+    db.prepare(`DELETE FROM automatisme_partie`).run()
   })
   purge()
   // Les fichiers audio synthétisés suivent leurs médias : les laisser
   // orphelins sur le disque serait une incohérence.
   fs.rmSync(path.join(process.cwd(), 'data', 'audio'), { recursive: true, force: true })
-  console.log('Purge effectuée : banque, sessions, tentatives, calendrier, plans, vocabulaire, mémoire du tuteur et audio remis à zéro.')
+  console.log('Purge effectuée : banque, sessions, tentatives, calendrier, plans, vocabulaire, mémoire du tuteur, automatismes et audio remis à zéro.')
 }
 
 console.log(
