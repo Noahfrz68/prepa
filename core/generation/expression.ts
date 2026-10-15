@@ -138,6 +138,62 @@ const phraseFautive: Famille = {
   },
 }
 
+/* ------------------------------------- la seule correcte, sans comparer -- */
+
+/**
+ * Cinq phrases sans rapport entre elles, une seule correcte.
+ *
+ * Le format « cinq variantes d'une même phrase » se résout sans connaître une
+ * seule règle : chaque variante ne diffère de la correcte que sur un point, donc
+ * la correcte est celle qui suit la majorité à chaque endroit où elles
+ * divergent. D'où 70 % de réussite sur les questions générées, contre 40 % sur
+ * les annales d'orthographe. Ici chaque fautive vient d'une autre phrase du
+ * corpus : plus de majorité à suivre, il faut juger chacune pour elle-même.
+ * Les phrases « difficiles » — pièges de règle, sans faute de frappe — passent
+ * devant : ce sont elles qu'on rencontre en annales.
+ */
+const seuleCorrecte: Famille = {
+  skillId: SKILL.orthographe,
+  nom: 'seule phrase correcte',
+  produire(a) {
+    const difficiles = PHRASES.filter((p) => p.difficile)
+    const seed = a.chance(0.75) ? a.choix(difficiles) : a.choix(PHRASES)
+    const autres = PHRASES.filter((p) => p !== seed)
+    // Trois fautives sur quatre au moins viennent de phrases difficiles.
+    const durs = a.melanger(autres.filter((p) => p.difficile)).slice(0, 3)
+    const sources = [...durs, ...a.melanger(autres.filter((p) => !durs.includes(p)))].slice(0, 4)
+    const fautives = sources.map((p) => ({ p, v: a.choix(p.variantes) }))
+
+    const { options, bonneReponse, diagnostics } = qcmTexte(
+      a,
+      seed.correcte,
+      fautives.map(({ v }): [string, string] => [v.texte, v.regle]),
+    )
+
+    return {
+      section: S,
+      skillId: SKILL[seed.skill],
+      typeItem: 'qcm',
+      enonce: 'Parmi les phrases suivantes, une seule ne comporte aucune faute. Laquelle ?',
+      options,
+      bonneReponse,
+      diagnostics,
+      rappel: `« ${seed.correcte} » est irréprochable ; chacune des quatre autres viole une règle précise.`,
+      explication:
+        `1. Les cinq phrases n'ont rien en commun : impossible de les comparer, il faut juger chacune pour ` +
+        `elle-même. Balayer les points où les annales piègent : participes passés (avec avoir, avec être, ` +
+        `pronominaux, suivis d'un infinitif), mode après une conjonction, préposition attendue par le verbe, ` +
+        `relatifs (« dont », « que »), homophones.\n` +
+        `2. La phrase correcte : « ${seed.correcte} »\n` +
+        `3. Les quatre autres, et la règle que chacune viole :\n` +
+        fautives.map(({ p, v }) => `   • « ${v.texte} » — ${v.regle} Forme correcte : « ${p.correcte} »`).join('\n') +
+        `\nUne phrase qui « sonne bizarre » n'est pas fautive pour autant (« les deux heures qu'a duré… », ` +
+        `« elles se sont succédé… ») : seule une règle nommée permet d'écarter une proposition.`,
+      difficulte: 5,
+    }
+  },
+}
+
 /* --------------------------------------------------------- connecteurs -- */
 
 const RELATIONS = Object.keys(CONNECTEURS) as Relation[]
@@ -271,6 +327,7 @@ const antonyme: Famille = {
 export const FAMILLES_EXPRESSION: Famille[] = [
   phraseCorrecte,
   phraseFautive,
+  seuleCorrecte,
   connecteur,
   synonyme,
   antonyme,

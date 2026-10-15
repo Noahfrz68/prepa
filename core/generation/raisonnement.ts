@@ -24,6 +24,7 @@ import type { Famille, QuestionGeneree } from './types'
 import { FAILLES, SCENARIOS } from './corpus-raisonnement'
 import { paradoxe } from './paradoxes'
 import { analogie } from './analogies'
+import { FAMILLES_ENIGMES } from './raisonnement-enigmes'
 
 const S = 'raisonnement' as const
 
@@ -351,4 +352,7 @@ export const FAMILLES_RAISONNEMENT: Famille[] = [
   // Le seul type qui n'avait aucune question (paradoxes.ts).
   paradoxe,
   analogie,
+  // Les énigmes des annales : classement, rangée, conditions, menteurs,
+  // calendrier, recoupements (raisonnement-enigmes.ts).
+  ...FAMILLES_ENIGMES,
 ]

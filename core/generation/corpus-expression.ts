@@ -27,6 +27,8 @@ export interface PhraseSeed {
   skill: SkillExpression
   correcte: string
   variantes: VarianteFautive[]
+  /** Ne teste que des pièges de règle, sans faute de frappe visible : niveau annales. */
+  difficile?: boolean
 }
 
 /* ------------------------------------------------------- orthographe -- */
@@ -344,7 +346,297 @@ const SYNTAXE: PhraseSeed[] = [
   },
 ]
 
-export const PHRASES: PhraseSeed[] = [...ORTHOGRAPHE, ...GRAMMAIRE, ...SYNTAXE]
+/* ---------------------------------------------------- niveau annales -- */
+
+/**
+ * Les règles sur lesquelles les annales font tomber les candidats.
+ *
+ * Les phrases plus haut testent souvent une faute de frappe (« erreure »,
+ * « delai ») qui se voit sans connaître de règle. Celles-ci ne contiennent que
+ * des pièges de règle : participe de « durer » ou de « falloir », « se
+ * succéder », « tout » devant un adjectif féminin, « après que » à l'indicatif,
+ * « dont » et ses pléonasmes, « pallier », « se rappeler ». La phrase correcte
+ * a l'air fautive aussi souvent que les variantes ont l'air justes.
+ */
+const DIFFICILES: PhraseSeed[] = [
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Les deux heures qu'a duré la réunion nous ont paru interminables.",
+    variantes: [
+      { texte: "Les deux heures qu'a durées la réunion nous ont paru interminables.", regle: "« durer » n'a pas de complément d'objet : « que » indique une durée, le participe reste invariable." },
+      { texte: "Les deux heures qu'a duré la réunion nous ont parues interminables.", regle: "« paraître » n'a pas de complément d'objet direct (« nous » est indirect) : le participe reste invariable." },
+      { texte: "Les deux heures qu'à duré la réunion nous ont paru interminables.", regle: "« a » est ici l'auxiliaire avoir, pas la préposition « à »." },
+      { texte: "Les deux heures qu'a duré la réunion nous ont paru interminable.", regle: "L'attribut « interminables » se rapporte à « heures », au pluriel." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Les efforts qu'il a fallu pour terminer à temps ont été considérables.",
+    variantes: [
+      { texte: "Les efforts qu'il a fallus pour terminer à temps ont été considérables.", regle: "« falloir » est impersonnel : son participe passé est toujours invariable." },
+      { texte: "Les efforts qu'il a fallut pour terminer à temps ont été considérables.", regle: "Le participe passé de « falloir » est « fallu », sans t." },
+      { texte: "Les efforts qu'il a fallu pour terminer à temps ont été considérable.", regle: "L'attribut « considérables » s'accorde avec « efforts », au pluriel." },
+      { texte: "Les efforts qu'il à fallu pour terminer à temps ont été considérables.", regle: "« a » est ici l'auxiliaire avoir, pas la préposition « à »." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Elles se sont succédé à la tribune sans jamais se répondre.",
+    variantes: [
+      { texte: "Elles se sont succédées à la tribune sans jamais se répondre.", regle: "On succède À quelqu'un : « se » est complément indirect, le participe reste invariable." },
+      { texte: "Elles se sont succédé à la tribune sans jamais ce répondre.", regle: "Devant un verbe, le pronom réfléchi s'écrit « se » ; « ce » est un démonstratif." },
+      { texte: "Elles ce sont succédé à la tribune sans jamais se répondre.", regle: "Devant un verbe pronominal, il faut le pronom réfléchi « se »." },
+      { texte: "Elles se sont succédé a la tribune sans jamais se répondre.", regle: "Devant « la tribune », c'est la préposition « à », avec accent." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Quoi qu'on en dise, ce projet a davantage de partisans que d'opposants.",
+    variantes: [
+      { texte: "Quoiqu'on en dise, ce projet a davantage de partisans que d'opposants.", regle: "« quoi que » (quelle que soit la chose que) s'écrit en deux mots ; « quoique » en un mot signifie « bien que »." },
+      { texte: "Quoi qu'on en dise, ce projet a d'avantage de partisans que d'opposants.", regle: "« davantage » (plus) s'écrit en un seul mot." },
+      { texte: "Quoi qu'on en dise, ce projet à davantage de partisans que d'opposants.", regle: "« a » est ici le verbe avoir, pas la préposition « à »." },
+      { texte: "Quoi qu'on en dises, ce projet a davantage de partisans que d'opposants.", regle: "Le sujet « on » est à la troisième personne : « dise »." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Ils se sont rappelé leurs promesses et les ont tenues.",
+    variantes: [
+      { texte: "Ils se sont rappelés leurs promesses et les ont tenues.", regle: "On rappelle quelque chose À soi : « se » est indirect et le COD « leurs promesses » est placé après — participe invariable." },
+      { texte: "Ils se sont rappelé leurs promesses et les ont tenu.", regle: "Le COD « les » (les promesses) est placé avant l'auxiliaire avoir : « tenues »." },
+      { texte: "Ils se sont rappelé de leurs promesses et les ont tenues.", regle: "« se rappeler » est transitif direct : on se rappelle quelque chose, pas « de » quelque chose." },
+      { texte: "Ils se sont rappelé leur promesses et les ont tenues.", regle: "Déterminant possessif devant un nom pluriel : « leurs promesses »." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Elle s'est fait opérer la semaine dernière et se porte déjà mieux.",
+    variantes: [
+      { texte: "Elle s'est faite opérer la semaine dernière et se porte déjà mieux.", regle: "« fait » suivi d'un infinitif reste toujours invariable." },
+      { texte: "Elle s'est fait opéré la semaine dernière et se porte déjà mieux.", regle: "Après « faire », le verbe est à l'infinitif : « opérer »." },
+      { texte: "Elle s'est fait opérer la semaine dernière et ce porte déjà mieux.", regle: "Devant un verbe, le pronom réfléchi s'écrit « se »." },
+      { texte: "Elle s'est fait opérer la semaine dernière et se porte déja mieux.", regle: "« déjà » prend un accent grave sur le a final." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "Tout émue, elle a remercié toutes les personnes présentes.",
+    variantes: [
+      { texte: "Toute émue, elle a remercié toutes les personnes présentes.", regle: "« tout » adverbe (tout à fait) ne varie que devant un adjectif féminin commençant par une consonne ; devant une voyelle, il reste « tout »." },
+      { texte: "Tout émue, elle a remerciée toutes les personnes présentes.", regle: "Le COD « toutes les personnes » est placé après le verbe : le participe reste invariable." },
+      { texte: "Tout émue, elle a remercié toutes les personnes présente.", regle: "« présentes » s'accorde avec « personnes », au pluriel." },
+      { texte: "Tout émue, elle a remercié tous les personnes présentes.", regle: "« personnes » est féminin : « toutes les personnes »." },
+    ],
+  },
+  {
+    skill: 'orthographe',
+    difficile: true,
+    correcte: "La salle compte deux cents places, dont quatre-vingt-trois sont déjà réservées.",
+    variantes: [
+      { texte: "La salle compte deux cent places, dont quatre-vingt-trois sont déjà réservées.", regle: "« cent » multiplié et non suivi d'un autre nombre prend un s : « deux cents »." },
+      { texte: "La salle compte deux cents places, dont quatre-vingts-trois sont déjà réservées.", regle: "« vingt » suivi d'un autre nombre ne prend pas de s : « quatre-vingt-trois »." },
+      { texte: "La salle compte deux cents places, dont quatre-vingt-trois sont déjà réservés.", regle: "Le participe se rapporte à « places », féminin : « réservées »." },
+      { texte: "La salle compte deux cents places, dont quatre-vingt-trois sont déja réservées.", regle: "« déjà » prend un accent grave sur le a final." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Après qu'il a terminé son discours, la salle s'est levée.",
+    variantes: [
+      { texte: "Après qu'il ait terminé son discours, la salle s'est levée.", regle: "« après que » introduit un fait accompli : indicatif. C'est « avant que » qui demande le subjonctif." },
+      { texte: "Après qu'il a terminé son discours, la salle s'est levé.", regle: "Avec un verbe pronominal réfléchi, le participe s'accorde avec le sujet « la salle »." },
+      { texte: "Après qu'il a terminé son discours, la salle c'est levée.", regle: "Devant un verbe pronominal, il faut le pronom réfléchi : « s'est »." },
+      { texte: "Après qu'il a terminer son discours, la salle s'est levée.", regle: "Après l'auxiliaire avoir, il faut le participe passé : « terminé »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Bien qu'il soit arrivé en retard, il a pu passer l'épreuve.",
+    variantes: [
+      { texte: "Bien qu'il est arrivé en retard, il a pu passer l'épreuve.", regle: "« bien que » exige le subjonctif : « soit arrivé »." },
+      { texte: "Bien qu'il soit arrivé en retard, il a pû passer l'épreuve.", regle: "Le participe passé de « pouvoir » s'écrit « pu », sans accent." },
+      { texte: "Bien qu'il soit arrivé en retard, il a pu passé l'épreuve.", regle: "Après « pouvoir », le verbe est à l'infinitif : « passer »." },
+      { texte: "Bien qu'il soit arrivée en retard, il a pu passer l'épreuve.", regle: "Avec l'auxiliaire être, le participe s'accorde avec le sujet « il » : « arrivé »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Si j'avais su, je serais venu plus tôt.",
+    variantes: [
+      { texte: "Si j'aurais su, je serais venu plus tôt.", regle: "Après le « si » de condition, jamais de conditionnel : « si j'avais su »." },
+      { texte: "Si j'avais su, je serai venu plus tôt.", regle: "Derrière « si » + plus-que-parfait, il faut le conditionnel passé : « je serais venu »." },
+      { texte: "Si j'avais su, j'aurais venu plus tôt.", regle: "« venir » se conjugue avec l'auxiliaire être : « je serais venu »." },
+      { texte: "Si j'avais su, je serais venu plutôt.", regle: "Il s'agit d'un moment, non d'une préférence : « plus tôt »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "C'est nous qui avons pris cette décision, et nous l'assumons.",
+    variantes: [
+      { texte: "C'est nous qui ont pris cette décision, et nous l'assumons.", regle: "Après « qui », le verbe s'accorde avec l'antécédent « nous » : « avons »." },
+      { texte: "C'est nous qui avons prit cette décision, et nous l'assumons.", regle: "Le participe passé de « prendre » est « pris »." },
+      { texte: "C'est nous qui avons pris cette décision, et nous l'assumont.", regle: "Première personne du pluriel : la terminaison est -ons." },
+      { texte: "C'est nous qui avons pris cette décision, et nous l'assumons pas.", regle: "À l'écrit, la négation est complète : « nous ne l'assumons pas »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Je doute qu'il puisse venir, mais je crois qu'il essaiera.",
+    variantes: [
+      { texte: "Je doute qu'il peut venir, mais je crois qu'il essaiera.", regle: "« douter que » commande le subjonctif : « puisse »." },
+      { texte: "Je doutes qu'il puisse venir, mais je crois qu'il essaiera.", regle: "Première personne du singulier : « je doute »." },
+      { texte: "Je doute qu'il puisse venir, mais je croit qu'il essaiera.", regle: "Première personne du singulier : « je crois »." },
+      { texte: "Je doute qu'il puisses venir, mais je crois qu'il essaiera.", regle: "Troisième personne du singulier : « qu'il puisse »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Les dossiers dont nous avons besoin sont rangés dans l'armoire.",
+    variantes: [
+      { texte: "Les dossiers que nous avons besoin sont rangés dans l'armoire.", regle: "On a besoin DE quelque chose : le relatif est « dont »." },
+      { texte: "Les dossiers dont nous en avons besoin sont rangés dans l'armoire.", regle: "« dont » reprend déjà le complément : « en » fait double emploi." },
+      { texte: "Les dossiers dont nous avons besoin sont rangé dans l'armoire.", regle: "Le participe s'accorde avec le sujet « les dossiers » : « rangés »." },
+      { texte: "Les dossiers dont nous avons besoins sont rangés dans l'armoire.", regle: "Dans « avoir besoin », le nom reste au singulier." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Il faut que vous preniez une décision avant que la réunion commence.",
+    variantes: [
+      { texte: "Il faut que vous prenez une décision avant que la réunion commence.", regle: "« il faut que » commande le subjonctif : « preniez »." },
+      { texte: "Il faut que vous prendriez une décision avant que la réunion commence.", regle: "« il faut que » commande le subjonctif, jamais le conditionnel : « preniez »." },
+      { texte: "Il faut que vous preniez une décision avant que la réunion a commencé.", regle: "« avant que » commande le subjonctif : « commence »." },
+      { texte: "Il faut que vous preniez une décision avant que la réunion commençe.", regle: "La cédille ne se met que devant a, o, u : « commence »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Les candidats se sont plu à rappeler leurs résultats.",
+    variantes: [
+      { texte: "Les candidats se sont plus à rappeler leurs résultats.", regle: "Le participe passé de « se plaire » est invariable : « plu »." },
+      { texte: "Les candidats se sont plu de rappeler leurs résultats.", regle: "On se plaît À faire quelque chose : préposition « à »." },
+      { texte: "Les candidats se sont plu à rappelé leurs résultats.", regle: "Après une préposition, le verbe est à l'infinitif : « rappeler »." },
+      { texte: "Les candidats se sont plu à rappeler leur résultats.", regle: "Déterminant possessif devant un nom pluriel : « leurs résultats »." },
+    ],
+  },
+  {
+    skill: 'grammaire_et_conjugaison',
+    difficile: true,
+    correcte: "Je vous saurais gré de bien vouloir me répondre.",
+    variantes: [
+      { texte: "Je vous serais gré de bien vouloir me répondre.", regle: "L'expression est « savoir gré » : « je vous saurais gré »." },
+      { texte: "Je vous saurez gré de bien vouloir me répondre.", regle: "Première personne du singulier : « je saurais »." },
+      { texte: "Je vous saurais gré à bien vouloir me répondre.", regle: "On sait gré DE quelque chose : préposition « de »." },
+      { texte: "Je vous saurais grès de bien vouloir me répondre.", regle: "« gré » s'écrit sans s." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "Le directeur, dont j'ai lu le rapport hier, nous a convaincus.",
+    variantes: [
+      { texte: "Le directeur, que j'ai lu le rapport hier, nous a convaincus.", regle: "Le rapport DU directeur : le relatif est « dont »." },
+      { texte: "Le directeur, dont j'ai lu son rapport hier, nous a convaincus.", regle: "« dont » marque déjà l'appartenance : le possessif « son » fait double emploi." },
+      { texte: "Le directeur, dont j'ai lu le rapport hier, nous ont convaincus.", regle: "Le sujet est « le directeur », au singulier : « a convaincus »." },
+      { texte: "Le directeur, dont j'ai lu le rapport hier, nous à convaincus.", regle: "« a » est ici l'auxiliaire avoir, pas la préposition « à »." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "Je me souviens de ce voyage ; je me rappelle chaque étape.",
+    variantes: [
+      { texte: "Je me souviens de ce voyage ; je me rappelle de chaque étape.", regle: "« se rappeler » est transitif direct : on se rappelle quelque chose, sans « de » (c'est « se souvenir » qui en prend un)." },
+      { texte: "Je me souviens ce voyage ; je me rappelle chaque étape.", regle: "On se souvient DE quelque chose : « je me souviens de »." },
+      { texte: "Je me souvient de ce voyage ; je me rappelle chaque étape.", regle: "Première personne du singulier : « je me souviens »." },
+      { texte: "Je me souviens de ce voyage ; je me rapelle chaque étape.", regle: "« rappeler » prend deux p." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "C'est à lui que je pense, et c'est de cela que je parle.",
+    variantes: [
+      { texte: "C'est à lui à qui je pense, et c'est de cela que je parle.", regle: "La préposition est déjà portée par « à lui » : « c'est à lui que », sans « à qui »." },
+      { texte: "C'est à lui que je pense, et c'est de cela dont je parle.", regle: "« dont » reprend déjà « de cela » : pléonasme ; il faut « c'est de cela que »." },
+      { texte: "C'est lui que je pense, et c'est de cela que je parle.", regle: "On pense À quelqu'un : « c'est à lui que je pense »." },
+      { texte: "C'est à lui que je pense, et c'est de cela que je parles.", regle: "Première personne du singulier : « je parle »." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "Bien qu'il ait plu, la fête a eu lieu comme prévu.",
+    variantes: [
+      { texte: "Malgré qu'il ait plu, la fête a eu lieu comme prévu.", regle: "« malgré que » est fautif : on dit « bien que » (ou « malgré » suivi d'un nom)." },
+      { texte: "Bien qu'il a plu, la fête a eu lieu comme prévu.", regle: "« bien que » exige le subjonctif : « ait plu »." },
+      { texte: "Bien qu'il ait plut, la fête a eu lieu comme prévu.", regle: "Le participe passé de « pleuvoir » est « plu », sans t." },
+      { texte: "Bien qu'il ait plu, la fête a eu lieue comme prévu.", regle: "Dans « avoir lieu », le nom « lieu » s'écrit sans e." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "Nous avons pallié ce manque grâce à une meilleure organisation.",
+    variantes: [
+      { texte: "Nous avons pallié à ce manque grâce à une meilleure organisation.", regle: "« pallier » est transitif direct : on pallie quelque chose, sans « à »." },
+      { texte: "Nous avons palié ce manque grâce à une meilleure organisation.", regle: "« pallier » prend deux l." },
+      { texte: "Nous avons pallié ce manque grâce à une meilleur organisation.", regle: "« meilleure » s'accorde avec « organisation », au féminin." },
+      { texte: "Nous avons pallier ce manque grâce à une meilleure organisation.", regle: "Après l'auxiliaire avoir, il faut le participe passé : « pallié »." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "On ne peut pas lui en vouloir : il n'a rien vu.",
+    variantes: [
+      { texte: "On peut pas lui en vouloir : il n'a rien vu.", regle: "À l'écrit, la négation est complète : « on ne peut pas »." },
+      { texte: "On ne peut pas lui en vouloir : il n'a vu rien.", regle: "Aux temps composés, « rien » se place entre l'auxiliaire et le participe : « il n'a rien vu »." },
+      { texte: "On ne peut pas l'en vouloir : il n'a rien vu.", regle: "On en veut À quelqu'un : le pronom est indirect, « lui en vouloir »." },
+      { texte: "On ne peut pas lui en vouloir : il n'a rien vus.", regle: "Sans COD placé avant, le participe reste invariable : « vu »." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "Les élèves, dont la plupart avaient révisé, ont réussi l'examen.",
+    variantes: [
+      { texte: "Les élèves, dont la plupart avait révisé, ont réussi l'examen.", regle: "Après « la plupart » (des élèves), le verbe se met au pluriel : « avaient »." },
+      { texte: "Les élèves, que la plupart avaient révisé, ont réussi l'examen.", regle: "La plupart DES élèves : le relatif est « dont »." },
+      { texte: "Les élèves, dont la plupart d'entre eux avaient révisé, ont réussi l'examen.", regle: "« dont » reprend déjà les élèves : « d'entre eux » fait double emploi." },
+      { texte: "Les élèves, dont la plupart avaient révisé, ont réussis l'examen.", regle: "Le COD « l'examen » est placé après : le participe reste invariable." },
+    ],
+  },
+  {
+    skill: 'correction_syntaxique',
+    difficile: true,
+    correcte: "Il est sorti sans qu'on le voie.",
+    variantes: [
+      { texte: "Il est sorti sans qu'on le voit.", regle: "« sans que » commande le subjonctif : « voie »." },
+      { texte: "Il est sorti sans qu'on le voye.", regle: "Le subjonctif de « voir » s'écrit « voie »." },
+      { texte: "Il a sorti sans qu'on le voie.", regle: "Sans complément d'objet, « sortir » se conjugue avec être : « il est sorti »." },
+      { texte: "Il est sortit sans qu'on le voie.", regle: "Le participe passé de « sortir » est « sorti », sans t." },
+    ],
+  },
+]
+
+export const PHRASES: PhraseSeed[] = [...ORTHOGRAPHE, ...GRAMMAIRE, ...SYNTAXE, ...DIFFICILES]
 
 /* --------------------------------------------- connecteurs logiques -- */
 
