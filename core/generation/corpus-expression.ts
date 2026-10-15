@@ -497,7 +497,7 @@ const DIFFICILES: PhraseSeed[] = [
     correcte: "Je doute qu'il puisse venir, mais je crois qu'il essaiera.",
     variantes: [
       { texte: "Je doute qu'il peut venir, mais je crois qu'il essaiera.", regle: "« douter que » commande le subjonctif : « puisse »." },
-      { texte: "Je doute qu'il pourra venir, mais je crois qu'il essaiera.", regle: "« douter que » commande le subjonctif, pas le futur : « puisse »." },
+      { texte: "Je doutes qu'il puisse venir, mais je crois qu'il essaiera.", regle: "Première personne du singulier : « je doute »." },
       { texte: "Je doute qu'il puisse venir, mais je croit qu'il essaiera.", regle: "Première personne du singulier : « je crois »." },
       { texte: "Je doute qu'il puisses venir, mais je crois qu'il essaiera.", regle: "Troisième personne du singulier : « qu'il puisse »." },
     ],
@@ -560,12 +560,12 @@ const DIFFICILES: PhraseSeed[] = [
   {
     skill: 'correction_syntaxique',
     difficile: true,
-    correcte: "Je me souviens de ce voyage ; je me le rappelle en détail.",
+    correcte: "Je me souviens de ce voyage ; je me rappelle chaque étape.",
     variantes: [
-      { texte: "Je me souviens de ce voyage ; je m'en rappelle en détail.", regle: "« se rappeler » est transitif direct : on se rappelle quelque chose, donc « je me le rappelle »." },
-      { texte: "Je me souviens ce voyage ; je me le rappelle en détail.", regle: "On se souvient DE quelque chose : « je me souviens de »." },
-      { texte: "Je me souvient de ce voyage ; je me le rappelle en détail.", regle: "Première personne du singulier : « je me souviens »." },
-      { texte: "Je me souviens de ce voyage ; je me le rapelle en détail.", regle: "« rappeler » prend deux p." },
+      { texte: "Je me souviens de ce voyage ; je me rappelle de chaque étape.", regle: "« se rappeler » est transitif direct : on se rappelle quelque chose, sans « de » (c'est « se souvenir » qui en prend un)." },
+      { texte: "Je me souviens ce voyage ; je me rappelle chaque étape.", regle: "On se souvient DE quelque chose : « je me souviens de »." },
+      { texte: "Je me souvient de ce voyage ; je me rappelle chaque étape.", regle: "Première personne du singulier : « je me souviens »." },
+      { texte: "Je me souviens de ce voyage ; je me rapelle chaque étape.", regle: "« rappeler » prend deux p." },
     ],
   },
   {
@@ -607,7 +607,7 @@ const DIFFICILES: PhraseSeed[] = [
     correcte: "On ne peut pas lui en vouloir : il n'a rien vu.",
     variantes: [
       { texte: "On peut pas lui en vouloir : il n'a rien vu.", regle: "À l'écrit, la négation est complète : « on ne peut pas »." },
-      { texte: "On ne peut pas lui en vouloir : il n'a pas rien vu.", regle: "« pas » et « rien » ne se cumulent pas : « il n'a rien vu »." },
+      { texte: "On ne peut pas lui en vouloir : il n'a vu rien.", regle: "Aux temps composés, « rien » se place entre l'auxiliaire et le participe : « il n'a rien vu »." },
       { texte: "On ne peut pas l'en vouloir : il n'a rien vu.", regle: "On en veut À quelqu'un : le pronom est indirect, « lui en vouloir »." },
       { texte: "On ne peut pas lui en vouloir : il n'a rien vus.", regle: "Sans COD placé avant, le participe reste invariable : « vu »." },
     ],
