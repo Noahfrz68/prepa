@@ -19,10 +19,15 @@ import { FAMILLES_CROIX } from './croix'
 import { FAMILLES_SERIES } from './series'
 import { FAMILLES_FIGURES } from './figures'
 import { FAMILLES_JEUX } from './jeux'
+import { FAMILLES_PROPRIETES } from './proprietes'
 
 export const FAMILLES_LOGIQUE: Famille[] = [
   ...FAMILLES_CROIX,
   ...FAMILLES_SERIES,
   ...FAMILLES_FIGURES,
   ...FAMILLES_JEUX,
+  // Les familles au niveau des annales (proprietes.ts), deux fois chacune :
+  // 31 % de réussite sur les annales contre 87 % sur les familles ci-dessus.
+  ...FAMILLES_PROPRIETES,
+  ...FAMILLES_PROPRIETES,
 ]

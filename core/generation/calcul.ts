@@ -11,6 +11,7 @@ import { capitale, euros, fraction, nombre, pgcd, pourcent, ppcm } from './alea'
 import { qcm, qcmTexte } from './qcm'
 import type { Famille } from './types'
 import { MODELES_CALCUL_SUPPLEMENTAIRES } from './calcul-modeles'
+import { FAMILLES_PROBLEMES } from './calcul-problemes'
 
 const S = 'calcul' as const
 
@@ -1099,4 +1100,7 @@ export const FAMILLES_CALCUL: Famille[] = [
   suites,
   // Deuxièmes modèles des types qui n'en avaient qu'un (calcul-modeles.ts).
   ...MODELES_CALCUL_SUPPLEMENTAIRES,
+  // Les problèmes rédigés en plusieurs étapes, au niveau des annales
+  // (calcul-problemes.ts) : 53 % de réussite sur les annales contre 71 %.
+  ...FAMILLES_PROBLEMES,
 ]

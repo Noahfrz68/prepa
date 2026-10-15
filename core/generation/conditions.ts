@@ -19,6 +19,7 @@
 import { de, euros, nombre, pgcd, pluriel, type Alea } from './alea'
 import type { Famille, Lettre, QuestionGeneree } from './types'
 import { informationsEquivalentes } from './format-cm'
+import { FAMILLES_PIEGES } from './conditions-pieges'
 
 const S = 'conditions_minimales' as const
 
@@ -607,4 +608,9 @@ export const FAMILLES_CONDITIONS: Famille[] = [
   famille('produit', 'tm.conditions_minimales.suffisance_vs_resolution', mouleProduit, 4),
   // Le type « maîtrise du format A–E » n'avait aucune question (format-cm.ts).
   informationsEquivalentes,
+  // Les pièges calculés (conditions-pieges.ts), deux fois chacun : sur les
+  // annales, ce sont eux qui font l'écart — 40 % de réussite contre 85 % sur
+  // les moules à statut fixé.
+  ...FAMILLES_PIEGES,
+  ...FAMILLES_PIEGES,
 ]
