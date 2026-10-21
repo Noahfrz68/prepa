@@ -7,7 +7,7 @@
  * quelque chose au lieu d'être un simple raté.
  */
 
-import { capitale, euros, fraction, nombre, pgcd, pourcent, ppcm } from './alea'
+import { capitale, euros, fraction, nombre, pgcd, pourcent, ppcm, presqueEntier } from './alea'
 import { qcm, qcmTexte } from './qcm'
 import type { Famille } from './types'
 import { MODELES_CALCUL_SUPPLEMENTAIRES } from './calcul-modeles'
@@ -117,7 +117,7 @@ const variationGlobale: Famille = {
         [-global, 'la bonne valeur, mais dans le mauvais sens'],
         [baisse ? -(h1 + h2) : (h1 * h2) / 100, 'les taux ont été combinés au hasard plutôt que par leurs coefficients'],
       ],
-      (n) => `${nombre(n, Number.isInteger(n) ? 0 : 2)} %`,
+      (n) => `${nombre(n, presqueEntier(n) ? 0 : 2)} %`,
     )
 
     return {
@@ -243,14 +243,16 @@ const premierDegre: Famille = {
       options,
       bonneReponse,
       diagnostics,
-      rappel: `${equation} → ${k2 - k1}x = ${nombre(b1 - b2)} → x = ${nombre(x)}.`,
+      rappel: `${equation} → ${coef(k2 - k1)} = ${nombre(b1 - b2)} → x = ${nombre(x)}.`,
       explication:
         `1. Traduire mot à mot, en appelant x le nombre cherché : ${equation}.\n` +
         `2. Regrouper les x d'un côté, les constantes de l'autre. On retire ${k1}x aux deux membres ` +
         `et on ${b2 >= 0 ? 'retire ' + nombre(b2) : 'ajoute ' + nombre(-b2)} de chaque côté :\n` +
         `   ${nombre(b1)} ${b2 >= 0 ? '−' : '+'} ${nombre(Math.abs(b2))} = ${k2}x − ${k1}x, ` +
-        `soit ${nombre(b1 - b2)} = ${k2 - k1}x.\n` +
-        `3. Diviser : x = ${nombre(b1 - b2)} ÷ ${k2 - k1} = ${nombre(x)}.\n` +
+        `soit ${nombre(b1 - b2)} = ${coef(k2 - k1)}.\n` +
+        (k2 - k1 === 1
+          ? `3. Le coefficient vaut 1 : x = ${nombre(x)} directement.\n`
+          : `3. Diviser : x = ${nombre(b1 - b2)} ÷ ${k2 - k1} = ${nombre(x)}.\n`) +
         `Vérification en dix secondes, à faire systématiquement : ` +
         `${k1} × ${nombre(x)} + ${nombre(b1)} = ${nombre(k1 * x + b1)}, ` +
         `et ${k2} × ${nombre(x)} ${signe} ${nombre(Math.abs(b2))} = ${nombre(k2 * x + b2)}. Les deux membres tombent juste.`,
@@ -258,6 +260,9 @@ const premierDegre: Famille = {
     }
   },
 }
+
+/** « 3x », mais « x » plutôt que « 1x ». */
+const coef = (k: number) => (k === 1 ? 'x' : `${k}x`)
 
 const MULTIPLICATEURS: Record<number, string> = {
   2: 'double',

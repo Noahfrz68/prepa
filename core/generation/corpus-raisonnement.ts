@@ -27,6 +27,9 @@ export interface Faille {
   presuppose: (c: Contexte) => string
 }
 
+/** « de la hausse », mais « du nombre » et « des ventes » : la langue contracte. */
+const de = (g: string) => (g.startsWith('le ') ? `du ${g.slice(3)}` : g.startsWith('les ') ? `des ${g.slice(4)}` : `de ${g}`)
+
 export const FAILLES: Faille[] = [
   {
     id: 'causalite',
@@ -60,8 +63,8 @@ export const FAILLES: Faille[] = [
     id: 'inversion',
     nom: 'confondre la cause et la conséquence',
     affaiblit: (c) => `${c.effet} précédait ${c.mesure} et pourrait en être la cause.`,
-    renforce: (c) => `${c.mesure} a précédé toute évolution de ${c.effet}.`,
-    presuppose: (c) => `${c.mesure} précède bien l’évolution de ${c.effet}.`,
+    renforce: (c) => `${c.mesure} a précédé toute évolution ${de(c.effet)}.`,
+    presuppose: (c) => `${c.mesure} précède bien l’évolution ${de(c.effet)}.`,
   },
   {
     id: 'moyenne',

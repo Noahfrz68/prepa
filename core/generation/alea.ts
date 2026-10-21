@@ -56,13 +56,24 @@ export function nombre(n: number, decimales = 0): string {
   return frac ? `${signe}${groupes},${frac}` : `${signe}${groupes}`
 }
 
+/**
+ * Vrai pour un nombre entier aux erreurs de virgule flottante près.
+ *
+ * 1 800 × 1,1 × 0,6 vaut 1 188,000…02 en machine : `Number.isInteger` le
+ * déclarait décimal, et dix questions affichaient « 1 980,00 € » ou
+ * « −8,00 % » pour des valeurs rondes.
+ */
+export function presqueEntier(n: number): boolean {
+  return Math.abs(n - Math.round(n)) < 1e-9
+}
+
 /** Euros, sans décimale quand le montant est rond. */
 export function euros(n: number): string {
-  return `${nombre(n, Number.isInteger(n) ? 0 : 2)} €`
+  return `${nombre(n, presqueEntier(n) ? 0 : 2)} €`
 }
 
 export function pourcent(n: number): string {
-  return `${nombre(n, Number.isInteger(n) ? 0 : 1)} %`
+  return `${nombre(n, presqueEntier(n) ? 0 : 1)} %`
 }
 
 /** Fraction réduite, présentée « a/b ». */
