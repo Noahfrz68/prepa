@@ -245,6 +245,13 @@ ${forme.mineure(p, q, r)}
 
 const PAR_ID = new Map(FAILLES.map((f) => [f.id, f]))
 
+export const JUMELLES: Record<string, string> = {
+  causalite: 'inversion',
+  inversion: 'causalite',
+  echantillon: 'survie',
+  survie: 'echantillon',
+}
+
 type Genre = 'affaiblit' | 'renforce' | 'presuppose' | 'sophisme'
 
 const CONSIGNES: Record<Genre, string> = {
@@ -273,7 +280,11 @@ function argument(a: Alea, genre: Genre): QuestionGeneree {
   // Les leurres sont les remèdes des AUTRES failles : chacun est une phrase
   // sensée, applicable à un argument voisin, et fausse pour celui-ci. Un leurre
   // absurde n'apprendrait rien ; celui-ci oblige à nommer la faille.
-  const autres = a.melanger(FAILLES.filter((f) => f.id !== faille.id))
+  // Les failles jumelles sont écartées : l'inversion de la cause est une
+  // causalité mal établie, le biais du survivant un échantillon mal choisi. Le
+  // remède de l'une affaiblit aussi l'argument bâti sur l'autre, et la question
+  // aurait eu deux bonnes réponses — c'était le cas de 35 questions en banque.
+  const autres = a.melanger(FAILLES.filter((f) => f.id !== faille.id && f.id !== JUMELLES[faille.id]))
 
   const bonne = genre === 'sophisme' ? faille.nom : faille[genre](c)
   const candidats: Array<[string, string]> =

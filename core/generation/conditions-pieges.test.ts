@@ -104,7 +104,9 @@ describe('pièges — univers tirés', () => {
       if (u.elargi) expect(lettre(u, paire[0], paire[1], u.elargi)).toBe(cible)
     }
     expect(trouvees).toBeGreaterThan(100)
-  })
+    // L'univers des âges énumère des milliers de couples : seul, le test prend
+    // deux secondes ; sous la charge de la suite complète, il frôlait les cinq.
+  }, 30_000)
 })
 
 describe('pièges — questions produites', () => {

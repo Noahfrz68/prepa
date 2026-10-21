@@ -198,24 +198,41 @@ const seuleCorrecte: Famille = {
 
 const RELATIONS = Object.keys(CONNECTEURS) as Relation[]
 
+/** Opposition et concession se distinguent mal entre deux faits juxtaposés. */
+const JUMELLE: Partial<Record<Relation, Relation>> = { opposition: 'concession', concession: 'opposition' }
+
+/**
+ * « bien que » introduit la proposition qui concède, pas celle qui s'oppose :
+ * placé entre « Le dossier était complet » et « il a été refusé », il inverse
+ * le sens et réclame un subjonctif que la phrase n'a pas. Il reste un leurre.
+ */
+const SUBORDONNANT_DE_TETE = new Set(['bien que'])
+
 const connecteur: Famille = {
   skillId: SKILL.connecteurs,
   nom: 'connecteur logique',
   produire(a) {
     const paire = a.choix(PAIRES)
-    const bon = a.choix(CONNECTEURS[paire.relation])
+    const bon = a.choix(CONNECTEURS[paire.relation].filter((c) => !SUBORDONNANT_DE_TETE.has(c)))
 
     // Les leurres sont les connecteurs des AUTRES relations : ils sont
     // grammaticalement possibles et sémantiquement faux, ce qui oblige à
-    // identifier le lien logique au lieu de choisir au son.
+    // identifier le lien logique au lieu de choisir au son. La relation
+    // jumelle est écartée : « pourtant » entre deux faits opposés se lit
+    // aussi bien que « tandis que », et la question aurait deux réponses.
     const leurres = a
-      .melanger(RELATIONS.filter((r) => r !== paire.relation))
-      .map((r): [string, string] => [
+      .melanger(RELATIONS.filter((r) => r !== paire.relation && r !== JUMELLE[paire.relation]))
+      .map((r): [string, string, Relation] => [
         a.choix(CONNECTEURS[r]),
         `ce connecteur marque ${LIBELLE_RELATION[r]} — grammaticalement possible ici, mais ce n’est pas le lien entre les deux propositions`,
+        r,
       ])
 
-    const { options, bonneReponse, diagnostics } = qcmTexte(a, bon, leurres)
+    const { options, bonneReponse, diagnostics } = qcmTexte(
+      a,
+      bon,
+      leurres.map(([c, motif]): [string, string] => [c, motif]),
+    )
 
     return {
       section: S,
@@ -234,8 +251,9 @@ const connecteur: Famille = {
         `2. Première proposition : « ${paire.gauche} ». Seconde : « ${paire.droite} ». ` +
         `La seconde exprime ${LIBELLE_RELATION[paire.relation]} par rapport à la première.\n` +
         `3. Le seul connecteur qui porte ce lien est « ${bon} ».\n` +
-        `4. Les quatre autres marquent ${RELATIONS.filter((r) => r !== paire.relation)
-          .map((r) => LIBELLE_RELATION[r])
+        `4. Les quatre autres marquent ${leurres
+          .slice(0, 4)
+          .map(([, , r]) => LIBELLE_RELATION[r])
           .join(', ')} : toutes des relations réelles, aucune n'est celle du texte.\n` +
         `La liste à avoir en tête : cause, conséquence, opposition, concession, addition, ` +
         `condition, but. Sept relations, et presque toutes les questions de ce type s'y ramènent.`,
