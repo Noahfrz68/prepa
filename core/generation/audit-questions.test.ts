@@ -30,6 +30,21 @@ describe('raisonnement — argumentation', () => {
     }
   })
 
+  // Audit du 2026-10-31 : ces remèdes s'appliquaient à n'importe quel argument
+  // et donnaient une seconde bonne réponse aux questions d'une autre faille.
+  it('ne propose aucun remède passe-partout', () => {
+    const PASSE_PARTOUT = [
+      'toutes les autres possibilités envisageables ont été testées puis écartées.',
+      'une troisième solution, ignorée par l’argument, obtient de meilleurs résultats.',
+      'les travaux publiés sur la question aboutissent tous à la même conclusion.',
+    ]
+    for (const q of lot) for (const o of q.options) expect(PASSE_PARTOUT, `${q.enonce}\n→ ${o}`).not.toContain(o.toLowerCase())
+  })
+
+  it('ne fait pas affirmer une cause à un argument de moyenne', () => {
+    for (const s of SCENARIOS.filter((s) => s.faille === 'moyenne')) expect(s.texte(s.contexte)).not.toMatch(/bénéficié/)
+  })
+
   it('contracte « de le » et « de les »', () => {
     for (const q of lot) for (const t of [q.enonce, q.explication, ...q.options]) expect(t).not.toMatch(/\bde les? /)
   })

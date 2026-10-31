@@ -48,15 +48,20 @@ export const FAILLES: Faille[] = [
   {
     id: 'faux_dilemme',
     nom: 'réduire la question à deux possibilités alors qu’il en existe d’autres',
-    affaiblit: () => `Une troisième solution, ignorée par l’argument, obtient de meilleurs résultats.`,
-    renforce: () => `Toutes les autres possibilités envisageables ont été testées puis écartées.`,
+    // Les deux remèdes nomment l'alternative. « Toutes les autres possibilités
+    // ont été écartées » renforçait aussi un argument de causalité (écarter les
+    // autres explications), et « une troisième solution fait mieux » affaiblissait
+    // tout argument concluant « il faut généraliser X » : deux bonnes réponses.
+    affaiblit: () => `Une troisième option, absente de l’alternative posée, permettrait elle aussi d’atteindre l’objectif.`,
+    renforce: () => `Les deux options mises en balance sont réellement les seules possibles.`,
     presuppose: () => `Il n’existe aucune autre possibilité que les deux mentionnées.`,
   },
   {
     id: 'autorite',
     nom: 'faire reposer la conclusion sur la seule notoriété de qui l’affirme',
     affaiblit: () => `La personne citée n’a aucune compétence dans le domaine dont il est question.`,
-    renforce: () => `Les travaux publiés sur la question aboutissent tous à la même conclusion.`,
+    // « Les travaux publiés concluent tous de même » renforçait n'importe quel argument.
+    renforce: () => `La personne citée fait autorité précisément dans le domaine dont il est question.`,
     presuppose: () => `Ce que soutient une personne réputée est vrai hors de son domaine comme dedans.`,
   },
   {
@@ -209,8 +214,10 @@ export const SCENARIOS: Scenario[] = [
   /* --------------------------------------------------------- moyenne -- */
   {
     faille: 'moyenne',
+    // La conclusion disait « chaque élève a bénéficié de la méthode » : elle
+    // affirmait aussi une cause, et le remède de la causalité valait autant.
     contexte: { sujet: 'ce lycée', mesure: 'la nouvelle méthode d’enseignement', effet: 'le niveau des élèves', groupe: 'l’ensemble des classes concernées' },
-    texte: (c) => `La moyenne générale de ${c.sujet} a progressé de deux points après ${c.mesure}. Chaque élève a donc bénéficié de ${c.mesure}.`,
+    texte: (c) => `La moyenne générale de ${c.sujet} a progressé de deux points après ${c.mesure}. Chaque élève a donc progressé de deux points.`,
   },
   {
     faille: 'moyenne',

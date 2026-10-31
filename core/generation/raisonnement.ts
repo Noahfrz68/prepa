@@ -21,7 +21,7 @@
 import { capitale, capitaliserPhrases, type Alea } from './alea'
 import { qcmTexte } from './qcm'
 import type { Famille, QuestionGeneree } from './types'
-import { FAILLES, SCENARIOS } from './corpus-raisonnement'
+import { FAILLES, SCENARIOS, type Faille } from './corpus-raisonnement'
 import { paradoxe } from './paradoxes'
 import { analogie } from './analogies'
 import { FAMILLES_ENIGMES } from './raisonnement-enigmes'
@@ -252,7 +252,7 @@ export const JUMELLES: Record<string, string> = {
   survie: 'echantillon',
 }
 
-type Genre = 'affaiblit' | 'renforce' | 'presuppose' | 'sophisme'
+export type Genre = 'affaiblit' | 'renforce' | 'presuppose' | 'sophisme'
 
 const CONSIGNES: Record<Genre, string> = {
   affaiblit: 'Laquelle des propositions suivantes affaiblit le plus cet argument ?',
@@ -266,6 +266,50 @@ const SKILL_GENRE: Record<Genre, string> = {
   renforce: SKILL.renforcer,
   presuppose: SKILL.hypothese,
   sophisme: SKILL.sophisme,
+}
+
+/** Pourquoi le remède d'une autre faille ne vaut rien ici. */
+export const MOTIF_LEURRE: Record<Exclude<Genre, 'sophisme'>, (autre: string) => string> = {
+  affaiblit: (autre) =>
+    `elle attaque un défaut que cet argument ne commet pas (${autre}) : le pas fragile du raisonnement reste intact`,
+  renforce: (autre) =>
+    `elle ferme une porte que cet argument n’a pas ouverte (${autre}) : le pas fragile du raisonnement reste à découvert`,
+  presuppose: (autre) =>
+    `cet argument n’a pas besoin de la tenir pour vraie : ce serait l’hypothèse d’un raisonnement qui commettrait un autre défaut (${autre})`,
+}
+
+/** Le rappel et la démarche, qui ne dépendent que de la faille, de la question et de la réponse. */
+export function correctionArgument(faille: Faille, genre: Genre, bonne: string): { rappel: string; explication: string } {
+  // L'étape 2 nomme la faille, l'étape 3 dit quoi en faire : avant, les deux
+  // répétaient la même phrase.
+  const cle = `Le pas franchi trop vite : ${faille.nom}.`
+
+  const consigne: Record<Genre, string> = {
+    affaiblit:
+      `3. Affaiblir un argument, ce n'est pas contester sa conclusion de front : c'est montrer que ` +
+      `ce pas ne tient pas.`,
+    renforce:
+      `3. Renforcer un argument, c'est fermer la porte que ce pas laissait ouverte : rendre ` +
+      `la conclusion plus sûre sans rien changer aux prémisses.`,
+    presuppose:
+      `3. Une hypothèse implicite est ce que l'argument tient pour acquis sans le dire. ` +
+      `C'est exactement ce que la faille laisse dans l'ombre : si l'hypothèse tombe, l'argument tombe.`,
+    sophisme: `3. Nommer le défaut suppose de reconstituer le pas de raisonnement qui a été franchi trop vite.`,
+  }
+
+  return {
+    rappel: `Faille : ${faille.nom.toLowerCase()}. ${genre === 'sophisme' ? '' : `D'où « ${capitale(bonne)} »`}`.trim(),
+    explication:
+      `1. Séparer ce que l'argument affirme de ce qu'il prouve. ` +
+      `Prémisses d'un côté, conclusion de l'autre, et regarder le pas entre les deux.\n` +
+      `2. ${cle}\n` +
+      `${consigne[genre]}\n` +
+      `4. Réponse : « ${capitale(bonne).replace(/\.$/, '')} ».\n` +
+      `Les quatre autres propositions sont des phrases sensées, mais chacune répond à un défaut que ` +
+      `cet argument ne commet pas. C'est ce qui les rend tentantes, et fausses ici. ` +
+      `D'où la méthode, qui vaut pour tout le sous-test : nommer la faille AVANT de lire les propositions. ` +
+      `Les lire d'abord, c'est se laisser convaincre par la première qui sonne bien.`,
+  }
 }
 
 /** Fabrique la question demandée sur un scénario tiré au sort. */
@@ -290,10 +334,7 @@ function argument(a: Alea, genre: Genre): QuestionGeneree {
   const candidats: Array<[string, string]> =
     genre === 'sophisme'
       ? autres.map((f) => [f.nom, `ce défaut existe, mais ce n’est pas celui-ci : l’argument ne ${f.nom.toLowerCase()} pas`])
-      : autres.map((f) => [
-          f[genre](c),
-          `cette proposition ${genre === 'affaiblit' ? 'affaiblirait' : genre === 'renforce' ? 'renforcerait' : 'serait l’hypothèse'} un argument bâti sur une autre faille (${f.nom.toLowerCase()}) — pas celui-ci`,
-        ])
+      : autres.map((f) => [f[genre](c), MOTIF_LEURRE[genre](f.nom.toLowerCase())])
 
   const { options, bonneReponse, diagnostics } = qcmTexte(
     a,
@@ -303,29 +344,6 @@ function argument(a: Alea, genre: Genre): QuestionGeneree {
       .map(([x, motif]): [string, string] => [capitale(x), motif]),
   )
 
-  const cle =
-    genre === 'sophisme'
-      ? `L’argument commet un défaut précis : ${faille.nom}.`
-      : `L’argument repose sur une faille précise : ${faille.nom}. ` +
-        (genre === 'affaiblit'
-          ? `L’affaiblir, c’est attaquer cette faille — pas contester la conclusion de front.`
-          : genre === 'renforce'
-            ? `Le renforcer, c’est écarter cette faille.`
-            : `L’hypothèse implicite, c’est exactement ce que la faille laisse dans l’ombre.`)
-
-  const consigne: Record<Genre, string> = {
-    affaiblit:
-      `3. Affaiblir un argument, ce n'est pas contester sa conclusion de front : c'est attaquer ` +
-      `le point faible du raisonnement. Ici, montrer que ${faille.nom.toLowerCase()} ne tient pas.`,
-    renforce:
-      `3. Renforcer un argument, c'est écarter sa faille — fermer la porte que le raisonnement ` +
-      `avait laissée ouverte. Ici, exclure que ${faille.nom.toLowerCase()} explique le résultat.`,
-    presuppose:
-      `3. Une hypothèse implicite est ce que l'argument tient pour acquis sans le dire. ` +
-      `C'est exactement ce que la faille laisse dans l'ombre : si l'hypothèse tombe, l'argument tombe.`,
-    sophisme: `3. Nommer le défaut suppose de reconstituer le pas de raisonnement qui a été franchi trop vite.`,
-  }
-
   return {
     section: S,
     skillId: SKILL_GENRE[genre],
@@ -334,17 +352,7 @@ function argument(a: Alea, genre: Genre): QuestionGeneree {
     options,
     bonneReponse,
     diagnostics,
-    rappel: `Faille : ${faille.nom.toLowerCase()}. ${genre === 'sophisme' ? '' : `D'où « ${capitale(bonne)} »`}`.trim(),
-    explication:
-      `1. Séparer ce que l'argument affirme de ce qu'il prouve. ` +
-      `Prémisses d'un côté, conclusion de l'autre, et regarder le pas entre les deux.\n` +
-      `2. ${cle}\n` +
-      `${consigne[genre]}\n` +
-      `4. Réponse : « ${capitale(bonne)} ».\n` +
-      `Les quatre autres propositions sont des phrases sensées — elles conviendraient à un argument ` +
-      `bâti sur une AUTRE faille. C'est ce qui les rend tentantes, et fausses ici. ` +
-      `D'où la méthode, qui vaut pour tout le sous-test : nommer la faille AVANT de lire les propositions. ` +
-      `Les lire d'abord, c'est se laisser convaincre par la première qui sonne bien.`,
+    ...correctionArgument(faille, genre, bonne),
     difficulte: 4,
   }
 }
