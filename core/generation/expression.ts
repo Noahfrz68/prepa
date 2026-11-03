@@ -196,11 +196,6 @@ const seuleCorrecte: Famille = {
 
 /* --------------------------------------------------------- connecteurs -- */
 
-const RELATIONS = Object.keys(CONNECTEURS) as Relation[]
-
-/** Opposition et concession se distinguent mal entre deux faits juxtaposés. */
-const JUMELLE: Partial<Record<Relation, Relation>> = { opposition: 'concession', concession: 'opposition' }
-
 /**
  * « bien que » introduit la proposition qui concède, pas celle qui s'oppose :
  * placé entre « Le dossier était complet » et « il a été refusé », il inverse
@@ -211,55 +206,68 @@ const SUBORDONNANT_DE_TETE = new Set(['bien que'])
 const connecteur: Famille = {
   skillId: SKILL.connecteurs,
   nom: 'connecteur logique',
-  produire(a) {
-    const paire = a.choix(PAIRES)
-    const bon = a.choix(CONNECTEURS[paire.relation].filter((c) => !SUBORDONNANT_DE_TETE.has(c)))
+  produire: (a) => connecteurEnCinqPhrases(a),
+}
 
-    // Les leurres sont les connecteurs des AUTRES relations : ils sont
-    // grammaticalement possibles et sémantiquement faux, ce qui oblige à
-    // identifier le lien logique au lieu de choisir au son. La relation
-    // jumelle est écartée : « pourtant » entre deux faits opposés se lit
-    // aussi bien que « tandis que », et la question aurait deux réponses.
-    const leurres = a
-      .melanger(RELATIONS.filter((r) => r !== paire.relation && r !== JUMELLE[paire.relation]))
-      .map((r): [string, string, Relation] => [
-        a.choix(CONNECTEURS[r]),
-        `ce connecteur marque ${LIBELLE_RELATION[r]} — grammaticalement possible ici, mais ce n’est pas le lien entre les deux propositions`,
-        r,
-      ])
+/**
+ * Les relations qu'un connecteur ne peut jamais porter entre deux faits de
+ * telle relation. Relevé sur le corpus : « de plus » colle à presque tout ;
+ * une conséquence se lit souvent dans une opposition (« touffue, par
+ * conséquent la seconde tient en deux pages ») ou dans une addition (« plus
+ * rapide, de sorte qu'elle mobilise moins de personnel ») ; une cause se lit
+ * dans une condition. Ces relations-là sont écartées des leurres.
+ */
+const INCOMPATIBLES: Record<Relation, Relation[]> = {
+  cause: ['consequence', 'opposition', 'condition'],
+  consequence: ['cause', 'opposition', 'concession', 'condition'],
+  opposition: ['cause', 'condition'],
+  concession: ['cause', 'consequence', 'condition'],
+  condition: ['opposition', 'consequence'],
+  addition: ['opposition', 'concession', 'condition'],
+}
 
-    const { options, bonneReponse, diagnostics } = qcmTexte(
-      a,
-      bon,
-      leurres.map(([c, motif]): [string, string] => [c, motif]),
-    )
+/** « parce que il » → « parce qu’il ». */
+function lier(gauche: string, c: string, droite: string): string {
+  const elide = /que$/.test(c) && /^[aeiouyhéèêàâîô]/i.test(droite)
+  return `${gauche}, ${elide ? c.replace(/que$/, 'qu’') : `${c} `}${droite}.`
+}
 
-    return {
-      section: S,
-      skillId: SKILL.connecteurs,
-      typeItem: 'qcm',
-      enonce:
-        `Quel connecteur complète correctement la phrase ?\n` +
-        `${paire.gauche} … ${paire.droite}.`,
-      options,
-      bonneReponse,
-      diagnostics,
-      rappel: `Le lien est ${LIBELLE_RELATION[paire.relation]} : « ${bon} ».`,
-      explication:
-        `1. Le réflexe qui décide de tout : nommer le lien logique AVANT de regarder les propositions. ` +
-        `Sinon on choisit au son, et les cinq connecteurs sonnent bien.\n` +
-        `2. Première proposition : « ${paire.gauche} ». Seconde : « ${paire.droite} ». ` +
-        `La seconde exprime ${LIBELLE_RELATION[paire.relation]} par rapport à la première.\n` +
-        `3. Le seul connecteur qui porte ce lien est « ${bon} ».\n` +
-        `4. Les quatre autres marquent ${leurres
-          .slice(0, 4)
-          .map(([, , r]) => LIBELLE_RELATION[r])
-          .join(', ')} : toutes des relations réelles, aucune n'est celle du texte.\n` +
-        `La liste à avoir en tête : cause, conséquence, opposition, concession, addition, ` +
-        `condition, but. Sept relations, et presque toutes les questions de ce type s'y ramènent.`,
-      difficulte: 2,
-    }
-  },
+/**
+ * Cinq phrases, cinq liens logiques à identifier : une seule emploie le bon
+ * connecteur. La forme « un blanc, cinq connecteurs » se réglait en nommant
+ * un seul lien (difficulté 2) ; ici il faut le faire cinq fois, et chaque
+ * leurre est une phrase plausible au son.
+ */
+function connecteurEnCinqPhrases(a: Alea): QuestionGeneree {
+  const [juste, ...autres] = a.melanger(PAIRES).slice(0, 5)
+  const bon = a.choix(CONNECTEURS[juste.relation].filter((c) => !SUBORDONNANT_DE_TETE.has(c)))
+  const phraseJuste = lier(juste.gauche, bon, juste.droite)
+  // Chaque leurre prend un connecteur qui ne PEUT PAS convenir à sa paire :
+  // sinon la question aurait deux bonnes réponses.
+  const fausses = autres.map((p): [string, string] => {
+    const r = a.choix(INCOMPATIBLES[p.relation])
+    const c = a.choix(CONNECTEURS[r].filter((x) => !SUBORDONNANT_DE_TETE.has(x)))
+    return [lier(p.gauche, c, p.droite), `« ${c} » marque ${LIBELLE_RELATION[r]}, alors que le lien entre ces deux propositions est ${LIBELLE_RELATION[p.relation]}`]
+  })
+  const { options, bonneReponse, diagnostics } = qcmTexte(a, phraseJuste, fausses)
+
+  return {
+    section: S,
+    skillId: SKILL.connecteurs,
+    typeItem: 'qcm',
+    enonce: 'Dans quelle phrase le connecteur exprime-t-il correctement le lien entre les deux propositions ?',
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: `« ${bon} » marque ${LIBELLE_RELATION[juste.relation]}, et c'est bien le lien de cette phrase.`,
+    explication:
+      `1. Pour chaque phrase, nommer le lien entre les deux propositions SANS regarder le connecteur, puis vérifier que le connecteur le porte.\n` +
+      `2. La bonne phrase : « ${phraseJuste} » Le lien est ${LIBELLE_RELATION[juste.relation]}, et « ${bon} » l'exprime.\n` +
+      `3. Les quatre autres emploient le connecteur d'une autre relation que la leur.\n` +
+      `La liste à avoir en tête : cause, conséquence, opposition, concession, addition, condition. ` +
+      `Le piège : se fier au son. Toutes les phrases « sonnent » bien ; une seule dit ce qu'elle veut dire.`,
+    difficulte: 3,
+  }
 }
 
 /* --------------------------------------------------------- lexique -- */
@@ -344,8 +352,10 @@ const antonyme: Famille = {
 
 export const FAMILLES_EXPRESSION: Famille[] = [
   phraseCorrecte,
-  phraseFautive,
-  seuleCorrecte,
+  // Poids 2 : ce sont les deux familles les plus dures (4 et 5). Sans elles,
+  // l'expression plafonnait à 3,4 de difficulté moyenne pour un objectif de 3,5.
+  { ...phraseFautive, poids: 2 },
+  { ...seuleCorrecte, poids: 2 },
   connecteur,
   synonyme,
   antonyme,

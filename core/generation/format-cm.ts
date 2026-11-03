@@ -43,31 +43,42 @@ const PAIRES: Array<(a: Tirage) => PaireEquivalente> = [
     return {
       question: 'Quel est le périmètre d’un carré ?',
       info1: `Son côté mesure ${nombre(k)} cm.`,
-      info2: `Son demi-périmètre vaut ${nombre(2 * k)} cm.`,
+      info2: `Le carré de sa diagonale vaut ${nombre(2 * k * k)} cm².`,
       suffit: true,
-      equivalence: 'un demi-périmètre de carré vaut deux côtés : les deux donnent le même côté',
+      equivalence: `diagonale² = 2 × côté² (Pythagore) : ${nombre(2 * k * k)} ÷ 2 = ${nombre(k * k)}, soit un côté de ${nombre(k)} cm`,
       verdict: `chacune donne un périmètre de ${nombre(4 * k)} cm`,
     }
   },
   (a) => {
     const prix = a.entier(4, 30) * 10
     return {
-      question: 'Quel est le prix d’un article après une remise de 20 % ?',
-      info1: `Avant remise, l’article coûtait ${nombre(prix)} €.`,
-      info2: `La remise porte sur un prix initial de ${nombre(prix)} €.`,
+      question: 'Quel était le prix d’un article avant une remise de 20 % ?',
+      info1: `Après remise, l’article coûte ${nombre(prix * 0.8)} €.`,
+      info2: `La remise lui a retiré ${nombre(prix * 0.2)} €.`,
       suffit: true,
-      equivalence: 'les deux phrases donnent le même prix initial',
-      verdict: `chacune donne ${nombre(prix)} × 0,8 = ${nombre(prix * 0.8)} €`,
+      equivalence: `les deux fixent le même prix de départ, l’un par ce qui reste (80 %), l’autre par ce qui est retiré (20 %)`,
+      verdict: `${nombre(prix * 0.8)} ÷ 0,8 = ${nombre(prix * 0.2)} ÷ 0,2 = ${nombre(prix)} €`,
     }
   },
   () => ({
     question: 'Quelle est la valeur de l’entier n ?',
-    info1: 'n est pair.',
-    info2: 'n est divisible par 2.',
+    info1: 'n² est pair.',
+    info2: 'n est pair.',
     suffit: false,
-    equivalence: 'être pair, c’est être divisible par 2',
+    equivalence: 'pour un entier, n² est pair exactement quand n l’est (le carré d’un impair est impair)',
     verdict: 'une infinité d’entiers sont pairs',
   }),
+  (a) => {
+    const [p, q] = a.choix([[2, 3], [3, 4], [3, 5], [4, 7], [5, 8]] as const)
+    return {
+      question: 'Quelle est la valeur de a ?',
+      info1: `a / b = ${p}/${q}.`,
+      info2: `${q}a = ${p}b.`,
+      suffit: false,
+      equivalence: `multiplier a / b = ${p}/${q} par ${q}b donne ${q}a = ${p}b`,
+      verdict: `un rapport sans valeur : (${p} ; ${q}), (${2 * p} ; ${2 * q})… une infinité de couples`,
+    }
+  },
   (a) => {
     const k = a.entier(3, 12)
     return {
@@ -131,7 +142,9 @@ export const informationsEquivalentes: Famille = {
             : 'même réunies, les deux informations laissent plusieurs réponses possibles'
         }.\n` +
         `À retenir : repérer l’équivalence élimine trois lettres d’un coup, sans rien calculer.`,
-      difficulte: 2,
+      // 3 depuis le 2026-11-03 : les équivalences sont déguisées (diagonale et côté,
+      // n² pair et n pair, a / b et produit en croix) au lieu d'être recopiées.
+      difficulte: 3,
     }
   },
 }

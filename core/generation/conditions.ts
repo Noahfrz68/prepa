@@ -158,25 +158,31 @@ function mouleAges(a: Alea): Moule {
   const facteur = a.entier(2, 4)
   const parent = enfant * facteur
   const [p, e] = a.melanger(PRENOMS).slice(0, 2)
-  const dans = a.entier(3, 10)
+  // Durci le 2026-11-03 : « dans 5 ans, Inès aura 40 ans » se lisait sans
+  // effort (difficulté 2). La première information suffisante ne contient
+  // plus aucun âge, et la partielle a tout d'une information suffisante.
+  const il = a.entier(2, Math.floor((parent - 1) / 2))
+  const dans = parent - 2 * il
+  const plus = a.entier(2, 9)
 
   return {
     question: `Quel est l'âge ${de(p)} ?`,
-    suffisant1: `Dans ${pluriel(dans, 'an')}, ${p} aura ${pluriel(parent + dans, 'an')}.`,
+    suffisant1: `Dans ${pluriel(dans, 'an')}, ${p} aura le double de l'âge ${/^[AEIOUYÉÈÂ]/.test(p) ? `qu'${p}` : `que ${p}`} avait il y a ${pluriel(il, 'an')}.`,
     suffisant2: `${p} a ${facteur} fois l'âge de son enfant ${e}, et la somme de leurs âges vaut ${pluriel(parent + enfant, 'an')}.`,
     partiel1: `${p} a ${facteur} fois l'âge de son enfant ${e}.`,
-    partiel2: `${e} a ${pluriel(enfant, 'an')}.`,
+    partiel2: `Dans ${pluriel(plus, 'an')}, la somme des âges ${de(p)} et ${de(e)} vaudra ${pluriel(parent + enfant + 2 * plus, 'an')}.`,
     inutile1: `${p} a plus de ${pluriel(a.entier(2, Math.max(3, enfant - 1)), 'an')}.`,
-    inutile2: `L'écart d'âge entre ${p} et ${e} est inférieur à ${pluriel(a.entier(60, 90), 'an')}.`,
-    carS1: `un âge futur se ramène à l'âge actuel en retranchant le nombre d'années : ` +
-      `${nombre(parent + dans)} − ${nombre(dans)} = ${nombre(parent)}`,
+    inutile2: `L'écart d'âge entre ${p} et ${e} restera le même toute leur vie.`,
+    carS1: `une seule inconnue et une équation : x + ${dans} = 2(x − ${il}), donc x = ${dans} + ${2 * il} = ${nombre(parent)}`,
     carS2: `un rapport ET une somme forment un système de deux équations à deux inconnues, ` +
-      `qui se résout : ${facteur}e + e = ${nombre(parent + enfant)}, donc e = ${nombre(enfant)} et ${de(p)} = ${nombre(parent)}`,
+      `qui se résout : ${facteur}e + e = ${nombre(parent + enfant)}, donc e = ${nombre(enfant)}, et l'âge ${de(p)} vaut ${nombre(parent)}`,
     manqueP1: `un rapport ne fixe aucun des deux âges — ${facteur} fois 10 ans, ${facteur} fois 30 ans, ` +
       `tous conviennent tant qu'aucune valeur absolue n'est donnée`,
-    manqueP2: `l'âge de ${e} ne dit rien de celui de ${p} tant qu'on ignore le lien entre les deux`,
-    ensemble: `le rapport devient calculable dès qu'un des deux âges est chiffré — ` +
-      `${facteur} × ${nombre(enfant)} = ${nombre(parent)}`,
+    manqueP2: `une somme fixe le total des deux âges, pas leur répartition : chaque âge reste inconnu`,
+    ensemble: `la somme actuelle vaut ${nombre(parent + enfant + 2 * plus)} − ${2 * plus} = ${nombre(parent + enfant)} ` +
+      `(chacun aura vieilli de ${plus} ans), et avec le rapport : ${facteur}e + e = ${nombre(parent + enfant)}, et l'âge ${de(p)} vaut ${nombre(parent)}`,
+    carI2: `vrai pour n'importe quels deux âges : c'est une évidence, pas une information`,
+    reunionInutile: `une borne et une évidence : aucun âge n'est fixé`,
     lecon: `un rapport entre deux âges ne fixe aucun des deux. Il faut une valeur absolue quelque part — ` +
       `un âge donné, une somme, un écart chiffré.`,
   }
@@ -282,30 +288,31 @@ function mouleEntier(a: Alea): Moule {
 
 function mouleMoyenne(a: Alea): Moule {
   const moitie = a.entier(6, 15)
-  const eleves = 2 * moitie
   const moyenne = a.entier(9, 15)
-  const somme = eleves * moyenne
   const ecart = a.entier(1, 4)
+  const plus = a.entier(1, 3)
 
   return {
     question: `Quelle est la moyenne d'une classe à un devoir ?`,
-    suffisant1: `La somme des notes vaut ${nombre(somme)} et la classe compte ${eleves} élèves.`,
+    // Durci le 2026-11-03 : « total et effectif donnés » se lisait d'un coup
+    // d'œil (difficulté 2). L'information suffisante est désormais indirecte,
+    // et les deux partielles réunissent le piège des moyennes non pondérées.
+    suffisant1: `Si chaque élève avait obtenu ${plus} points de plus, la moyenne de la classe aurait été de ${nombre(moyenne + plus)}.`,
     // Indépendante de la première : deux demi-groupes de même effectif, dont la
     // moyenne d'ensemble est la moyenne des deux moyennes.
     suffisant2: `La classe se partage en deux groupes de ${moitie} élèves, de moyennes ` +
       `${nombre(moyenne - ecart)} et ${nombre(moyenne + ecart)}.`,
-    partiel1: `La classe compte ${eleves} élèves.`,
-    partiel2: `La somme des notes obtenues vaut ${nombre(somme)}.`,
+    partiel1: `La classe compte autant de filles que de garçons.`,
+    partiel2: `Les filles ont obtenu ${nombre(moyenne - ecart)} de moyenne, les garçons ${nombre(moyenne + ecart)}.`,
     inutile1: `Toutes les notes sont comprises entre 0 et 20, et ${a.entier(2, moitie)} élèves ont eu la moyenne.`,
     inutile2: `${a.entier(2, moitie)} élèves au moins ont obtenu la même note.`,
-    carS1: `une moyenne est un total divisé par un effectif, et les deux sont donnés : ` +
-      `${nombre(somme)} ÷ ${eleves} = ${nombre(moyenne)}`,
+    carS1: `ajouter ${plus} points à chaque note ajoute ${plus} à la moyenne : ${nombre(moyenne + plus)} − ${plus} = ${nombre(moyenne)}`,
     carS2: `les deux groupes ont le MÊME effectif, donc la moyenne d'ensemble est la moyenne des deux : ` +
       `(${nombre(moyenne - ecart)} + ${nombre(moyenne + ecart)}) ÷ 2 = ${nombre(moyenne)}. ` +
       `Avec des effectifs différents il aurait fallu pondérer, et l'information n'aurait plus suffi`,
-    manqueP1: `un effectif sans total ne donne aucune moyenne`,
-    manqueP2: `un total sans effectif ne donne aucune moyenne non plus`,
-    ensemble: `total ÷ effectif = ${nombre(somme)} ÷ ${eleves} = ${nombre(moyenne)}`,
+    manqueP1: `une répartition sans aucune note ne donne aucune moyenne`,
+    manqueP2: `deux moyennes de groupes ne se combinent qu'avec leurs effectifs : sans eux, la moyenne d'ensemble peut tomber n'importe où entre ${nombre(moyenne - ecart)} et ${nombre(moyenne + ecart)}`,
+    ensemble: `effectifs égaux, donc la moyenne d'ensemble est la moyenne des deux : (${nombre(moyenne - ecart)} + ${nombre(moyenne + ecart)}) ÷ 2 = ${nombre(moyenne)}`,
     lecon: `une moyenne est un total divisé par un effectif : il faut les deux. ` +
       `Deux moyennes ne se moyennent que si les effectifs sont égaux — sinon il faut les pondérer.`,
   }
@@ -520,20 +527,28 @@ function mouleMediane(a: Alea): Moule {
 
 function moulePeinture(a: Alea): Moule {
   const rendement = a.entier(5, 12)
-  const surface = rendement * a.entier(2, 8)
-  const litres = surface / rendement
+  // Durci le 2026-11-03 : « un litre couvre 8 m² » se divisait d'emblée
+  // (difficulté 2). L'information suffisante passe par une fraction du mur.
+  const litres = a.choix([4, 6, 8, 12])
+  const surface = rendement * litres
+  const [num, den, fracMot] = a.choix(
+    ([[1, 4, 'le quart'], [1, 3, 'le tiers'], [1, 2, 'la moitié'], [2, 3, 'les deux tiers'], [3, 4, 'les trois quarts']] as const).filter(
+      ([, d]) => litres % d === 0,
+    ),
+  )
+  const premiers = (litres * num) / den
   const essai = a.entier(2, 6)
   const pot = a.entier(2, 5)
 
   return {
     question: `Combien de litres de peinture faut-il pour couvrir un mur de ${nombre(surface)} m² ?`,
-    suffisant1: `Un litre de cette peinture couvre ${nombre(rendement)} m².`,
+    suffisant1: `Les ${nombre(premiers)} premiers litres ont suffi à couvrir ${fracMot} du mur.`,
     suffisant2: `Il a fallu ${nombre(essai)} litres de la même peinture pour un mur de ${nombre(essai * rendement)} m².`,
     partiel1: `Un pot de cette peinture couvre ${nombre(pot * rendement)} m².`,
     partiel2: `Un pot contient ${nombre(pot)} litres.`,
     inutile1: `Deux pots couvrent deux fois plus de surface qu'un seul.`,
     inutile2: `Cette peinture couvre mieux que celle utilisée l'an dernier.`,
-    carS1: `${nombre(surface)} ÷ ${nombre(rendement)} = ${nombre(litres)} litres`,
+    carS1: `${nombre(premiers)} litres pour ${fracMot} du mur : le mur entier en demande ${nombre(premiers)} × ${den}${num > 1 ? ` ÷ ${num}` : ''} = ${nombre(litres)}`,
     carS2: `l'essai donne le rendement, ${nombre(essai * rendement)} ÷ ${nombre(essai)} = ${nombre(rendement)} m² par litre, puis ${nombre(surface)} ÷ ${nombre(rendement)} = ${nombre(litres)} litres`,
     manqueP1: `on sait ce que couvre un pot, pas ce qu'il contient : le rendement par litre reste inconnu`,
     manqueP2: `la contenance d'un pot ne dit pas quelle surface il couvre`,
@@ -592,11 +607,11 @@ function famille(
 }
 
 export const FAMILLES_CONDITIONS: Famille[] = [
-  famille('âges', 'tm.conditions_minimales.cm_equations_et_systemes', mouleAges, 2),
+  famille('âges', 'tm.conditions_minimales.cm_equations_et_systemes', mouleAges, 3),
   famille('rectangle', 'tm.conditions_minimales.cm_geometrie', mouleRectangle, 3),
   famille('remise', 'tm.conditions_minimales.cm_pourcentages_et_variations', moulePourcentage, 3),
   famille('entier', 'tm.conditions_minimales.cm_arithmetique_et_divisibilite', mouleEntier, 4),
-  famille('moyenne', 'tm.conditions_minimales.cm_statistiques_et_probabilites', mouleMoyenne, 2),
+  famille('moyenne', 'tm.conditions_minimales.cm_statistiques_et_probabilites', mouleMoyenne, 3),
   famille('ratio', 'tm.conditions_minimales.cm_proportionnalite_et_ratios', mouleRatio, 3),
   famille('somme', 'tm.conditions_minimales.suffisance_vs_resolution', mouleSomme, 4),
   famille('signe', 'tm.conditions_minimales.pieges_de_signe_et_cas_particuliers', mouleSigne, 4),
@@ -604,7 +619,7 @@ export const FAMILLES_CONDITIONS: Famille[] = [
   famille('carré', 'tm.conditions_minimales.cm_geometrie', mouleCarre, 3),
   famille('hausse', 'tm.conditions_minimales.cm_pourcentages_et_variations', mouleHausse, 3),
   famille('médiane', 'tm.conditions_minimales.cm_statistiques_et_probabilites', mouleMediane, 3),
-  famille('peinture', 'tm.conditions_minimales.cm_proportionnalite_et_ratios', moulePeinture, 2),
+  famille('peinture', 'tm.conditions_minimales.cm_proportionnalite_et_ratios', moulePeinture, 3),
   famille('produit', 'tm.conditions_minimales.suffisance_vs_resolution', mouleProduit, 4),
   // Le type « maîtrise du format A–E » n'avait aucune question (format-cm.ts).
   informationsEquivalentes,

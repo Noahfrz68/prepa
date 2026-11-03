@@ -496,48 +496,9 @@ const intrusFigure: Famille = {
   skillId: 'tm.logique.intrus_figure',
   nom: 'intrus figuré',
   produire(a) {
-    const genre = a.entier(0, 1)
-
-    if (genre === 0) {
-      // Quatre figures à nombre de côtés pair, une impaire.
-      const paires = FORMES.filter((f) => COTES[f] > 0 && COTES[f] % 2 === 0)
-      const impaires = FORMES.filter((f) => COTES[f] > 0 && COTES[f] % 2 === 1)
-      if (paires.length < 4 || impaires.length === 0) throw new Error('Pas assez de formes.')
-      const conformes = a.melanger(paires).slice(0, 4)
-      const bonne: Case = { forme: a.choix(impaires) }
-
-      const leurres: Array<[Case, string]> = conformes.map((f) => [
-        { forme: f },
-        `${COTES[f]} côtés : un nombre pair, la règle est respectée`,
-      ])
-
-      const { options, optionsFigure, bonneReponse, diagnostics } = qcmFigure(a, bonne, leurres)
-      return {
-        section: S,
-        skillId: intrusFigure.skillId,
-        typeItem: 'qcm',
-        enonce: 'Parmi ces cinq figures, laquelle est l’intrus ?',
-        figure: { type: 'bande', cases: optionsFigure },
-        options,
-        optionsFigure,
-        bonneReponse,
-        diagnostics,
-        rappel: 'Quatre figures ont un nombre PAIR de côtés ; une seule en a un nombre impair.',
-        explication:
-          `1. Comme pour l'intrus numérique : on cherche la règle que QUATRE figures partagent, ` +
-          `jamais ce qui cloche dans une seule. Sur un dessin, chercher l'anomalie mène toujours ` +
-          `quelque part — et presque toujours au mauvais endroit.\n` +
-          `2. L'ordre de test sur des figures : nombre de côtés — parité de ce nombre — présence ` +
-          `d'un axe de symétrie — nombre de points ou de traits — orientation. Cinq essais.\n` +
-          `3. Ici c'est le deuxième qui répond : ` +
-          `${conformes.map((f) => `${COTES[f]} côtés`).join(', ')} — que des nombres pairs.\n` +
-          `4. La cinquième figure en a un nombre impair : c'est l'intrus.\n` +
-          `Compter les côtés se fait au crayon sur le sujet, pas de tête. Deux secondes de plus, ` +
-          `et plus aucune erreur de comptage.`,
-        difficulte: 2,
-      }
-    }
-
+    // La variante « parité du nombre de côtés » a été retirée le 2026-11-03 :
+    // elle se réglait en comptant (difficulté 2). Reste celle-ci, où il faut
+    // d'abord écarter l'attribut qui varie partout (la forme).
     // Quatre figures portant une pastille au même coin, une au mauvais coin.
     const coin = a.choix(COINS)
     const autres = COINS.filter((c) => c !== coin)

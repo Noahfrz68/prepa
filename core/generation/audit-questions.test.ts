@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { aleaDepuis, capitaliserPhrases } from './alea'
 import { genererLot } from '.'
-import { CONNECTEURS, LEXIQUE, PHRASES } from './corpus-expression'
+import { CONNECTEURS, LEXIQUE, PAIRES, PHRASES } from './corpus-expression'
 import { FAILLES, SCENARIOS } from './corpus-raisonnement'
 import { FAMILLES_EXPRESSION } from './expression'
 import { FAMILLES_RAISONNEMENT, JUMELLES } from './raisonnement'
@@ -54,18 +54,38 @@ describe('expression — connecteurs et lexique', () => {
   const famille = FAMILLES_EXPRESSION.find((f) => f.nom === 'connecteur logique')!
   const a = aleaDepuis(9)
   const qs = Array.from({ length: 500 }, () => famille.produire(a))
-  const relation = (c: string) => Object.entries(CONNECTEURS).find(([, l]) => l.includes(c))![0]
+  // Chaque proposition est une phrase « gauche, connecteur droite. » : on
+  // retrouve sa paire du corpus et la relation du connecteur employé.
+  const lire = (o: string) => {
+    const p = PAIRES.find((x) => o.startsWith(`${x.gauche}, `))!
+    const milieu = o.slice(p.gauche.length + 2)
+    const c = Object.values(CONNECTEURS).flat().find((x) => milieu.startsWith(`${x} `) || milieu.startsWith(x.replace(/que$/, 'qu’')))!
+    const r = Object.entries(CONNECTEURS).find(([, l]) => l.includes(c))![0]
+    return { paire: p.relation, connecteur: c, relation: r }
+  }
 
   it('ne donne jamais « bien que » comme bonne réponse entre deux propositions juxtaposées', () => {
-    for (const q of qs) expect(q.options['ABCDE'.indexOf(q.bonneReponse)]).not.toBe('bien que')
+    for (const q of qs) expect(lire(q.options['ABCDE'.indexOf(q.bonneReponse)]).connecteur).not.toBe('bien que')
   })
 
-  it('ne met jamais face à face opposition et concession', () => {
+  it('n’a qu’une phrase juste : les leurres ne portent ni la relation de leur paire, ni une relation qui pourrait s’y lire', () => {
+    // Opposition et concession se lisent l'une dans l'autre ; « de plus » colle à
+    // presque tout ; une conséquence se lit souvent dans une opposition ou une addition.
+    const LISIBLE: Record<string, string[]> = {
+      opposition: ['concession', 'addition', 'consequence'],
+      concession: ['opposition', 'addition'],
+      addition: ['cause', 'consequence'],
+      condition: ['cause', 'addition', 'concession'],
+    }
     for (const q of qs) {
-      const r = relation(q.options['ABCDE'.indexOf(q.bonneReponse)])
-      const rs = q.options.map(relation)
-      if (r === 'opposition') expect(rs).not.toContain('concession')
-      if (r === 'concession') expect(rs).not.toContain('opposition')
+      const juste = lire(q.options['ABCDE'.indexOf(q.bonneReponse)])
+      expect(juste.relation).toBe(juste.paire)
+      for (const o of q.options.filter((_, i) => 'ABCDE'[i] !== q.bonneReponse)) {
+        const l = lire(o)
+        expect(l.relation, o).not.toBe(l.paire)
+        expect(l.relation, o).not.toBe('addition')
+        expect(LISIBLE[l.paire] ?? [], o).not.toContain(l.relation)
+      }
     }
   })
 
