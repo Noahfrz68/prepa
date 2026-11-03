@@ -72,8 +72,13 @@ export function genererLot(
   // tourner la boucle indéfiniment au lieu de rendre ce qu'elle a pu produire.
   const maxEssais = combien * 40
 
+  // Une famille de poids 3 revient trois fois par tour, à des places espacées :
+  // le tour enchaîne d'abord toutes les familles, puis celles de poids ≥ 2, etc.
+  const plusLourd = Math.max(...familles.map((f) => f.poids ?? 1))
+  const tour = Array.from({ length: plusLourd }, (_, r) => familles.filter((f) => (f.poids ?? 1) > r)).flat()
+
   for (let essai = 0; questions.length < combien && essai < maxEssais; essai++) {
-    const famille = familles[essai % familles.length]
+    const famille = tour[essai % tour.length]
 
     let q: QuestionGeneree
     try {

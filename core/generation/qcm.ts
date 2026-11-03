@@ -1,4 +1,4 @@
-import type { Alea } from './alea'
+import { fraction, type Alea } from './alea'
 import { LETTRES, type Lettre } from './types'
 
 /**
@@ -184,6 +184,65 @@ export function qcmTexte(
     bonneReponse: LETTRES[melange.indexOf(bonne)],
     diagnostics: parLettre(melange, motifs),
   }
+}
+
+export type Fraction = [numerateur: number, denominateur: number]
+export type LeurreFraction = Fraction | [valeur: Fraction, diagnostic: string]
+
+/**
+ * Propositions fractionnaires, écrites sous des formes mêlées.
+ *
+ * Une épreuve blanche de prépa proposait 7/14, 15/28, 8/14, 17/28 et 9/14 :
+ * la forme ne dit rien, il faut calculer. Le générateur réduisait tout, et la
+ * seule fraction « qui tombe juste » sur le dénominateur des cas possibles se
+ * repérait sans calcul. Chaque proposition est donc écrite au hasard, soit
+ * réduite, soit sur l'un des dénominateurs naturels de l'énoncé.
+ *
+ * Les doublons sont écartés sur la VALEUR : 2/4 et 1/2 sont la même
+ * proposition. Une probabilité hors de [0, 1] est écartée aussi.
+ */
+export function qcmFraction(
+  a: Alea,
+  bonne: Fraction,
+  leurres: LeurreFraction[],
+  denominateurs: number[],
+  secours?: () => Fraction,
+): { options: string[]; bonneReponse: Lettre; diagnostics: Diagnostics } {
+  const valide = ([n, d]: Fraction) => d > 0 && n > 0 && n < d
+  const vus = new Set([fraction(...bonne)])
+  const retenus: Array<[Fraction, string | undefined]> = []
+
+  const ajouter = (f: Fraction, motif?: string) => {
+    if (retenus.length === 4 || !valide(f) || vus.has(fraction(...f))) return
+    vus.add(fraction(...f))
+    retenus.push([f, motif])
+  }
+
+  for (const l of leurres) {
+    const [f, motif] = Array.isArray(l[0]) ? (l as [Fraction, string]) : [l as Fraction, undefined]
+    ajouter(f, motif)
+  }
+  for (let essai = 0; secours && retenus.length < 4 && essai < 200; essai++) ajouter(secours())
+
+  if (retenus.length < 4) {
+    throw new Error(`Pas assez de leurres distincts pour ${fraction(...bonne)} : ${retenus.length + 1} proposition(s).`)
+  }
+
+  const ecrire = ([n, d]: Fraction) => {
+    const formes = [fraction(n, d)]
+    for (const D of denominateurs) {
+      if ((n * D) % d !== 0) continue
+      const t = `${(n * D) / d}/${D}`
+      if (!formes.includes(t)) formes.push(t)
+    }
+    return a.choix(formes)
+  }
+
+  return qcmTexte(
+    a,
+    ecrire(bonne),
+    retenus.map(([f, motif]) => (motif ? [ecrire(f), motif] : ecrire(f))),
+  )
 }
 
 function parLettre(propositions: string[], motifs: Map<string, string>): Diagnostics {

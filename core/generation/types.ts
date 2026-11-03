@@ -69,6 +69,15 @@ export interface Famille {
   skillId: string
   /** Identifiant court, pour dire d'où vient une question dans un rapport. */
   nom: string
+  /**
+   * Nombre de passages par tour de rotation (1 par défaut).
+   *
+   * Les familles « à une idée » relevées sur une épreuve blanche pèsent 3 :
+   * à poids égal, elles n'étaient que 8 familles de calcul sur 41, soit une
+   * question sur cinq, et le reste demandait surtout d'appliquer une formule.
+   * Avec ce poids, elles font environ 40 % du calcul généré.
+   */
+  poids?: number
   produire(a: import('./alea').Alea): QuestionGeneree
 }
 

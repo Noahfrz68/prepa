@@ -205,7 +205,9 @@ describe('automatismes — chaque question est juste', () => {
       }
       if (q.table) expect(titres.has(q.table), q.table).toBe(true)
     }
-  })
+    // Des dizaines de milliers d'assertions : 5 à 6 s quand toute la suite
+    // tourne en parallèle, au-delà du délai de 5 s par défaut.
+  }, 20_000)
 
   // Le pavé décimal de l'iPhone n'a pas de « − » : une réponse négative y
   // serait impossible à taper.
