@@ -8,9 +8,10 @@
  */
 
 import { capitale, euros, fraction, nombre, pgcd, pourcent, ppcm, presqueEntier } from './alea'
-import { qcm, qcmTexte } from './qcm'
+import { qcm, qcmFraction, type LeurreFraction } from './qcm'
 import type { Famille } from './types'
 import { MODELES_CALCUL_SUPPLEMENTAIRES } from './calcul-modeles'
+import { FAMILLES_IDEES } from './calcul-idees'
 import { FAMILLES_PROBLEMES } from './calcul-problemes'
 
 const S = 'calcul' as const
@@ -542,10 +543,15 @@ const pgcdPpcm: Famille = {
       a,
       reponse,
       [
-        [cherchePgcd ? ppcm(x, y) : d, `c’est le ${cherchePgcd ? 'PPCM' : 'PGCD'} : les deux ont été échangés`],
+        [
+          cherchePgcd ? ppcm(x, y) : d,
+          cherchePgcd
+            ? 'c’est le PPCM : on cherchait le plus grand nombre qui divise les deux, pas le plus petit qu’ils divisent'
+            : 'c’est le PGCD : on cherchait le premier instant multiple des deux durées, pas un diviseur commun',
+        ],
         [x, 'c’est l’un des deux nombres de l’énoncé'],
         [y, 'c’est l’autre nombre de l’énoncé'],
-        [Math.abs(x - y), 'c’est leur différence — elle n’a rien à voir avec le PGCD'],
+        cherchePgcd ? [Math.abs(x - y), 'c’est leur différence — elle n’a rien à voir avec le PGCD'] : [x * y, 'c’est le produit des deux : il convient, mais ce n’est pas la PREMIÈRE fois'],
       ],
       (n) => nombre(n),
       { minimum: 1 },
@@ -555,7 +561,18 @@ const pgcdPpcm: Famille = {
       section: S,
       skillId: pgcdPpcm.skillId,
       typeItem: 'qcm',
-      enonce: `Quel est le ${cherchePgcd ? 'PGCD' : 'PPCM'} de ${nombre(x)} et ${nombre(y)} ?`,
+      // Le mot « PGCD » ou « PPCM » n'apparaît jamais à l'épreuve : on y lit
+      // « les plus grands carrés possibles » ou « de nouveau en même temps ».
+      // Reconnaître lequel des deux est demandé fait partie de la question.
+      enonce: cherchePgcd
+        ? a.choix([
+            `On veut découper une plaque de ${nombre(x)} cm sur ${nombre(y)} cm en carrés identiques, les plus grands possible, sans aucune chute. Quelle est la longueur du côté d'un carré, en cm ?`,
+            `Un fleuriste dispose de ${nombre(x)} roses et ${nombre(y)} tulipes. On compose avec toutes ces fleurs des bouquets tous identiques, le plus grand nombre possible. Combien de bouquets obtient-on ?`,
+          ])
+        : a.choix([
+            `Deux phares s'allument ensemble à minuit. L'un s'allume toutes les ${nombre(x)} secondes, l'autre toutes les ${nombre(y)} secondes. Au bout de combien de secondes s'allumeront-ils de nouveau en même temps ?`,
+            `Deux bus partent ensemble du terminus à 6 h. L'un repasse toutes les ${nombre(x)} minutes, l'autre toutes les ${nombre(y)} minutes. Au bout de combien de minutes repartiront-ils de nouveau ensemble ?`,
+          ]),
       options,
       bonneReponse,
       diagnostics,
@@ -569,7 +586,9 @@ const pgcdPpcm: Famille = {
         `mettre en commun. PGCD = ${d}.\n` +
         `3. Le PPCM prend le facteur commun UNE fois, puis ce qui reste de chaque côté : ` +
         `${d} × ${u} × ${v} = ${nombre(ppcm(x, y))}.\n` +
-        `4. La question porte sur le ${cherchePgcd ? 'PGCD' : 'PPCM'} : ${nombre(reponse)}.\n` +
+        (cherchePgcd
+          ? `4. « Le plus grand possible, sans reste » : c'est le PGCD, ${nombre(reponse)}.\n`
+          : `4. « De nouveau en même temps » : le premier instant multiple des deux durées, c'est le PPCM, ${nombre(reponse)}.\n`) +
         `Contrôle imparable : PGCD × PPCM = les deux nombres multipliés. ` +
         `Ici ${d} × ${nombre(ppcm(x, y))} = ${nombre(x * y)} = ${nombre(x)} × ${nombre(y)}. ` +
         `Et un repère de bon sens : le PGCD est plus petit que les deux nombres, le PPCM plus grand.`,
@@ -776,44 +795,75 @@ const probabilites: Famille = {
     const bleues = a.entier(3, 9)
     const total = rouges + bleues
 
-    const favorables = rouges * (rouges - 1)
-    const possibles = total * (total - 1)
+    // L'épreuve ne dit presque jamais « sans remise » : elle dit « simultanément »,
+    // « d'un coup », « on la met de côté ». Traduire la formule fait partie de la
+    // question ; l'écrire en toutes lettres la retirait. Le tirage avec remise
+    // revient de temps en temps, pour que la lecture compte vraiment.
+    const remise = a.chance(0.25)
+    const tirage = remise
+      ? a.choix([
+          `On tire une boule, on note sa couleur et on la remet dans l'urne, puis on en tire une seconde.`,
+          `On tire deux fois une boule, en la replaçant dans l'urne entre les deux tirages.`,
+        ])
+      : a.choix([
+          `On en tire deux successivement, sans remise.`,
+          `On en tire deux simultanément.`,
+          `On plonge la main dans l'urne et on en prend deux d'un coup.`,
+          `On tire une boule, on la met de côté, puis on en tire une seconde.`,
+        ])
 
-    // Les propositions sont des fractions réduites : formater une probabilité
-    // en décimal arrondi effacerait justement la différence entre « avec » et
-    // « sans remise », qui est ce que la question teste.
-    const { options, bonneReponse, diagnostics } = qcmTexte(a, fraction(favorables, possibles), [
-      [fraction(rouges * rouges, total * total), 'c’est le calcul AVEC remise : la boule aurait été remise dans l’urne'],
-      [fraction(bleues * (bleues - 1), possibles), 'c’est la probabilité de deux BLEUES'],
-      [fraction(rouges, total), 'c’est la probabilité d’une seule boule rouge, au premier tirage'],
-      [fraction(2 * rouges * bleues, possibles), 'c’est la probabilité d’obtenir une boule de chaque couleur'],
-      [fraction(rouges * (rouges - 1), total * total), 'le numérateur a été ajusté mais pas le dénominateur : il reste une boule de moins dans l’urne aussi'],
-      [fraction(rouges - 1, total - 1), 'c’est le second tirage seul, sans le premier'],
-    ])
+    const sansRemise: [number, number] = [rouges * (rouges - 1), total * (total - 1)]
+    const avecRemise: [number, number] = [rouges * rouges, total * total]
+    const [favorables, possibles] = remise ? avecRemise : sansRemise
+    const reponse = fraction(favorables, possibles)
 
+    const leurres: LeurreFraction[] = [
+      remise
+        ? [sansRemise, 'c’est le calcul SANS remise : or la boule est replacée, l’urne est la même au second tirage']
+        : [avecRemise, 'c’est le calcul AVEC remise : la première boule n’est plus dans l’urne au second tirage'],
+      [[bleues * (bleues - (remise ? 0 : 1)), possibles], 'c’est la probabilité de deux BLEUES'],
+      [[rouges, total], 'c’est la probabilité d’une seule boule rouge, au premier tirage'],
+      [[2 * rouges * bleues, possibles], 'c’est la probabilité d’obtenir une boule de chaque couleur'],
+    ]
+    if (!remise) {
+      leurres.push(
+        [[rouges * (rouges - 1), total * total], 'le numérateur a été ajusté mais pas le dénominateur : il reste une boule de moins dans l’urne aussi'],
+        [[rouges - 1, total - 1], 'c’est le second tirage seul, sans le premier'],
+      )
+    }
+    const { options, bonneReponse, diagnostics } = qcmFraction(
+      a,
+      [favorables, possibles],
+      leurres,
+      remise ? [possibles] : [possibles, possibles / 2],
+      () => [a.entier(1, total - 1), total],
+    )
+
+    const second = remise ? `${rouges}/${total}` : `${rouges - 1}/${total - 1}`
     return {
       section: S,
       skillId: probabilites.skillId,
       typeItem: 'qcm',
       enonce:
-        `Une urne contient ${rouges} boules rouges et ${bleues} boules bleues. ` +
-        `On en tire deux successivement, sans remise. ` +
+        `Une urne contient ${rouges} boules rouges et ${bleues} boules bleues. ${tirage} ` +
         `Quelle est la probabilité d'obtenir deux boules rouges ?`,
       options,
       bonneReponse,
       diagnostics,
-      rappel: `${rouges}/${total} × ${rouges - 1}/${total - 1} = ${fraction(favorables, possibles)}. Sans remise : les deux nombres baissent.`,
+      rappel: remise
+        ? `${rouges}/${total} × ${rouges}/${total} = ${reponse}. Boule remise : l'urne ne change pas.`
+        : `${rouges}/${total} × ${rouges - 1}/${total - 1} = ${reponse}. Tirage sans remise : les deux nombres baissent.`,
       explication:
         `1. L'urne contient ${rouges} + ${bleues} = ${total} boules.\n` +
         `2. Premier tirage : ${rouges} boules rouges sur ${total}, soit ${rouges}/${total}.\n` +
-        `3. « Sans remise » : la boule tirée ne revient pas. Il reste ${rouges - 1} rouges ` +
-        `sur ${total - 1} boules au total. Les DEUX nombres baissent d'une unité.\n` +
+        (remise
+          ? `3. La boule est remise : au second tirage, l'urne est exactement la même, ${rouges} rouges sur ${total}.\n`
+          : `3. La première boule ne revient pas (tirer deux boules d'un coup revient au même) : il reste ${rouges - 1} rouges ` +
+            `sur ${total - 1} boules. Les DEUX nombres baissent d'une unité.\n`) +
         `4. Les deux tirages doivent réussir tous les deux, donc on multiplie : ` +
-        `${rouges}/${total} × ${rouges - 1}/${total - 1} = ${favorables}/${possibles} = ` +
-        `${fraction(favorables, possibles)}.\n` +
-        `Le piège tient en deux mots dans l'énoncé. Avec remise, on aurait ` +
-        `${rouges}/${total} × ${rouges}/${total} = ${fraction(rouges * rouges, total * total)}. ` +
-        `Repérer « avec » ou « sans remise » avant de calculer vaut un point à chaque fois.`,
+        `${rouges}/${total} × ${second} = ${favorables}/${possibles} = ${reponse}.\n` +
+        `Le piège : traduire la phrase du tirage avant de calculer. « Simultanément », « d'un coup », ` +
+        `« mise de côté » : sans remise. « Remise », « replacée » : avec remise, et les deux tirages sont identiques.`,
       difficulte: 3,
     }
   },
@@ -858,7 +908,7 @@ const denombrement: Famille = {
             : `l’ordre a été compté : chaque commission a été comptée ${factorielle} = ${nombre(arrangements(n, k) / combinaisons(n, k))} fois`,
         ],
         [Math.pow(n, k), `c’est ${n}^${k} : cela reviendrait à pouvoir choisir ${k} fois la même personne`],
-        [combinaisons(n, k - 1), `le calcul a porté sur ${k - 1} places au lieu de ${k}`],
+        [combinaisons(n, k - 1), `le calcul a porté sur ${k - 1} place${k > 2 ? "s" : ""} au lieu de ${k}`],
         [n * k, 'les deux nombres ont été multipliés entre eux, sans démarche de dénombrement'],
       ],
       (v) => nombre(v),
@@ -869,28 +919,40 @@ const denombrement: Famille = {
       section: S,
       skillId: denombrement.skillId,
       typeItem: 'qcm',
+      // Ni « places distinctes » ni « sans hiérarchie » : c'est au lecteur de
+      // voir si les rôles se distinguent. L'énoncé le dit par la situation.
       enonce: ordonne
-        ? `${n} coureurs disputent une course. Combien de podiums différents (${k} places distinctes) sont possibles ?`
-        : `Un club de ${n} membres doit désigner une commission de ${k} personnes, sans hiérarchie. ` +
-          `Combien de commissions différentes peut-on former ?`,
+        ? a.choix([
+            k === 3
+              ? `${n} coureurs disputent une course. Combien de podiums différents sont possibles ?`
+              : `${n} coureurs disputent une course. Combien de duos (vainqueur, deuxième) différents sont possibles ?`,
+            `Une association de ${n} membres élit ${k === 2 ? 'un président et un trésorier' : 'un président, un secrétaire et un trésorier'}, ` +
+              `qui doivent être des personnes différentes. Combien de bureaux différents peut-on former ?`,
+            `${n} candidats passent un concours. Combien de classements différents des ${k} premiers sont possibles ?`,
+          ])
+        : a.choix([
+            `Un club de ${n} membres doit désigner une commission de ${k} personnes. Combien de commissions différentes peut-on former ?`,
+            `Parmi ${n} salariés, on en choisit ${k} pour représenter l'entreprise à un salon. Combien de groupes différents sont possibles ?`,
+            `Combien de façons y a-t-il de choisir ${k} copies parmi ${n} pour une double correction ?`,
+          ]),
       options,
       bonneReponse,
       diagnostics,
       rappel: ordonne
-        ? `Places distinctes → l'ordre compte : ${produit} = ${nombre(reponse)}.`
-        : `Sans hiérarchie → l'ordre ne compte pas : (${produit}) ÷ ${k}! = ${nombre(reponse)}.`,
+        ? `Rôles distincts → l'ordre compte : ${produit} = ${nombre(reponse)}.`
+        : `Même rôle pour tous → l'ordre ne compte pas : (${produit}) ÷ ${k}! = ${nombre(reponse)}.`,
       explication:
         `1. La seule question à se poser : est-ce que changer l'ordre change le résultat ?\n` +
         (ordonne
-          ? `   Ici oui — ${k} places distinctes, être premier n'est pas être ${k}ᵉ. On compte des ARRANGEMENTS.\n` +
+          ? `   Ici oui — ${k} rôles distincts : échanger deux personnes donne un autre résultat. On compte des ARRANGEMENTS.\n` +
             `2. On remplit les places une par une : ${n} candidats pour la première, ` +
             `${n - 1} pour la deuxième${k > 2 ? `, ${n - 2} pour la troisième` : ''}.\n` +
             `3. ${produit} = ${nombre(reponse)}.\n` +
             `Le piège inverse : si les ${k} places n'étaient pas distinctes, il faudrait diviser par ` +
             `${k}! = ${factorielle} = ${nombre(arrangements(n, k) / combinaisons(n, k))}, ` +
             `et on trouverait ${nombre(combinaisons(n, k))}.`
-          : `   Ici non — la commission est « sans hiérarchie », les mêmes ${k} personnes forment la même ` +
-            `commission quel que soit l'ordre où on les nomme. On compte des COMBINAISONS.\n` +
+          : `   Ici non — les ${k} personnes retenues jouent toutes le même rôle : nommées dans un autre ordre, ` +
+            `elles forment le même groupe. On compte des COMBINAISONS.\n` +
             `2. On commence comme si l'ordre comptait : ${produit} = ${nombre(arrangements(n, k))} façons ` +
             `de désigner ${k} personnes l'une après l'autre.\n` +
             `3. Mais chaque commission a été comptée autant de fois qu'il y a de façons d'ordonner ` +
@@ -1053,11 +1115,16 @@ const suites: Famille = {
       section: S,
       skillId: suites.skillId,
       typeItem: 'qcm',
-      enonce: chercheSomme
-        ? `Une suite commence à ${nombre(u1)} et augmente de ${nombre(r)} à chaque terme. ` +
-          `Quelle est la somme de ses ${n} premiers termes ?`
-        : `Une suite commence à ${nombre(u1)} et augmente de ${nombre(r)} à chaque terme. ` +
-          `Que vaut son ${n}ᵉ terme ?`,
+      // Aucune « suite » dans l'énoncé : une situation qui avance d'un pas
+      // constant, qu'il faut reconnaître, et dont il faut compter les pas.
+      enonce: a.choix([
+        `Dans un amphithéâtre, la 1ʳᵉ rangée compte ${nombre(u1)} sièges, et chaque rangée en compte ${nombre(r)} de plus que la précédente. ` +
+          (chercheSomme ? `Combien de sièges compte l'amphithéâtre, qui a ${n} rangées ?` : `Combien de sièges compte la ${n}ᵉ rangée ?`),
+        `Pour préparer une course, une coureuse parcourt ${nombre(u1)} km la 1ʳᵉ semaine, puis ${nombre(r)} km de plus chaque semaine que la précédente. ` +
+          (chercheSomme ? `Combien de kilomètres a-t-elle parcourus en tout au bout de ${n} semaines ?` : `Combien de kilomètres parcourt-elle la ${n}ᵉ semaine ?`),
+        `Un salarié met de côté ${nombre(u1)} € le 1ᵉʳ mois, puis chaque mois ${nombre(r)} € de plus que le mois précédent. ` +
+          (chercheSomme ? `Quelle somme a-t-il épargnée au total au bout de ${n} mois ?` : `Combien met-il de côté le ${n}ᵉ mois ?`),
+      ]),
       options,
       bonneReponse,
       diagnostics,
@@ -1108,4 +1175,6 @@ export const FAMILLES_CALCUL: Famille[] = [
   // Les problèmes rédigés en plusieurs étapes, au niveau des annales
   // (calcul-problemes.ts) : 53 % de réussite sur les annales contre 71 %.
   ...FAMILLES_PROBLEMES,
+  // Les questions à une idée relevées sur une épreuve blanche (calcul-idees.ts).
+  ...FAMILLES_IDEES,
 ]

@@ -14,7 +14,7 @@
  */
 
 import { fraction, nombre } from './alea'
-import { qcm, qcmTexte } from './qcm'
+import { qcm, qcmFraction, qcmTexte } from './qcm'
 import type { Famille } from './types'
 
 const S = 'calcul' as const
@@ -31,17 +31,19 @@ export const auMoinsUne: Famille = {
     const cas = total * (total - 1)
     const aucun = noirs * (noirs - 1)
     const reponse = fraction(cas - aucun, cas)
+    const tirage = a.choix(['On tire successivement deux jetons, sans remise,', 'On tire simultanément deux jetons', 'On prend deux jetons au hasard, d’un seul geste,'])
 
-    const { options, bonneReponse, diagnostics } = qcmTexte(
+    const { options, bonneReponse, diagnostics } = qcmFraction(
       a,
-      reponse,
+      [cas - aucun, cas],
       [
-        [fraction(verts * (verts - 1), cas), 'c’est la probabilité de DEUX jetons verts ; « au moins un » accepte aussi un seul'],
-        [fraction(aucun, cas), 'c’est la probabilité de n’en tirer AUCUN : il fallait encore la retrancher de 1'],
-        [fraction(2 * verts * noirs, cas), 'c’est « exactement un » jeton vert : le cas de deux verts a été oublié'],
-        [fraction(total * total - noirs * noirs, total * total), 'le complément a été calculé AVEC remise : le second tirage garde ' + total + ' jetons'],
+        [[verts * (verts - 1), cas], 'c’est la probabilité de DEUX jetons verts ; « au moins un » accepte aussi un seul'],
+        [[aucun, cas], 'c’est la probabilité de n’en tirer AUCUN : il fallait encore la retrancher de 1'],
+        [[2 * verts * noirs, cas], 'c’est « exactement un » jeton vert : le cas de deux verts a été oublié'],
+        [[total * total - noirs * noirs, total * total], 'le complément a été calculé AVEC remise : le second tirage garde ' + total + ' jetons'],
       ],
-      () => fraction(a.entier(1, cas - 1), cas),
+      [cas, cas / 2],
+      () => [a.entier(1, cas - 1), cas],
     )
 
     return {
@@ -49,7 +51,7 @@ export const auMoinsUne: Famille = {
       skillId: auMoinsUne.skillId,
       typeItem: 'qcm',
       enonce:
-        `On tire successivement deux jetons, sans remise, d'un sac contenant ${verts} jetons verts ` +
+        `${tirage} d'un sac contenant ${verts} jetons verts ` +
         `et ${noirs} jetons noirs. Quelle est la probabilité d'obtenir au moins un jeton vert ?`,
       options,
       bonneReponse,
@@ -58,7 +60,7 @@ export const auMoinsUne: Famille = {
       explication:
         `1. « Au moins un » regroupe deux cas (un vert, ou deux verts). Le chemin court passe par le ` +
         `contraire : « aucun vert », c'est-à-dire deux noirs.\n` +
-        `2. P(deux noirs) = ${noirs}/${total} × ${noirs - 1}/${total - 1} = ${aucun}/${cas}. Sans remise, ` +
+        `2. P(deux noirs) = ${noirs}/${total} × ${noirs - 1}/${total - 1} = ${aucun}/${cas}. Tirer deux jetons d'un coup revient à tirer sans remise : ` +
         `les deux nombres baissent d'une unité au second tirage.\n` +
         `3. P(au moins un vert) = 1 − ${aucun}/${cas} = ${cas - aucun}/${cas} = ${reponse}.\n` +
         `Le réflexe : dès que l'énoncé dit « au moins un », calculer le contraire et le retrancher de 1. ` +
@@ -84,16 +86,17 @@ export const deuxDes: Famille = {
       .map((x) => `(${x} ; ${somme - x})`)
       .join(', ')
 
-    const { options, bonneReponse, diagnostics } = qcmTexte(
+    const { options, bonneReponse, diagnostics } = qcmFraction(
       a,
-      reponse,
+      [favorables, 36],
       [
-        ['1/11', 'les onze sommes possibles (de 2 à 12) ont été supposées également probables — elles ne le sont pas'],
-        [fraction(paires, 21), 'les paires ont été comptées sans ordre (21 paires) : or (2 ; 5) et (5 ; 2) sont deux issues distinctes'],
-        [fraction(paires, 36), 'les issues favorables ont été comptées sans ordre, mais divisées par les 36 issues ordonnées'],
-        ['1/6', 'c’est la probabilité d’une face donnée sur UN dé'],
+        [[1, 11], 'les onze sommes possibles (de 2 à 12) ont été supposées également probables — elles ne le sont pas'],
+        [[paires, 21], 'les paires ont été comptées sans ordre (21 paires) : or (2 ; 5) et (5 ; 2) sont deux issues distinctes'],
+        [[paires, 36], 'les issues favorables ont été comptées sans ordre, mais divisées par les 36 issues ordonnées'],
+        [[1, 6], 'c’est la probabilité d’une face donnée sur UN dé'],
       ],
-      () => fraction(a.entier(1, 35), 36),
+      [36],
+      () => [a.entier(1, 35), 36],
     )
 
     return {
@@ -104,7 +107,7 @@ export const deuxDes: Famille = {
       options,
       bonneReponse,
       diagnostics,
-      rappel: `36 issues ordonnées, dont ${favorables} donnent ${somme} : ${favorables}/36 = ${reponse}.`,
+      rappel: `36 issues ordonnées, dont ${favorables} donnent ${somme} : ${favorables}/36${reponse === `${favorables}/36` ? "" : ` = ${reponse}`}.`,
       explication:
         `1. Deux dés distincts donnent 6 × 6 = 36 issues, toutes également probables — à condition de ` +
         `les compter DANS L'ORDRE : (1 ; 2) et (2 ; 1) sont deux issues différentes.\n` +
@@ -253,9 +256,16 @@ export const suiteGeometrique: Famille = {
       section: S,
       skillId: suiteGeometrique.skillId,
       typeItem: 'qcm',
-      enonce:
-        `Une suite géométrique a pour premier terme ${nombre(u1)} et pour raison ${q}. ` +
-        `Quelle est la valeur de son ${n}ᵉ terme ?`,
+      // La suite n'est jamais nommée : il faut la reconnaître dans la situation,
+      // et compter soi-même les étapes — c'est là que se loge le piège.
+      enonce: a.choix([
+        `Le 1ᵉʳ jour, ${nombre(u1)} personnes connaissent une rumeur ; chaque jour, ce nombre est ${q === 2 ? 'multiplié par deux' : 'multiplié par trois'}. ` +
+          `Combien de personnes la connaissent le ${n}ᵉ jour ?`,
+        `À 8 h, une culture compte ${nombre(u1)} millions de bactéries ; leur nombre ${q === 2 ? 'double' : 'triple'} toutes les heures. ` +
+          `Combien de millions de bactéries compte-t-elle à ${8 + n - 1} h ?`,
+        `Une balle est lâchée ; à chaque rebond, elle remonte à une hauteur ${q === 2 ? 'deux' : 'trois'} fois plus petite. ` +
+          `Après le ${n - 1}ᵉ rebond, elle remonte à ${nombre(u1)} cm. De quelle hauteur, en cm, avait-elle été lâchée ?`,
+      ]),
       options,
       bonneReponse,
       diagnostics,

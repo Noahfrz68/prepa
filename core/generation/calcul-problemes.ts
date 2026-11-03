@@ -23,7 +23,7 @@ const S = 'calcul' as const
 const PRENOMS = ['Camille', 'Malik', 'Inès', 'Thomas', 'Awa', 'Lucas', 'Sofia', 'Nathan', 'Léa', 'Youssef', 'Chloé', 'Hugo']
 
 /** Cherche des paramètres jusqu'à ce que `ok` soit vrai ; lève sinon (le lot retire). */
-function chercher<T>(a: Alea, tirer: (a: Alea) => T, ok: (t: T) => boolean, essais = 200): T {
+export function chercher<T>(a: Alea, tirer: (a: Alea) => T, ok: (t: T) => boolean, essais = 200): T {
   for (let i = 0; i < essais; i++) {
     const t = tirer(a)
     if (ok(t)) return t
