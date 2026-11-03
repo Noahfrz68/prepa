@@ -247,3 +247,17 @@ describe('génération — correction à deux niveaux', () => {
     }
   })
 })
+
+/**
+ * Objectif fixé le 2026-11-03 pour tous les sous-tests générés : aucune
+ * question sous 3, et au moins 3,5 de moyenne sur ce que le générateur sert
+ * réellement. La compréhension n'a pas de générateur (annales seulement).
+ */
+describe('génération — difficulté plancher', () => {
+  it.each(SECTIONS_GENERABLES)('%s : aucune question sous 3, moyenne d’au moins 3,5', (section) => {
+    const lot = genererLot(section, 300, 2026)
+    const notes = lot.questions.map((q) => q.difficulte)
+    expect(Math.min(...notes)).toBeGreaterThanOrEqual(3)
+    expect(notes.reduce((s, n) => s + n, 0) / notes.length).toBeGreaterThanOrEqual(3.5)
+  })
+})

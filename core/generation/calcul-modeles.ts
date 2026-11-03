@@ -13,9 +13,9 @@
  * reconnaisse comme des modèles distincts (core/scheduler/tirage.ts).
  */
 
-import { fraction, nombre } from './alea'
-import { qcm, qcmFraction, qcmTexte } from './qcm'
-import type { Famille } from './types'
+import { fraction, nombre, type Alea } from './alea'
+import { qcm, qcmFraction, qcmTexte, type LeurreTexte } from './qcm'
+import type { Famille, QuestionGeneree } from './types'
 
 const S = 'calcul' as const
 
@@ -125,57 +125,7 @@ export const deuxDes: Famille = {
 export const disque: Famille = {
   skillId: 'tm.calcul.geometrie_plane',
   nom: 'périmètre et aire du disque',
-  produire(a) {
-    // À partir de 3 : pour r = 2, r² et 2r coïncident et deux leurres disparaissent.
-    const rayon = a.entier(3, 12)
-    const perimetre = a.chance(0.5)
-    const u = perimetre ? 'cm' : 'cm²'
-    const pi = (k: number) => `${nombre(k)} π ${u}`
-    const bonne = perimetre ? pi(2 * rayon) : pi(rayon * rayon)
-
-    const { options, bonneReponse, diagnostics } = qcmTexte(
-      a,
-      bonne,
-      perimetre
-        ? [
-            [pi(rayon), 'la formule a perdu son 2 : le périmètre vaut 2πr, pas πr'],
-            [pi(4 * rayon), `le diamètre (${nombre(2 * rayon)} cm) a été pris pour le rayon`],
-            [pi(rayon * rayon), 'c’est l’aire (πr²), pas le périmètre'],
-            [pi(2 * rayon * rayon), 'la formule du périmètre a été mêlée à celle de l’aire : 2πr²'],
-          ]
-        : [
-            [pi(4 * rayon * rayon), `le diamètre (${nombre(2 * rayon)} cm) a été élevé au carré à la place du rayon`],
-            [pi(2 * rayon), 'c’est le périmètre (2πr), pas l’aire'],
-            [pi(2 * rayon * rayon), 'un 2 s’est glissé dans l’aire : c’est πr², sans facteur 2'],
-            [pi(rayon), 'le rayon n’a pas été élevé au carré'],
-          ],
-      // Complément du même ordre de grandeur : un « 147 π » s'écarte sans réfléchir.
-      () => pi(a.entier(Math.max(1, rayon - 2), perimetre ? 4 * rayon + 2 : rayon * rayon + 2 * rayon)),
-    )
-
-    return {
-      section: S,
-      skillId: disque.skillId,
-      typeItem: 'qcm',
-      enonce: `Un disque a pour rayon ${nombre(rayon)} cm. ` + (perimetre ? `Quel est son périmètre ?` : `Quelle est son aire ?`),
-      options,
-      bonneReponse,
-      diagnostics,
-      rappel: perimetre
-        ? `Périmètre = 2πr = 2 × π × ${nombre(rayon)} = ${bonne}.`
-        : `Aire = πr² = π × ${nombre(rayon)}² = ${bonne}.`,
-      explication: perimetre
-        ? `1. Le périmètre d'un cercle vaut 2πr, soit π fois le diamètre.\n` +
-          `2. 2 × π × ${nombre(rayon)} = ${bonne}.\n` +
-          `Les propositions sont écrites en « π cm » : inutile de remplacer π par 3,14, il suffit de comparer ` +
-          `le coefficient. Le contrôle d'unité départage aussi : un périmètre est en cm, une aire en cm².`
-        : `1. L'aire d'un disque vaut πr² : c'est le RAYON qu'on élève au carré.\n` +
-          `2. π × ${nombre(rayon)}² = π × ${nombre(rayon * rayon)} = ${bonne}.\n` +
-          `L'erreur classique : élever le diamètre au carré, ce qui quadruple l'aire. Si l'énoncé donnait le ` +
-          `diamètre, il faudrait d'abord le diviser par 2.`,
-      difficulte: 2,
-    }
-  },
+  produire: (a) => disqueSansRayon(a),
 }
 
 /* ----------------------------------------- volumes : pavé en litres -- */
@@ -183,47 +133,164 @@ export const disque: Famille = {
 export const paveLitres: Famille = {
   skillId: 'tm.calcul.aires_et_volumes',
   nom: 'volume d’un pavé, en litres',
-  produire(a) {
-    // Dimensions multiples de 10 : le volume tombe sur un nombre entier de litres.
-    const [longueur, largeur, hauteur] = [a.entier(3, 8) * 10, a.entier(2, 5) * 10, a.entier(2, 6) * 10]
-    const cm3 = longueur * largeur * hauteur
-    const litres = cm3 / 1000
+  produire: (a) => paveEnSituation(a),
+}
 
+/**
+ * Le rayon était donné et la formule suffisait (difficulté 2). On part
+ * désormais d'une autre grandeur — le périmètre, l'aire, ou deux cercles
+ * concentriques — et il faut repasser par le rayon.
+ */
+function disqueSansRayon(a: Alea): QuestionGeneree {
+  const forme = a.choix(['perimetre-vers-aire', 'aire-vers-perimetre', 'couronne'] as const)
+  const pi = (k: number, u: string) => `${nombre(k)} π ${u}`
+
+  let bonne: string
+  let leurres: LeurreTexte[]
+  let enonce: string
+  let etapes: string[]
+  let secours: () => string
+
+  if (forme === 'couronne') {
+    const r = a.entier(2, 8)
+    const R = a.entier(r + 1, r + 6)
+    bonne = pi(R * R - r * r, 'cm²')
+    leurres = [
+      [pi((R - r) * (R - r), 'cm²'), 'la différence des rayons a été élevée au carré : on retranche les AIRES, pas les rayons'],
+      [pi(R * R + r * r, 'cm²'), 'les deux aires ont été additionnées au lieu d’être retranchées'],
+      [pi(R * R, 'cm²'), 'c’est l’aire du grand disque, sans retirer le petit'],
+      [pi(2 * (R - r), 'cm²'), 'c’est un calcul de périmètre, pas d’aire'],
+    ]
+    enonce = `Deux cercles ont le même centre, de rayons ${r} cm et ${R} cm. Quelle est l'aire de la couronne comprise entre eux ?`
+    etapes = [
+      `Aire de la couronne = aire du grand disque − aire du petit.`,
+      `π × ${R}² − π × ${r}² = ${R * R} π − ${r * r} π = ${bonne}.`,
+    ]
+    secours = () => pi(a.entier(Math.max(1, R * R - r * r - 20), R * R + 10), 'cm²')
+  } else {
+    const r = a.entier(3, 12)
+    if (forme === 'perimetre-vers-aire') {
+      bonne = pi(r * r, 'cm²')
+      leurres = [
+        [pi(4 * r * r, 'cm²'), `le diamètre (${2 * r} cm) a été pris pour le rayon`],
+        [pi(2 * r, 'cm²'), 'c’est le coefficient du périmètre, recopié comme une aire'],
+        [pi(2 * r * r, 'cm²'), 'un 2 s’est glissé dans l’aire : c’est πr², sans facteur 2'],
+        [pi(r, 'cm²'), 'le rayon n’a pas été élevé au carré'],
+      ]
+      enonce = `Un cercle a un périmètre de ${nombre(2 * r)} π cm. Quelle est l'aire du disque qu'il délimite ?`
+      etapes = [`Périmètre = 2πr = ${2 * r} π, donc r = ${r} cm.`, `Aire = πr² = π × ${r}² = ${bonne}.`]
+    } else {
+      bonne = pi(2 * r, 'cm')
+      leurres = [
+        [pi(r, 'cm'), 'la formule a perdu son 2 : le périmètre vaut 2πr'],
+        [pi(2 * r * r, 'cm'), `l’aire ${r * r} π a été prise pour le rayon`],
+        [pi(4 * r, 'cm'), 'le rayon a été doublé deux fois'],
+        [pi(r * r, 'cm'), 'c’est l’aire, recopiée comme un périmètre'],
+      ]
+      enonce = `Un disque a une aire de ${nombre(r * r)} π cm². Quel est le périmètre du cercle qui le borde ?`
+      etapes = [`Aire = πr² = ${r * r} π, donc r² = ${r * r} et r = ${r} cm.`, `Périmètre = 2πr = 2 × π × ${r} = ${bonne}.`]
+    }
+    secours = () => pi(a.entier(Math.max(1, r - 2), 4 * r * r), forme === 'perimetre-vers-aire' ? 'cm²' : 'cm')
+  }
+
+  const { options, bonneReponse, diagnostics } = qcmTexte(a, bonne, leurres, secours)
+  return {
+    section: S,
+    skillId: 'tm.calcul.geometrie_plane',
+    typeItem: 'qcm',
+    enonce,
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: etapes.join(' '),
+    explication:
+      etapes.map((e, i) => `${i + 1}. ${e}`).join('\n') +
+      `\nLe piège : appliquer une formule à la grandeur donnée sans repasser par le rayon. ` +
+      `Les propositions sont en « π » : on compare les coefficients, sans jamais remplacer π par 3,14.`,
+    difficulte: 3,
+  }
+}
+
+/**
+ * Le volume d'un aquarium plein se calculait d'un produit et d'une
+ * conversion (difficulté 2). On demande maintenant la hauteur atteinte par
+ * l'eau versée, ou un volume aux dimensions données dans trois unités.
+ */
+function paveEnSituation(a: Alea): QuestionGeneree {
+  if (a.chance(0.5)) {
+    const [L, l] = [a.entier(3, 8) * 10, a.entier(2, 5) * 10]
+    const h = a.entier(1, 5) * 5
+    const litres = (L * l * h) / 1000
+    if (!Number.isInteger(litres)) return paveEnSituation(a)
     const { options, bonneReponse, diagnostics } = qcm(
       a,
-      litres,
+      h,
       [
-        [cm3 / 100, 'la conversion a divisé par 100 : or 1 L = 1 dm³ = 1 000 cm³'],
-        [cm3, 'le volume est resté en cm³ : il fallait le convertir en litres'],
-        [(longueur * largeur) / 1000, 'la hauteur a été oubliée : c’est la surface du fond, convertie comme un volume'],
-        [cm3 / 10_000, 'la conversion a divisé par 10 000 au lieu de 1 000'],
+        [h * 10, 'la conversion a été faite avec 100 cm³ par litre au lieu de 1 000'],
+        [h / 10, 'les litres ont été convertis en dm³ mais la hauteur est restée en dm'],
+        [Math.round((litres / (L + l)) * 10) / 10, 'les dimensions du fond ont été additionnées au lieu d’être multipliées'],
+        [litres, 'le nombre de litres a été pris pour une hauteur'],
       ],
-      (n) => `${nombre(n, Number.isInteger(n) ? 0 : 2)} L`,
+      (n) => `${nombre(n, Number.isInteger(n) ? 0 : 1)} cm`,
       { minimum: 0 },
     )
-
     return {
       section: S,
-      skillId: paveLitres.skillId,
+      skillId: 'tm.calcul.aires_et_volumes',
       typeItem: 'qcm',
-      enonce:
-        `Un aquarium a la forme d'un pavé de ${nombre(longueur)} cm de long, ${nombre(largeur)} cm de large ` +
-        `et ${nombre(hauteur)} cm de haut. Quelle quantité d'eau contient-il une fois plein ?`,
+      enonce: `On verse ${nombre(litres)} litres d'eau dans un aquarium vide, en forme de pavé, de ${L} cm de long et ${l} cm de large. Jusqu'à quelle hauteur l'eau monte-t-elle ?`,
       options,
       bonneReponse,
       diagnostics,
-      rappel: `${nombre(longueur)} × ${nombre(largeur)} × ${nombre(hauteur)} = ${nombre(cm3)} cm³ = ${nombre(litres)} L (1 L = 1 000 cm³).`,
+      rappel: `${nombre(litres)} L = ${nombre(litres * 1000)} cm³ ; ÷ (${L} × ${l} = ${L * l} cm²) = ${h} cm.`,
       explication:
-        `1. Volume d'un pavé : longueur × largeur × hauteur = ${nombre(longueur)} × ${nombre(largeur)} × ` +
-        `${nombre(hauteur)} = ${nombre(cm3)} cm³.\n` +
-        `2. Conversion : 1 L = 1 dm³, et 1 dm³ = 10 cm × 10 cm × 10 cm = 1 000 cm³.\n` +
-        `3. ${nombre(cm3)} ÷ 1 000 = ${nombre(litres)} L.\n` +
-        `Le raccourci : convertir d'abord chaque dimension en dm (${nombre(longueur / 10)}, ${nombre(largeur / 10)}, ` +
-        `${nombre(hauteur / 10)}) donne directement des litres : ${nombre(longueur / 10)} × ${nombre(largeur / 10)} × ` +
-        `${nombre(hauteur / 10)} = ${nombre(litres)}.`,
-      difficulte: 2,
+        `1. Convertir le volume : 1 L = 1 000 cm³, donc ${nombre(litres)} L = ${nombre(litres * 1000)} cm³.\n` +
+        `2. Le fond mesure ${L} × ${l} = ${nombre(L * l)} cm².\n` +
+        `3. Volume = fond × hauteur, donc hauteur = ${nombre(litres * 1000)} ÷ ${nombre(L * l)} = ${h} cm.\n` +
+        `Le piège : oublier la conversion, ou la faire avec 100 au lieu de 1 000. En dm, c'est immédiat : ` +
+        `fond ${L / 10} × ${l / 10} = ${(L * l) / 100} dm², et ${nombre(litres)} dm³ ÷ ${(L * l) / 100} = ${h / 10} dm = ${h} cm.`,
+      difficulte: 3,
     }
-  },
+  }
+
+  // Trois unités dans le même énoncé : m, dm et cm.
+  const Lm = a.choix([1, 1.2, 1.5, 2])
+  const ldm = a.entier(3, 8)
+  const hcm = a.entier(2, 6) * 10
+  const arrondi = (x: number) => Math.round(x * 1000) / 1000
+  const litres = arrondi(Lm * 10 * ldm * (hcm / 10))
+  // Attention : multiplier les trois nombres tels quels (m × dm × cm) redonne
+  // exactement le bon résultat (le ×10 et le ÷10 se compensent) ; ce n'est
+  // donc pas un leurre.
+  const { options, bonneReponse, diagnostics } = qcm(
+    a,
+    litres,
+    [
+      [litres * 10, 'la profondeur est restée en centimètres au lieu de passer en décimètres'],
+      [arrondi(litres / 10), 'la longueur est restée en mètres au lieu de passer en décimètres'],
+      [arrondi((Lm * ldm * hcm) / 1000), 'les trois nombres ont été multipliés tels quels, puis divisés par 1 000 comme des cm³'],
+      [litres * 100, 'longueur et profondeur ont toutes deux été mal converties'],
+    ],
+    (n) => `${nombre(n, Number.isInteger(n) ? 0 : 1)} L`,
+    { minimum: 0 },
+  )
+  return {
+    section: S,
+    skillId: 'tm.calcul.aires_et_volumes',
+    typeItem: 'qcm',
+    enonce: `Un bac en forme de pavé mesure ${nombre(Lm, Number.isInteger(Lm) ? 0 : 1)} m de long, ${ldm} dm de large et ${hcm} cm de profondeur. Combien de litres contient-il une fois plein ?`,
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: `Tout en dm : ${nombre(Lm * 10)} × ${ldm} × ${hcm / 10} = ${nombre(litres)} dm³ = ${nombre(litres)} L.`,
+    explication:
+      `1. Ramener les trois dimensions à la même unité. Le décimètre est le bon choix : 1 dm³ = 1 L.\n` +
+      `2. ${nombre(Lm, Number.isInteger(Lm) ? 0 : 1)} m = ${nombre(Lm * 10)} dm ; ${ldm} dm ; ${hcm} cm = ${hcm / 10} dm.\n` +
+      `3. Volume : ${nombre(Lm * 10)} × ${ldm} × ${hcm / 10} = ${nombre(litres)} dm³, soit ${nombre(litres)} L.\n` +
+      `Le piège : convertir une dimension et pas les autres, ou travailler en cm³ puis oublier de diviser par 1 000. ` +
+      `Tout passer en dm, c'est un seul type de conversion et aucune division à la fin.`,
+    difficulte: 3,
+  }
 }
 
 /* --------------------------------------------- suites géométriques -- */
@@ -232,6 +299,10 @@ export const suiteGeometrique: Famille = {
   skillId: 'tm.calcul.suites_et_progressions',
   nom: 'progression géométrique',
   produire(a) {
+    // Le terme direct (« combien le 7ᵉ jour ? ») se réglait d'une puissance
+    // (difficulté 2). Restent deux formes à reconstruire : le seuil (quel
+    // jour le nombre dépasse-t-il N ?) et la balle, qu'on remonte à l'envers.
+    if (a.chance(0.5)) return seuilGeometrique(a)
     const u1 = a.entier(2, 6)
     const q = a.choix([2, 3])
     const n = a.entier(4, q === 2 ? 8 : 6)
@@ -259,10 +330,6 @@ export const suiteGeometrique: Famille = {
       // La suite n'est jamais nommée : il faut la reconnaître dans la situation,
       // et compter soi-même les étapes — c'est là que se loge le piège.
       enonce: a.choix([
-        `Le 1ᵉʳ jour, ${nombre(u1)} personnes connaissent une rumeur ; chaque jour, ce nombre est ${q === 2 ? 'multiplié par deux' : 'multiplié par trois'}. ` +
-          `Combien de personnes la connaissent le ${n}ᵉ jour ?`,
-        `À 8 h, une culture compte ${nombre(u1)} millions de bactéries ; leur nombre ${q === 2 ? 'double' : 'triple'} toutes les heures. ` +
-          `Combien de millions de bactéries compte-t-elle à ${8 + n - 1} h ?`,
         `Une balle est lâchée ; à chaque rebond, elle remonte à une hauteur ${q === 2 ? 'deux' : 'trois'} fois plus petite. ` +
           `Après le ${n - 1}ᵉ rebond, elle remonte à ${nombre(u1)} cm. De quelle hauteur, en cm, avait-elle été lâchée ?`,
       ]),
@@ -277,9 +344,58 @@ export const suiteGeometrique: Famille = {
         `3. ${q}^${n - 1} = ${nombre(q ** (n - 1))}, donc u${n} = ${nombre(u1)} × ${nombre(q ** (n - 1))} = ${nombre(un)}.\n` +
         `Le piège est le même que pour les suites arithmétiques : compter ${n} étapes au lieu de ${n - 1}. ` +
         `Écrire les trois premiers termes à la main suffit à le déjouer.`,
-      difficulte: 2,
+      difficulte: 3,
     }
   },
+}
+
+/**
+ * « Quel jour le nombre dépasse-t-il N ? » On ne calcule pas un terme, on
+ * cherche le premier qui franchit un seuil : écrire les termes jusqu'au
+ * dépassement, et ne pas se tromper d'une unité sur le rang.
+ */
+function seuilGeometrique(a: Alea): QuestionGeneree {
+  const u1 = a.entier(2, 9)
+  const q = a.choix([2, 3])
+  const n = a.entier(4, q === 2 ? 9 : 6)
+  // Le seuil tombe strictement entre le terme n − 1 et le terme n.
+  const avant = u1 * q ** (n - 2)
+  const apres = u1 * q ** (n - 1)
+  const seuil = Math.round((avant + (apres - avant) * a.choix([0.3, 0.5, 0.7])) / 10) * 10 || avant + 1
+  const N = seuil > avant && seuil < apres ? seuil : avant + 1
+  const abonnes = a.chance(0.5)
+  const jour = (k: number) => (k === 1 ? '1ᵉʳ jour' : `${k}ᵉ jour`)
+
+  const { options, bonneReponse, diagnostics } = qcm(
+    a,
+    n,
+    [
+      [n - 1, `c’est le dernier jour SOUS le seuil : ${nombre(avant)} ne dépasse pas ${nombre(N)}`],
+      [n + 1, 'un jour de trop : le seuil est déjà franchi la veille'],
+      [n - 2, `le ${jour(n - 2)} ne donne que ${nombre(avant / q)} : les multiplications ont été comptées comme des jours`],
+    ],
+    jour,
+    { minimum: 2 },
+  )
+  const termes = Array.from({ length: n }, (_, i) => nombre(u1 * q ** i)).join(', ')
+  return {
+    section: S,
+    skillId: 'tm.calcul.suites_et_progressions',
+    typeItem: 'qcm',
+    enonce: abonnes
+      ? `Le 1ᵉʳ jour, une page compte ${nombre(u1)} abonnés ; chaque jour, ce nombre est multiplié par ${q === 2 ? 'deux' : 'trois'}. Quel jour dépasse-t-il pour la première fois ${nombre(N)} abonnés ?`
+      : `Le 1ᵉʳ jour, ${nombre(u1)} personnes connaissent une rumeur ; chaque jour, ce nombre ${q === 2 ? 'double' : 'triple'}. Quel jour plus de ${nombre(N)} personnes la connaissent-elles pour la première fois ?`,
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: `${termes} : le ${jour(n)} est le premier au-dessus de ${nombre(N)}.`,
+    explication:
+      `1. Le jour k, le nombre vaut ${nombre(u1)} × ${q}^(k − 1) : le 1ᵉʳ jour n'a subi aucune multiplication.\n` +
+      `2. On écrit les termes jusqu'à franchir ${nombre(N)} : ${termes}.\n` +
+      `3. Le ${jour(n - 1)} donne ${nombre(avant)}, encore sous le seuil ; le ${jour(n)} donne ${nombre(apres)}, au-dessus.\n` +
+      `Le piège : répondre le ${jour(n - 1)}, ou compter les multiplications au lieu des jours. Le rang dépasse d'une unité le nombre de multiplications.`,
+    difficulte: 3,
+  }
 }
 
 export const MODELES_CALCUL_SUPPLEMENTAIRES: Famille[] = [auMoinsUne, deuxDes, disque, paveLitres, suiteGeometrique]

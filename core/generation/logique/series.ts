@@ -30,7 +30,10 @@ const suitesNumeriques: Famille = {
   skillId: 'tm.logique.suites_numeriques',
   nom: 'suite numérique',
   produire(a) {
-    const genre = a.entier(0, 5)
+    // Les genres 0 et 1 (écart constant, rapport constant) se lisaient au
+    // premier écart (difficulté 2) : ils ne sont plus tirés. Restent les
+    // règles à deux étages, celles qui font la différence à l'épreuve.
+    const genre = a.entier(2, 5)
     const u0 = a.entier(2, 15)
     let regle: string
     let quoiRegarder: string
@@ -127,7 +130,7 @@ const suitesNumeriques: Famille = {
         `L'ordre de test qui couvre presque tout le sous-test : écarts constants → écarts en ` +
         `progression → rapport constant → alternance de deux règles → somme des deux précédents → ` +
         `carrés et cubes déguisés. Six essais, trente secondes.`,
-      difficulte: genre >= 4 ? 4 : genre >= 2 ? 3 : 2,
+      difficulte: genre >= 4 ? 4 : 3,
     }
   },
 }
@@ -138,7 +141,10 @@ const suitesDeLettres: Famille = {
   skillId: 'tm.logique.suites_de_lettres',
   nom: 'suite de lettres',
   produire(a) {
-    const genre = a.entier(0, 2)
+    // Le genre 0 (un pas constant) se lisait en un écart (difficulté 2) : il
+    // n'est plus tiré. L'écart qui grandit vaut le même 3 que son équivalent
+    // en suite numérique, et les lettres ajoutent la conversion en rangs.
+    const genre = a.entier(1, 2)
     const termes: string[] = []
     let regle: string
     let methode: string
@@ -222,7 +228,7 @@ const suitesDeLettres: Famille = {
         `4. Appliquée à ${termes[4]}, elle donne ${reponse}.\n` +
         `Les repères à connaître pour convertir sans compter depuis A : E = 5, J = 10, O = 15, ` +
         `T = 20, Y = 25. Et après Z, on repart à A — un rang 27 vaut A, un rang 28 vaut B.`,
-      difficulte: genre === 2 ? 3 : 2,
+      difficulte: 3,
     }
   },
 }
@@ -240,17 +246,20 @@ const intrusNumerique: Famille = {
     let pourquoi: string
     let detail: string
 
+    // Durci le 2026-11-03 (chaque genre était à 2) : des carrés au-delà de
+    // 100, des multiples de 7, 13, 17 ou 19, et un intrus « premier » impair,
+    // non divisible par 3 ni 5 — 91, 119, 143 : ceux qu'on prend pour premiers.
     if (genre === 0) {
-      const bases = a.melanger([4, 5, 6, 7, 8, 9, 11, 12, 13]).slice(0, 4)
+      const bases = a.melanger([11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25]).slice(0, 4)
       conformes = bases.map((b) => b * b)
-      const proche = a.entier(10, 15) ** 2
+      const proche = a.entier(11, 25) ** 2
       intrusValeur = proche + a.choix([-1, 1, 2, -2])
       regle = 'ce sont des carrés parfaits'
       detail = conformes.map((c, i) => `${nombre(c)} = ${bases[i]}²`).join(', ')
       const r = Math.floor(Math.sqrt(intrusValeur))
       pourquoi = `il tombe entre ${r}² = ${nombre(r * r)} et ${r + 1}² = ${nombre((r + 1) ** 2)}`
     } else if (genre === 1) {
-      const d = a.choix([3, 4, 6, 7, 9, 11])
+      const d = a.choix([7, 13, 17, 19])
       const vus = new Set<number>()
       conformes = []
       while (conformes.length < 4) {
@@ -265,11 +274,10 @@ const intrusNumerique: Famille = {
       detail = conformes.map((c) => `${nombre(c)} = ${d} × ${c / d}`).join(', ')
       pourquoi = `il tombe entre ${nombre(d * Math.floor(intrusValeur / d))} et ${nombre(d * (Math.floor(intrusValeur / d) + 1))}, deux multiples consécutifs de ${d}`
     } else if (genre === 2) {
-      const premiers = [11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73]
+      const premiers = [41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199]
       conformes = a.melanger(premiers).slice(0, 4)
-      let candidat = a.entier(12, 90)
-      while (estPremier(candidat)) candidat++
-      intrusValeur = candidat
+      intrusValeur = a.choix([49, 77, 91, 119, 121, 133, 143, 161, 169, 187])
+      if (estPremier(intrusValeur)) throw new Error('intrus premier')
       regle = 'ce sont des nombres premiers'
       detail = `${conformes.map(nombre).join(', ')} n’ont pas d’autre diviseur qu’eux-mêmes et 1`
       const d = [2, 3, 5, 7, 11, 13].find((x) => intrusValeur % x === 0) ?? 2
@@ -328,7 +336,7 @@ const intrusNumerique: Famille = {
         `${iIntrus >= 0 ? `, proposition ${'ABCDE'[iIntrus]}` : ''}.\n` +
         `Les carrés jusqu'à 25² et les cubes jusqu'à 10³ méritent d'être sus par cœur : ils font ` +
         `gagner dix secondes ici, et reviennent en calcul comme en conditions minimales.`,
-      difficulte: genre === 3 ? 3 : 2,
+      difficulte: 3,
     }
   },
 }
@@ -337,43 +345,36 @@ const intrusAlphabetique: Famille = {
   skillId: 'tm.logique.intrus_alphabetique',
   nom: 'intrus alphabétique',
   produire(a) {
-    const genre = a.entier(0, 2)
+    // Durci le 2026-11-03 : « trois lettres consécutives » ou « une voyelle au
+    // milieu » se voyaient sans convertir (difficulté 2). Les deux règles
+    // restantes exigent les rangs : un écart constant propre à CHAQUE groupe,
+    // ou une symétrie dans l'alphabet (A↔Z, B↔Y : rangs de somme 27).
+    const genre = a.entier(0, 1)
     const conformes: string[] = []
     let intrusGroupe: string
     let regle: string
 
     if (genre === 0) {
-      // Trois lettres consécutives.
-      while (conformes.length < 4) {
-        const d = a.entier(1, 22)
-        const g = `${lettre(d)}${lettre(d + 1)}${lettre(d + 2)}`
-        if (!conformes.includes(g)) conformes.push(g)
+      const pas = a.melanger([2, 3, 4, 5, 6])
+      for (const p of pas.slice(0, 4)) {
+        const d = a.entier(1, 26 - 2 * p)
+        conformes.push(`${lettre(d)}${lettre(d + p)}${lettre(d + 2 * p)}`)
       }
-      const d = a.entier(1, 20)
-      intrusGroupe = `${lettre(d)}${lettre(d + 1)}${lettre(d + 3)}`
-      regle = 'trois lettres qui se suivent dans l’alphabet'
-    } else if (genre === 1) {
-      // Écart interne constant, différent de 1.
-      const pas = a.choix([2, 3, 4])
-      while (conformes.length < 4) {
-        const d = a.entier(1, 26 - 2 * pas)
-        const g = `${lettre(d)}${lettre(d + pas)}${lettre(d + 2 * pas)}`
-        if (!conformes.includes(g)) conformes.push(g)
-      }
-      const d = a.entier(1, 26 - 2 * pas - 1)
-      intrusGroupe = `${lettre(d)}${lettre(d + pas)}${lettre(d + 2 * pas + 1)}`
-      regle = `un écart constant de ${pas} rangs entre les lettres`
+      // L'intrus a deux écarts différents, proches l'un de l'autre.
+      const p1 = a.entier(2, 5)
+      const p2 = p1 + a.choix([1, -1])
+      const d = a.entier(1, 26 - p1 - p2)
+      intrusGroupe = `${lettre(d)}${lettre(d + p1)}${lettre(d + p1 + p2)}`
+      regle = 'dans chaque groupe, les deux écarts sont égaux (l’écart change d’un groupe à l’autre)'
     } else {
-      // Une voyelle au milieu.
-      const voyelles = ['A', 'E', 'I', 'O', 'U']
       while (conformes.length < 4) {
-        const g = `${ALPHABET[a.entier(0, 25)]}${a.choix(voyelles)}${ALPHABET[a.entier(0, 25)]}`
+        const d = a.entier(1, 12)
+        const g = `${lettre(d)}${ALPHABET[a.entier(0, 25)]}${lettre(27 - d)}`
         if (!conformes.includes(g)) conformes.push(g)
       }
-      let milieu = ALPHABET[a.entier(0, 25)]
-      while (voyelles.includes(milieu)) milieu = ALPHABET[a.entier(0, 25)]
-      intrusGroupe = `${ALPHABET[a.entier(0, 25)]}${milieu}${ALPHABET[a.entier(0, 25)]}`
-      regle = 'la lettre du milieu est une voyelle'
+      const d = a.entier(1, 12)
+      intrusGroupe = `${lettre(d)}${ALPHABET[a.entier(0, 25)]}${lettre(27 - d + (d === 1 ? -1 : a.choix([1, -1])))}`
+      regle = 'la première et la dernière lettre sont symétriques dans l’alphabet (rangs de somme 27 : A↔Z, B↔Y…)'
     }
 
     if (conformes.includes(intrusGroupe)) throw new Error('L’intrus vérifie la règle.')
@@ -412,7 +413,7 @@ const intrusAlphabetique: Famille = {
         `4. ${intrusGroupe} ne la vérifie pas : c'est l'intrus.\n` +
         `Savoir placer E = 5, J = 10, O = 15, T = 20, Y = 25 permet de convertir sans compter ` +
         `depuis A. C'est ce qui fait la différence quand il reste quatre minutes.`,
-      difficulte: 2,
+      difficulte: 3,
     }
   },
 }

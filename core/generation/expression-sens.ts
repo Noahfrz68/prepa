@@ -7,8 +7,9 @@
  * la raison de son erreur.
  */
 
+import type { Alea } from './alea'
 import { qcmTexte } from './qcm'
-import type { Famille } from './types'
+import type { Famille, QuestionGeneree } from './types'
 
 /* ------------------------------------------------------ reformulation -- */
 
@@ -158,13 +159,6 @@ interface Registre {
   impropre: string
 }
 
-const MOTIFS_REGISTRE = {
-  familier: 'registre familier : déplacé dans un écrit de cette nature',
-  pompeux: 'registre ampoulé : la phrase se veut soutenue et devient pompeuse ou fautive',
-  incoherent: 'incohérence logique : le connecteur ou la construction contredit ce qui est dit',
-  impropre: 'impropriété : un mot employé dans un sens qu’il n’a pas',
-} as const
-
 export const REGISTRES: Registre[] = [
   {
     situation: 'Dans une lettre de candidature adressée à une école',
@@ -251,33 +245,73 @@ export const REGISTRES: Registre[] = [
 export const registre: Famille = {
   skillId: 'tm.expression.coherence_et_registre',
   nom: 'cohérence et registre',
-  produire(a) {
-    const r = a.choix(REGISTRES)
-    const { options, bonneReponse, diagnostics } = qcmTexte(a, r.juste, [
-      [r.familier, MOTIFS_REGISTRE.familier],
-      [r.pompeux, MOTIFS_REGISTRE.pompeux],
-      [r.incoherent, MOTIFS_REGISTRE.incoherent],
-      [r.impropre, MOTIFS_REGISTRE.impropre],
-    ])
-    return {
-      section: 'expression',
-      skillId: registre.skillId,
-      typeItem: 'qcm',
-      enonce: `${r.situation}, quelle phrase convient le mieux ?`,
-      options,
-      bonneReponse,
-      diagnostics,
-      rappel: 'Registre courant et soutenu sans emphase, logique cohérente, mots dans leur sens exact.',
-      explication:
-        `1. Trois contrôles, dans l’ordre : le registre (ni familier, ni ampoulé), la cohérence (le connecteur dit-il ` +
-        `ce que la phrase fait ?), la propriété des mots (chaque mot dans son vrai sens).\n` +
-        `2. La bonne phrase passe les trois : « ${r.juste} »\n` +
-        `3. Les leurres échouent chacun sur un point : un registre familier, une emphase pompeuse, une ` +
-        `contradiction logique, un mot pris pour un autre (paronyme).\n` +
-        `Le piège : croire que « plus soutenu » veut dire « meilleur ». Un écrit professionnel est sobre.`,
-      difficulte: 2,
-    }
-  },
+  produire: (a) => registreDiagnostic(a),
+}
+
+const DEFAUTS = {
+  familier: 'Un registre familier',
+  pompeux: 'Un registre ampoulé',
+  incoherent: 'Une incohérence logique',
+  impropre: 'Une impropriété : un mot employé pour un autre',
+  juste: 'Aucun défaut',
+} as const
+
+/** Le mot qui distingue deux phrases presque identiques : « gestion » / « gestation ». */
+function motChange(juste: string, fautive: string): [string, string] | undefined {
+  const [j, f] = [juste.split(/\s+/), fautive.split(/\s+/)]
+  const i = j.findIndex((m, k) => m !== f[k])
+  return i < 0 || j.length !== f.length ? undefined : [j[i].replace(/[.,;!?]$/, ''), f[i].replace(/[.,;!?]$/, '')]
+}
+
+/**
+ * Une phrase, et son défaut à nommer. Choisir « la phrase qui convient » parmi
+ * cinq se réglait en écartant la familière et l'ampoulée au premier coup d'œil
+ * (difficulté 2). Ici la phrase montrée est juste, incohérente ou impropre :
+ * il faut la lire mot à mot, et l'impropriété est un paronyme discret.
+ * L'ampoulé n'est jamais montré : ses phrases glissent souvent un mot impropre
+ * (« procrastiner ladite réunion »), et deux défauts feraient deux réponses.
+ */
+function registreDiagnostic(a: Alea): QuestionGeneree {
+  const r = a.choix(REGISTRES)
+  const type = a.choix(['juste', 'incoherent', 'impropre'] as const)
+  const phrase = r[type]
+  const autres = (Object.keys(DEFAUTS) as Array<keyof typeof DEFAUTS>).filter((t) => t !== type)
+  const { options, bonneReponse, diagnostics } = qcmTexte(
+    a,
+    DEFAUTS[type],
+    autres.map((t): [string, string] => [
+      DEFAUTS[t],
+      t === 'juste' ? 'la phrase a bien un défaut' : t === 'familier' || t === 'pompeux' ? 'le registre est juste ici : sobre, ni relâché ni emphatique' : t === 'incoherent' ? 'la phrase ne se contredit pas : le lien logique est cohérent' : 'chaque mot est pris dans son sens exact',
+    ]),
+  )
+  const mots = type === 'impropre' ? motChange(r.juste, r.impropre) : undefined
+  return {
+    section: 'expression',
+    skillId: 'tm.expression.coherence_et_registre',
+    typeItem: 'qcm',
+    enonce: `${r.situation}, on lit :\n« ${phrase} »\nQuel est le défaut de cette phrase ?`,
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel:
+      type === 'juste'
+        ? 'Registre sobre, logique cohérente, chaque mot dans son sens : aucun défaut.'
+        : type === 'impropre'
+          ? `Impropriété${mots ? ` : « ${mots[1]} » au lieu de « ${mots[0]} »` : ''}.`
+          : 'Incohérence : la construction contredit ce que la phrase affirme.',
+    explication:
+      `1. Trois contrôles, dans l'ordre : le registre (ni familier, ni ampoulé), la cohérence (la phrase ne se contredit-elle pas ?), ` +
+      `la propriété des mots (chaque mot dans son vrai sens).\n` +
+      (type === 'juste'
+        ? `2. La phrase passe les trois : registre sobre, aucune contradiction, aucun mot détourné. Réponse : aucun défaut.\n`
+        : type === 'impropre'
+          ? `2. Registre et logique sont justes, mais un mot est pris pour un autre${mots ? ` : « ${mots[1]} » au lieu de « ${mots[0]} »` : ''}. ` +
+            `La phrase correcte : « ${r.juste} »\n`
+          : `2. Le registre est juste, mais la phrase se contredit : la construction dit le contraire de ce qu'elle affirme. ` +
+            `La phrase cohérente : « ${r.juste} »\n`) +
+      `Le piège : survoler une phrase au registre irréprochable et conclure « aucun défaut ». L'impropriété tient souvent à une ou deux lettres.`,
+    difficulte: 3,
+  }
 }
 
 export const FAMILLES_EXPRESSION_SENS: Famille[] = [reformulation, registre]

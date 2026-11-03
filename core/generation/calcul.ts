@@ -7,12 +7,12 @@
  * quelque chose au lieu d'être un simple raté.
  */
 
-import { capitale, euros, fraction, nombre, pgcd, pourcent, ppcm, presqueEntier } from './alea'
-import { qcm, qcmFraction, type LeurreFraction } from './qcm'
-import type { Famille } from './types'
+import { capitale, de, euros, fraction, nombre, pgcd, pourcent, ppcm, presqueEntier, type Alea } from './alea'
+import { qcm, qcmFraction, type Leurre, type LeurreFraction } from './qcm'
+import type { Famille, QuestionGeneree } from './types'
 import { MODELES_CALCUL_SUPPLEMENTAIRES } from './calcul-modeles'
 import { FAMILLES_IDEES } from './calcul-idees'
-import { FAMILLES_PROBLEMES } from './calcul-problemes'
+import { chercher, FAMILLES_PROBLEMES } from './calcul-problemes'
 
 const S = 'calcul' as const
 
@@ -44,25 +44,34 @@ const pourcentages: Famille = {
   skillId: 'tm.calcul.pourcentages_et_variations',
   nom: 'variations successives',
   produire(a) {
+    // « Une hausse puis une baisse, quel prix final ? » se réglait d'un seul
+    // produit de coefficients (difficulté 2). La moitié des tirages demande
+    // désormais la variation qui ramène au prix de départ : il faut inverser
+    // le coefficient, et le leurre « même taux » est celui de l'épreuve.
+    if (a.chance(0.5)) return retourAuPrix(a)
+    // L'autre moitié enchaîne TROIS variations : une étape de plus, et le
+    // leurre « somme des taux » devient bien plus tentant.
     const prix = a.entier(2, 40) * 100
     const hausse = a.choix([10, 20, 25, 40, 50])
     const baisse = a.choix([10, 20, 25, 40, 50])
+    const hausse2 = a.choix([10, 20, 25, 50])
     const produit = a.choix(PRODUITS)
 
-    const final = prix * (1 + hausse / 100) * (1 - baisse / 100)
+    const final = prix * (1 + hausse / 100) * (1 - baisse / 100) * (1 + hausse2 / 100)
+    const somme = hausse - baisse + hausse2
 
     const cH = nombre(1 + hausse / 100, 2)
     const cB = nombre(1 - baisse / 100, 2)
+    const cH2 = nombre(1 + hausse2 / 100, 2)
 
     const { options, bonneReponse, diagnostics } = qcm(
       a,
       final,
       [
-        [prix * (1 + (hausse - baisse) / 100), `les deux taux ont été additionnés (${pourcent(hausse)} − ${pourcent(baisse)}) au lieu d'être composés`],
-        [prix * (1 + hausse / 100), 'seule la hausse a été appliquée : la baisse a été oubliée'],
-        [prix * (1 - baisse / 100), 'seule la baisse a été appliquée : la hausse a été oubliée'],
-        [prix, 'les deux variations ont été supposées se compenser — elles ne le font jamais'],
-        [prix * (1 + hausse / 100) * (1 + baisse / 100), 'la baisse a été appliquée comme une hausse : le signe s’est perdu'],
+        [prix * (1 + somme / 100), `les trois taux ont été additionnés (${hausse} − ${baisse} + ${hausse2} = ${somme} %) au lieu d'être composés`],
+        [prix * (1 + hausse / 100) * (1 - baisse / 100), 'la troisième variation a été oubliée'],
+        [prix * (1 + hausse2 / 100), 'la hausse et la baisse ont été supposées se compenser — elles ne le font jamais'],
+        [prix * (1 + hausse / 100) * (1 + baisse / 100) * (1 + hausse2 / 100), 'la baisse a été appliquée comme une hausse : le signe s’est perdu'],
       ],
       euros,
       { minimum: 0 },
@@ -74,25 +83,73 @@ const pourcentages: Famille = {
       typeItem: 'qcm',
       enonce:
         `${capitale(produit)} coûte ${euros(prix)}. Son prix augmente de ${pourcent(hausse)}, ` +
-        `puis le nouveau prix baisse de ${pourcent(baisse)}. Quel est le prix final ?`,
+        `puis baisse de ${pourcent(baisse)}, puis augmente encore de ${pourcent(hausse2)}. Quel est le prix final ?`,
       options,
       bonneReponse,
       diagnostics,
-      rappel: `${euros(prix)} × ${cH} × ${cB} = ${euros(final)}. Les taux se composent.`,
+      rappel: `${euros(prix)} × ${cH} × ${cB} × ${cH2} = ${euros(final)}. Les taux se composent.`,
       explication:
-        `1. Chaque variation devient un coefficient multiplicateur : ` +
-        `une hausse de ${pourcent(hausse)} donne 1 + ${hausse}/100 = ${cH}, ` +
-        `une baisse de ${pourcent(baisse)} donne 1 − ${baisse}/100 = ${cB}.\n` +
-        `2. Les deux se suivent, donc les coefficients se multiplient : ` +
-        `${euros(prix)} × ${cH} × ${cB}.\n` +
-        `3. ${euros(prix)} × ${cH} = ${euros(prix * (1 + hausse / 100))}, ` +
-        `puis × ${cB} = ${euros(final)}.\n` +
-        `Le piège : ${pourcent(hausse)} − ${pourcent(baisse)} donnerait ` +
-        `${euros(prix * (1 + (hausse - baisse) / 100))}. Additionner deux taux n'est légitime que ` +
-        `s'ils portent sur la même base. Ici la baisse porte sur le prix DÉJÀ augmenté, pas sur le prix de départ.`,
-      difficulte: 2,
+        `1. Chaque variation devient un coefficient multiplicateur : ${cH}, ${cB}, ${cH2}.\n` +
+        `2. Elles se suivent, donc les coefficients se multiplient : ${euros(prix)} × ${cH} × ${cB} × ${cH2}.\n` +
+        `3. ${euros(prix)} × ${cH} = ${euros(prix * (1 + hausse / 100))} ; × ${cB} = ` +
+        `${euros(prix * (1 + hausse / 100) * (1 - baisse / 100))} ; × ${cH2} = ${euros(final)}.\n` +
+        `Le piège : ${hausse} − ${baisse} + ${hausse2} = ${somme} % donnerait ` +
+        `${euros(prix * (1 + somme / 100))}. Additionner des taux n'est légitime que s'ils portent sur la même base ; ` +
+        `ici chaque variation porte sur le prix déjà modifié par la précédente.`,
+      difficulte: 3,
     }
   },
+}
+
+/**
+ * « Le prix augmente de 25 % : de combien doit-il baisser pour revenir au
+ * départ ? » Réponse 20 %, pas 25 : la baisse porte sur un prix plus élevé.
+ * Couples choisis pour tomber juste.
+ */
+const RETOURS: Array<[variation: number, retour: number]> = [
+  [25, 20], [100, 50], [150, 60], [300, 75], [400, 80], [60, 37.5],
+  [-20, 25], [-50, 100], [-60, 150], [-75, 300], [-80, 400],
+]
+
+function retourAuPrix(a: Alea): QuestionGeneree {
+  const [v, r] = a.choix(RETOURS)
+  const hausse = v > 0
+  const produit = a.choix(PRODUITS)
+  const c = 1 + v / 100
+  const pct = (x: number) => `${nombre(x, Number.isInteger(x) ? 0 : 1)} %`
+
+  const leurres: Leurre[] = [
+    [Math.abs(v), `le même taux en sens inverse : la seconde variation porte sur un prix ${hausse ? 'plus élevé' : 'plus bas'}, elle ne peut pas compenser au même taux`],
+  ]
+  // Le calcul fait dans l'autre sens : la compensation d'une variation de signe opposé.
+  const inverse = hausse ? (100 * v) / (100 - v) : (-100 * v) / (100 - v)
+  if (v < 100 && v > -100 && Number.isFinite(inverse) && inverse > 0) {
+    leurres.push([Math.round(inverse * 10) / 10, 'la formule a été appliquée dans le mauvais sens : la base de la seconde variation est le prix modifié, pas le prix de départ'])
+  }
+  leurres.push([Math.abs(v) / 2, 'la moitié du taux : aucune règle ne justifie ce raccourci'])
+  if (Math.abs(v) < 100) leurres.push([100 - Math.abs(v), `c’est le complément à 100 de ${Math.abs(v)} %, pas le taux de retour`])
+
+  const { options, bonneReponse, diagnostics } = qcm(a, r, leurres, pct, { minimum: 0 })
+  return {
+    section: S,
+    skillId: 'tm.calcul.pourcentages_et_variations',
+    typeItem: 'qcm',
+    enonce: hausse
+      ? `Le prix d’${produit} augmente de ${pourcent(v)}. De quel pourcentage ce nouveau prix doit-il baisser pour revenir au prix de départ ?`
+      : `Le prix d’${produit} baisse de ${pourcent(-v)}. De quel pourcentage ce nouveau prix doit-il augmenter pour retrouver le prix de départ ?`,
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: `Coefficient ${nombre(c, 2)} ; pour revenir, × 1/${nombre(c, 2)} = ${nombre(1 / c, 4)}, soit ${hausse ? '−' : '+'}${pct(r)}.`,
+    explication:
+      `1. La variation de ${pourcent(Math.abs(v))} ${hausse ? 'en hausse' : 'en baisse'} correspond au coefficient ${nombre(c, 2)}.\n` +
+      `2. Revenir au prix de départ, c'est multiplier par l'inverse : 1 ÷ ${nombre(c, 2)} = ${nombre(1 / c, 4)}.\n` +
+      `3. ${nombre(1 / c, 4)} ${hausse ? `= 1 − ${nombre(r / 100, 4)}, soit une baisse de` : `= 1 + ${nombre(r / 100, 4)}, soit une hausse de`} ${pct(r)}.\n` +
+      `Le piège : répondre ${pourcent(Math.abs(v))}. La seconde variation porte sur le prix déjà ${hausse ? 'augmenté' : 'diminué'} : ` +
+      `${hausse ? 'une baisse appliquée à une base plus grande retire plus, il en faut donc moins' : 'une hausse appliquée à une base plus petite ajoute moins, il en faut donc plus'}. ` +
+      `Contrôle sur 100 € : ${nombre(100 * c)} € ${hausse ? '−' : '+'} ${pct(r)} = 100 €.`,
+    difficulte: 3,
+  }
 }
 
 const variationGlobale: Famille = {
@@ -156,50 +213,58 @@ const ratios: Famille = {
     // Deux parts égales ne font pas un rapport, et deux parts non réduites
     // (4 pour 6) sont un énoncé mal écrit : on impose des entiers premiers
     // entre eux et distincts.
-    const p = a.entier(2, 7)
-    let q = a.entier(2, 9)
-    for (let essai = 0; (q === p || pgcd(p, q) !== 1) && essai < 30; essai++) q = a.entier(2, 9)
-    if (q === p || pgcd(p, q) !== 1) q = p + 1
+    // Le total donné se partageait en une division (difficulté 2). C'est
+    // désormais l'ÉCART entre les deux groupes qui est donné : il faut voir
+    // qu'il vaut |q − p| parts, et le leurre « l'écart est une part » est
+    // le réflexe qui coûte le point.
+    const { p, q } = chercher(
+      a,
+      (a) => ({ p: a.entier(2, 7), q: a.entier(2, 9) }),
+      ({ p, q }) => p !== q && pgcd(p, q) === 1 && Math.abs(p - q) >= 2,
+    )
     const parts = p + q
-    const total = parts * a.entier(6, 40)
-
-    const seconde = (total * q) / parts
-
-    const part = total / parts
+    const part = a.entier(6, 40)
+    const ecart = Math.abs(q - p) * part
+    const [adh, vis, total] = [p * part, q * part, parts * part]
+    const demande = a.choix(['total', 'visiteurs', 'adherents'] as const)
+    const reponse = { total, visiteurs: vis, adherents: adh }[demande]
+    const plusNombreux = q > p ? 'visiteurs' : 'adhérents'
+    const moinsNombreux = q > p ? "d'adhérents" : 'de visiteurs'
 
     const { options, bonneReponse, diagnostics } = qcm(
       a,
-      seconde,
+      reponse,
       [
-        [(total * p) / parts, `c’est l’autre groupe : les ${p} parts d’adhérents, pas les ${q} parts de visiteurs`],
-        [total / parts, 'c’est UNE part, il en faut ' + q],
-        [(total * q) / p, 'le total a été divisé par ' + p + ' au lieu de ' + parts + ' : le rapport a été pris pour un dénominateur'],
-        [total - q, 'le nombre de parts a été retranché du total, comme si c’était un effectif'],
+        [{ total: ecart * parts, visiteurs: ecart * q, adherents: ecart * p }[demande], 'l’écart a été pris pour une part : il en vaut ' + Math.abs(q - p)],
+        [{ total: adh, visiteurs: adh, adherents: vis }[demande], demande === 'total' ? 'c’est le nombre d’adhérents seul, pas le total' : 'c’est l’autre groupe'],
+        [demande === 'total' ? vis : total, demande === 'total' ? 'c’est le nombre de visiteurs seul, pas le total' : 'c’est le total des deux groupes'],
+        [part, `c’est UNE part (${nombre(ecart)} ÷ ${Math.abs(q - p)})`],
+        [ecart, 'c’est l’écart donné dans l’énoncé'],
       ],
       (n) => nombre(n),
       { minimum: 1 },
     )
 
+    const question = { total: 'de personnes en tout', visiteurs: 'de visiteurs', adherents: "d'adhérents" }[demande]
     return {
       section: S,
       skillId: ratios.skillId,
       typeItem: 'qcm',
       enonce:
         `Dans ${a.choix(ENTREPRISES).join(' ')}, le rapport entre le nombre d'adhérents et celui des visiteurs ` +
-        `est de ${p} pour ${q}. L'ensemble représente ${nombre(total)} personnes. ` +
-        `Combien y a-t-il de visiteurs ?`,
+        `est de ${p} pour ${q}. Il y a ${nombre(ecart)} ${plusNombreux} de plus que ${moinsNombreux}. ` +
+        `Combien y a-t-il ${question} ?`,
       options,
       bonneReponse,
       diagnostics,
-      rappel: `${p} + ${q} = ${parts} parts de ${nombre(part)} ; les visiteurs en font ${q}, soit ${nombre(seconde)}.`,
+      rappel: `Écart = ${Math.abs(q - p)} parts → 1 part = ${nombre(part)} ; ${demande === 'total' ? `${parts} parts` : demande === 'visiteurs' ? `${q} parts` : `${p} parts`} = ${nombre(reponse)}.`,
       explication:
-        `1. Un rapport de ${p} pour ${q} découpe le total en ${p} + ${q} = ${parts} parts égales.\n` +
-        `2. Une part vaut ${nombre(total)} ÷ ${parts} = ${nombre(part)} personnes.\n` +
-        `3. Les visiteurs comptent pour ${q} parts : ${q} × ${nombre(part)} = ${nombre(seconde)}.\n` +
-        `Contrôle : les adhérents en font ${p}, soit ${nombre((total * p) / parts)}, ` +
-        `et ${nombre(seconde)} + ${nombre((total * p) / parts)} = ${nombre(total)}. ` +
-        `Le piège est de répondre pour le mauvais groupe : relire quel nombre est demandé avant de cocher.`,
-      difficulte: 2,
+        `1. Un rapport de ${p} pour ${q} découpe les personnes en parts égales : ${p} pour les adhérents, ${q} pour les visiteurs.\n` +
+        `2. L'écart entre les deux groupes vaut ${Math.abs(q - p)} parts. Une part vaut donc ${nombre(ecart)} ÷ ${Math.abs(q - p)} = ${nombre(part)}.\n` +
+        `3. Adhérents : ${p} × ${nombre(part)} = ${nombre(adh)} ; visiteurs : ${q} × ${nombre(part)} = ${nombre(vis)} ; total : ${nombre(total)}.\n` +
+        `4. On demande ${question} : ${nombre(reponse)}.\n` +
+        `Le piège : prendre l'écart de ${nombre(ecart)} pour une part. Il en vaut ${Math.abs(q - p)}, puisque c'est la différence entre ${q} parts et ${p} parts.`,
+      difficulte: 3,
     }
   },
 }
@@ -209,61 +274,58 @@ const ratios: Famille = {
 const premierDegre: Famille = {
   skillId: 'tm.calcul.equations_du_1er_degre',
   nom: 'nombre inconnu',
+  // L'équation était donnée presque toute faite (« le triple d'un nombre
+  // augmenté de… ») : difficulté 2. C'est maintenant un problème d'âges, où
+  // l'écart de n ans s'ajoute aux DEUX âges — l'oubli classique.
   produire(a) {
-    const x = a.entier(3, 40)
-    // On reste dans double/triple/quadruple/quintuple/sextuple : au-delà, le
-    // français n'a plus de mot courant et l'énoncé devient artificiel.
-    const k1 = a.entier(2, 5)
-    const k2 = a.entier(k1 + 1, 6) // strictement plus grand : le coefficient ne s'annule pas
-    const b1 = a.entier(5, 60)
-    const b2 = (k1 - k2) * x + b1
-
-    const signe = b2 >= 0 ? '+' : '−'
-    const equation = `${k1}x + ${nombre(b1)} = ${k2}x ${signe} ${nombre(Math.abs(b2))}`
-
-    const { options, bonneReponse, diagnostics } = qcm(
+    const { k, m, n, b } = chercher(
       a,
-      x,
-      [
-        [-x, 'la bonne valeur au signe près : l’équation a été retournée dans le mauvais sens'],
-        [x + 1, 'une unité de trop — sans doute un report de constante mal compté'],
-        [x - 1, 'une unité de moins — sans doute un report de constante mal compté'],
-        [b1 - b2, 'c’est la différence des constantes, avant la division par ' + (k2 - k1)],
-      ],
-      (n) => nombre(n),
+      (a) => {
+        const k = a.entier(3, 6)
+        const m = a.entier(2, k - 1)
+        const n = a.entier(2, 20)
+        return { k, m, n, b: (n * (m - 1)) / (k - m) }
+      },
+      ({ k, b }) => Number.isInteger(b) && b >= 3 && b <= 20 && k * b <= 80,
     )
+    const [aine, cadet] = a.melanger(PRENOMS).slice(0, 2)
+    const demandeAine = a.chance(0.35)
+    const reponse = demandeAine ? k * b : b
+
+    const leurres: Leurre[] = [
+      [demandeAine ? b : k * b, demandeAine ? `c’est l’âge ${de(cadet)}, pas celui ${de(aine)}` : `c’est l’âge ${de(aine)}, pas celui ${de(cadet)}`],
+      [demandeAine ? k * b + n : b + n, `c’est l’âge dans ${n} ans, pas aujourd’hui`],
+    ]
+    // Les n ans ajoutés au seul cadet : k·b = m(b + n).
+    const oubli = (m * n) / (k - m)
+    if (Number.isInteger(oubli)) leurres.push([demandeAine ? k * oubli : oubli, `les ${n} ans n’ont été ajoutés qu’à l’âge ${de(cadet)} : ils s’ajoutent aux deux`])
+    leurres.push([demandeAine ? k * b - n : Math.abs(b - n), 'les années ont été retranchées au lieu d’être ajoutées'])
+
+    const { options, bonneReponse, diagnostics } = qcm(a, reponse, leurres, (v) => `${nombre(v)} ans`, { minimum: 1 })
+    const fois = (x: number) => (x <= 6 ? `le ${motMultiplicateur(x)} de` : `${x} fois`)
 
     return {
       section: S,
       skillId: premierDegre.skillId,
       typeItem: 'qcm',
       enonce:
-        `Le ${motMultiplicateur(k1)} d'un nombre augmenté de ${nombre(b1)} est égal ` +
-        `au ${motMultiplicateur(k2)} de ce nombre ${b2 >= 0 ? 'augmenté' : 'diminué'} de ${nombre(Math.abs(b2))}. ` +
-        `Quel est ce nombre ?`,
+        `${aine} a aujourd'hui ${k} fois l'âge ${de(cadet)}. Dans ${n} ans, ${aine} aura ${fois(m)} l'âge ${de(cadet)}. ` +
+        `Quel âge a ${demandeAine ? aine : cadet} aujourd'hui ?`,
       options,
       bonneReponse,
       diagnostics,
-      rappel: `${equation} → ${coef(k2 - k1)} = ${nombre(b1 - b2)} → x = ${nombre(x)}.`,
+      rappel: `${k}x + ${n} = ${m}(x + ${n}) → ${k - m === 1 ? '' : `${k - m}x = ${n * (m - 1)} → `}x = ${b}${demandeAine ? `, et ${aine} a ${k * b} ans` : ''}.`,
       explication:
-        `1. Traduire mot à mot, en appelant x le nombre cherché : ${equation}.\n` +
-        `2. Regrouper les x d'un côté, les constantes de l'autre. On retire ${k1}x aux deux membres ` +
-        `et on ${b2 >= 0 ? 'retire ' + nombre(b2) : 'ajoute ' + nombre(-b2)} de chaque côté :\n` +
-        `   ${nombre(b1)} ${b2 >= 0 ? '−' : '+'} ${nombre(Math.abs(b2))} = ${k2}x − ${k1}x, ` +
-        `soit ${nombre(b1 - b2)} = ${coef(k2 - k1)}.\n` +
-        (k2 - k1 === 1
-          ? `3. Le coefficient vaut 1 : x = ${nombre(x)} directement.\n`
-          : `3. Diviser : x = ${nombre(b1 - b2)} ÷ ${k2 - k1} = ${nombre(x)}.\n`) +
-        `Vérification en dix secondes, à faire systématiquement : ` +
-        `${k1} × ${nombre(x)} + ${nombre(b1)} = ${nombre(k1 * x + b1)}, ` +
-        `et ${k2} × ${nombre(x)} ${signe} ${nombre(Math.abs(b2))} = ${nombre(k2 * x + b2)}. Les deux membres tombent juste.`,
-      difficulte: 2,
+        `1. Appeler x l'âge actuel ${de(cadet)} ; ${aine} a ${k}x ans.\n` +
+        `2. Dans ${n} ans, CHACUN a vieilli de ${n} ans : ${aine} aura ${k}x + ${n}, ${cadet} aura x + ${n}.\n` +
+        `3. L'énoncé donne : ${k}x + ${n} = ${m}(x + ${n}), soit ${k}x + ${n} = ${m}x + ${m * n}, donc ${k - m === 1 ? '' : k - m}x = ${n * (m - 1)} et x = ${b}.\n` +
+        `4. ${cadet} a ${b} ans, ${aine} ${k * b} ans. On demande l'âge ${de(demandeAine ? aine : cadet)} : ${reponse} ans.\n` +
+        `Vérification : dans ${n} ans, ${k * b + n} = ${m} × ${b + n}. ` +
+        `Le piège : n'ajouter les ${n} ans qu'à un seul des deux âges.`,
+      difficulte: 3,
     }
   },
 }
-
-/** « 3x », mais « x » plutôt que « 1x ». */
-const coef = (k: number) => (k === 1 ? 'x' : `${k}x`)
 
 const MULTIPLICATEURS: Record<number, string> = {
   2: 'double',
@@ -526,75 +588,101 @@ const divisibilite: Famille = {
 const pgcdPpcm: Famille = {
   skillId: 'tm.calcul.arithmetique_et_divisibilite',
   nom: 'PGCD et PPCM',
-  produire(a) {
-    const d = a.choix([6, 8, 9, 12, 14, 15, 18])
-    let u = a.entier(2, 9)
-    let v = a.entier(2, 9)
-    while (pgcd(u, v) !== 1) {
-      u = a.entier(2, 9)
-      v = a.entier(2, 11)
-    }
-    const x = d * u
-    const y = d * v
-    const cherchePgcd = a.chance(0.5)
-    const reponse = cherchePgcd ? d : ppcm(x, y)
+  produire: (a) => pgcdEnSituation(a),
+}
 
-    const { options, bonneReponse, diagnostics } = qcm(
-      a,
-      reponse,
-      [
-        [
-          cherchePgcd ? ppcm(x, y) : d,
-          cherchePgcd
-            ? 'c’est le PPCM : on cherchait le plus grand nombre qui divise les deux, pas le plus petit qu’ils divisent'
-            : 'c’est le PGCD : on cherchait le premier instant multiple des deux durées, pas un diviseur commun',
-        ],
-        [x, 'c’est l’un des deux nombres de l’énoncé'],
-        [y, 'c’est l’autre nombre de l’énoncé'],
-        cherchePgcd ? [Math.abs(x - y), 'c’est leur différence — elle n’a rien à voir avec le PGCD'] : [x * y, 'c’est le produit des deux : il convient, mais ce n’est pas la PREMIÈRE fois'],
-      ],
-      (n) => nombre(n),
-      { minimum: 1 },
-    )
+const heureMinutes = (m: number) => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`
 
-    return {
-      section: S,
-      skillId: pgcdPpcm.skillId,
-      typeItem: 'qcm',
-      // Le mot « PGCD » ou « PPCM » n'apparaît jamais à l'épreuve : on y lit
-      // « les plus grands carrés possibles » ou « de nouveau en même temps ».
-      // Reconnaître lequel des deux est demandé fait partie de la question.
-      enonce: cherchePgcd
-        ? a.choix([
-            `On veut découper une plaque de ${nombre(x)} cm sur ${nombre(y)} cm en carrés identiques, les plus grands possible, sans aucune chute. Quelle est la longueur du côté d'un carré, en cm ?`,
-            `Un fleuriste dispose de ${nombre(x)} roses et ${nombre(y)} tulipes. On compose avec toutes ces fleurs des bouquets tous identiques, le plus grand nombre possible. Combien de bouquets obtient-on ?`,
-          ])
-        : a.choix([
-            `Deux phares s'allument ensemble à minuit. L'un s'allume toutes les ${nombre(x)} secondes, l'autre toutes les ${nombre(y)} secondes. Au bout de combien de secondes s'allumeront-ils de nouveau en même temps ?`,
-            `Deux bus partent ensemble du terminus à 6 h. L'un repasse toutes les ${nombre(x)} minutes, l'autre toutes les ${nombre(y)} minutes. Au bout de combien de minutes repartiront-ils de nouveau ensemble ?`,
-          ]),
-      options,
-      bonneReponse,
-      diagnostics,
-      rappel: cherchePgcd
-        ? `${nombre(x)} = ${d}×${u}, ${nombre(y)} = ${d}×${v} : le facteur commun est ${d}.`
-        : `PPCM = ${d} × ${u} × ${v} = ${nombre(ppcm(x, y))}.`,
-      explication:
-        `1. Factoriser les deux nombres pour faire apparaître ce qu'ils ont en commun :\n` +
-        `   ${nombre(x)} = ${d} × ${u} et ${nombre(y)} = ${d} × ${v}.\n` +
-        `2. ${u} et ${v} n'ont aucun diviseur commun : le facteur ${d} est donc le plus grand qu'on puisse ` +
-        `mettre en commun. PGCD = ${d}.\n` +
-        `3. Le PPCM prend le facteur commun UNE fois, puis ce qui reste de chaque côté : ` +
-        `${d} × ${u} × ${v} = ${nombre(ppcm(x, y))}.\n` +
-        (cherchePgcd
-          ? `4. « Le plus grand possible, sans reste » : c'est le PGCD, ${nombre(reponse)}.\n`
-          : `4. « De nouveau en même temps » : le premier instant multiple des deux durées, c'est le PPCM, ${nombre(reponse)}.\n`) +
-        `Contrôle imparable : PGCD × PPCM = les deux nombres multipliés. ` +
-        `Ici ${d} × ${nombre(ppcm(x, y))} = ${nombre(x * y)} = ${nombre(x)} × ${nombre(y)}. ` +
-        `Et un repère de bon sens : le PGCD est plus petit que les deux nombres, le PPCM plus grand.`,
-      difficulte: 2,
-    }
-  },
+/**
+ * Le PGCD ou le PPCM n'est jamais la réponse : c'est l'étape intermédiaire.
+ * Trouver le côté des carrés ne suffit pas, on demande leur nombre ; trouver
+ * l'intervalle commun ne suffit pas, on demande l'heure ou le nombre de
+ * rencontres. Reconnaître l'outil, puis s'en servir (difficulté 3).
+ */
+function pgcdEnSituation(a: Alea): QuestionGeneree {
+  const scene = a.choix(['plaque', 'fleurs', 'bus', 'phares'] as const)
+  const pgcdCherche = scene === 'plaque' || scene === 'fleurs'
+  const { d, u, v } = chercher(
+    a,
+    (a) => ({ d: a.choix([6, 8, 9, 12, 14, 15, 18]), u: a.entier(2, 9), v: a.entier(2, 11) }),
+    ({ d, u, v }) =>
+      u !== v && pgcd(u, v) === 1 &&
+      (scene === 'bus' ? d * u * v <= 600 : scene === 'phares' ? d * u * v <= 900 : true),
+  )
+  const [x, y] = [d * u, d * v]
+  const L = d * u * v
+
+  let reponse: number
+  let leurres: Leurre[]
+  let enonce: string
+  let derniere: string
+  let formater = (n: number) => nombre(n)
+
+  if (scene === 'plaque') {
+    reponse = u * v
+    leurres = [
+      [d, `c’est le côté des carrés (${d} cm), pas leur nombre`],
+      [u + v, 'les carrés des deux bords ont été additionnés au lieu d’être multipliés'],
+      [L, 'c’est le PPCM : il ne mesure rien ici'],
+      ...(d % 2 === 0 ? [[4 * u * v, `ce sont des carrés de ${d / 2} cm, plus petits que nécessaire`] as Leurre] : []),
+    ]
+    enonce = `On découpe une plaque de ${nombre(x)} cm sur ${nombre(y)} cm en carrés identiques, les plus grands possible, sans aucune chute. Combien de carrés obtient-on ?`
+    derniere = `Côté ${d} cm : ${u} carrés sur la longueur de ${x} cm, ${v} sur celle de ${y} cm, soit ${u} × ${v} = ${reponse} carrés.`
+  } else if (scene === 'fleurs') {
+    reponse = u
+    leurres = [
+      [d, `c’est le nombre de bouquets (${d}), pas le nombre de roses par bouquet`],
+      [v, 'c’est le nombre de tulipes par bouquet'],
+      [u + v, 'c’est le nombre de fleurs par bouquet, roses et tulipes ensemble'],
+    ]
+    enonce = `Un fleuriste dispose de ${nombre(x)} roses et ${nombre(y)} tulipes. Avec toutes ces fleurs, on compose le plus grand nombre possible de bouquets identiques. Combien de roses contient chaque bouquet ?`
+    derniere = `${d} bouquets : chacun reçoit ${x} ÷ ${d} = ${u} roses (et ${v} tulipes).`
+  } else if (scene === 'bus') {
+    reponse = 360 + L
+    formater = heureMinutes
+    leurres = [
+      [360 + d, `${d} min est le PGCD : à ${heureMinutes(360 + d)}, aucun des deux bus ne repasse forcément`],
+      [360 + x, `c’est le prochain passage du premier bus seul`],
+      [360 + y, `c’est le prochain passage du second bus seul`],
+      ...(360 + x * y < 24 * 60 ? [[360 + x * y, 'avec le produit des deux intervalles : les bus se retrouvent bien, mais pas pour la première fois'] as Leurre] : []),
+    ]
+    enonce = `Deux bus partent ensemble du terminus à 6 h 00. L'un y repasse toutes les ${x} minutes, l'autre toutes les ${y} minutes. À quelle heure repartiront-ils de nouveau ensemble pour la première fois ?`
+    derniere = `${L} min = ${Math.floor(L / 60)} h ${String(L % 60).padStart(2, '0')} après 6 h 00, soit ${heureMinutes(reponse)}.`
+  } else {
+    reponse = Math.ceil(3600 / L)
+    leurres = [
+      [reponse - 1, 'l’allumage commun de minuit a été oublié'],
+      [reponse + 1, 'un allumage de trop : 1 h est exclue'],
+      [Math.ceil(3600 / d), `le calcul a été fait avec le PGCD (${d} s) au lieu du PPCM`],
+      [Math.floor(3600 / x) + Math.floor(3600 / y), 'les allumages des deux phares ont été additionnés, sans chercher ceux qui coïncident'],
+    ]
+    enonce = `Deux phares s'allument ensemble à minuit. L'un s'allume toutes les ${x} secondes, l'autre toutes les ${y} secondes. Combien de fois s'allument-ils en même temps entre minuit et 1 h, minuit compris et 1 h exclue ?`
+    derniere = `Ensemble toutes les ${L} s : à 0, ${L}, ${2 * L}… s, tant que l'on reste sous 3 600 s. Cela fait ${reponse} allumages communs.`
+  }
+
+  const { options, bonneReponse, diagnostics } = qcm(a, reponse, leurres, formater, { minimum: 1 })
+  return {
+    section: S,
+    skillId: 'tm.calcul.arithmetique_et_divisibilite',
+    typeItem: 'qcm',
+    // Le mot « PGCD » ou « PPCM » n'apparaît jamais à l'épreuve : on y lit
+    // « les plus grands carrés possibles » ou « de nouveau ensemble ».
+    enonce,
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: pgcdCherche
+      ? `PGCD(${x}, ${y}) = ${d}, puis : ${derniere}`
+      : `PPCM(${x}, ${y}) = ${d} × ${u} × ${v} = ${L}, puis : ${derniere}`,
+    explication:
+      `1. Factoriser : ${nombre(x)} = ${d} × ${u} et ${nombre(y)} = ${d} × ${v}, avec ${u} et ${v} sans diviseur commun.\n` +
+      (pgcdCherche
+        ? `2. « Les plus grands possible, sans reste » : c'est le PGCD, ${d}.\n`
+        : `2. « De nouveau ensemble » : le premier multiple commun aux deux intervalles, c'est le PPCM, ${d} × ${u} × ${v} = ${L}.\n`) +
+      `3. ${derniere}\n` +
+      `Le piège : s'arrêter au ${pgcdCherche ? 'PGCD' : 'PPCM'}. Il n'est qu'une étape ; relire ce que la question demande avant de cocher.`,
+    difficulte: 3,
+  }
 }
 
 /* ------------------------------------------------------ géométrie plane -- */
@@ -611,67 +699,71 @@ const TRIPLETS: Array<[number, number, number]> = [
 const geometrie: Famille = {
   skillId: 'tm.calcul.geometrie_plane',
   nom: 'triangle rectangle',
-  produire(a) {
-    const [p, q, h] = a.choix(TRIPLETS)
-    const k = a.entier(1, 6)
-    const [c1, c2, hyp] = [p * k, q * k, h * k]
-    const cherchePerimetre = a.chance(0.5)
-    const aire = (c1 * c2) / 2
-    const reponse = cherchePerimetre ? c1 + c2 + hyp : aire
+  produire: (a) => triangleAvecPythagore(a),
+}
 
-    const { options, bonneReponse, diagnostics } = qcm(
-      a,
-      reponse,
-      cherchePerimetre
+/**
+ * Les deux côtés de l'angle droit étaient donnés : l'aire tombait en une
+ * multiplication (difficulté 2). On donne maintenant l'hypoténuse et un seul
+ * côté, ou une échelle contre un mur : Pythagore d'abord, le reste ensuite.
+ */
+function triangleAvecPythagore(a: Alea): QuestionGeneree {
+  const echelle = a.chance(0.35)
+  // L'échelle reste à taille humaine : 3-4-5, 5-12-13 ou 8-15-17, en mètres.
+  const [p, q, h] = a.choix(echelle ? TRIPLETS.filter((t) => t[2] <= 17) : TRIPLETS)
+  const k = echelle ? 1 : a.entier(1, 5)
+  const [c1, c2, hyp] = [p * k, q * k, h * k]
+  const demande = echelle ? 'hauteur' : a.choix(['aire', 'perimetre'] as const)
+  const unite = echelle ? 'm' : demande === 'aire' ? 'cm²' : 'cm'
+  const aire = (c1 * c2) / 2
+  const reponse = demande === 'hauteur' ? c2 : demande === 'aire' ? aire : c1 + c2 + hyp
+
+  const leurres: Leurre[] =
+    demande === 'hauteur'
+      ? [
+          [hyp - c1, 'les longueurs ont été soustraites : Pythagore porte sur les CARRÉS des côtés'],
+          [hyp, 'c’est la longueur de l’échelle elle-même'],
+          [Math.round(Math.sqrt(hyp * hyp + c1 * c1) * 10) / 10, 'les carrés ont été additionnés : l’échelle est l’hypoténuse, il fallait soustraire'],
+        ]
+      : demande === 'aire'
         ? [
-            [c1 + c2, 'l’hypoténuse a été oubliée : un périmètre compte les trois côtés'],
-            [aire, 'c’est l’aire, pas le périmètre'],
-            [c1 + c2 + c1, `le côté de ${nombre(c1)} cm a été compté deux fois à la place de l’hypoténuse`],
-            [2 * (c1 + c2), 'c’est le périmètre d’un rectangle de mêmes côtés, pas d’un triangle'],
+            [(c1 * hyp) / 2, 'l’hypoténuse a été prise comme hauteur : l’aire se calcule sur les deux côtés de l’angle droit'],
+            [c1 * c2, 'la division par 2 a été oubliée : c’est l’aire du rectangle'],
+            [c1 * (hyp - c1) / 2, 'le côté manquant a été calculé comme une différence de longueurs, sans les carrés'],
+            [c1 + c2 + hyp, 'c’est le périmètre, pas l’aire'],
           ]
         : [
-            [c1 * c2, 'la division par 2 a été oubliée : c’est l’aire du rectangle, le triangle en fait la moitié'],
-            [(c1 * hyp) / 2, `l’hypoténuse a remplacé le côté de ${nombre(c2)} cm — l’aire se calcule sur les deux côtés de l’angle droit`],
-            [c1 + c2 + hyp, 'c’est le périmètre, pas l’aire'],
-            [(c2 * hyp) / 2, `l’hypoténuse a remplacé le côté de ${nombre(c1)} cm — l’aire se calcule sur les deux côtés de l’angle droit`],
-          ],
-      (n) => `${nombre(n)} ${cherchePerimetre ? 'cm' : 'cm²'}`,
-      { minimum: 0 },
-    )
+            [c1 + hyp, 'le côté manquant a été oublié : un périmètre compte les trois côtés'],
+            [c1 + hyp + (hyp - c1), 'le côté manquant a été calculé comme une différence de longueurs, sans les carrés'],
+            [aire, 'c’est l’aire, pas le périmètre'],
+            [2 * c1 + hyp, `le côté de ${nombre(c1)} cm a été compté deux fois`],
+          ]
 
-    return {
-      section: S,
-      skillId: geometrie.skillId,
-      typeItem: 'qcm',
-      enonce:
-        `Un triangle rectangle a pour côtés de l'angle droit ${nombre(c1)} cm et ${nombre(c2)} cm. ` +
-        (cherchePerimetre ? `Quel est son périmètre ?` : `Quelle est son aire ?`),
-      options,
-      bonneReponse,
-      diagnostics,
-      rappel: cherchePerimetre
-        ? `Triplet ${p}-${q}-${h} × ${k} : hypoténuse ${nombre(hyp)}, périmètre ${nombre(reponse)} cm.`
-        : `Aire = (${nombre(c1)} × ${nombre(c2)}) ÷ 2 = ${nombre(reponse)} cm². L'hypoténuse ne sert pas.`,
-      explication: cherchePerimetre
-        ? `1. Le périmètre demande les trois côtés : les deux de l'angle droit sont donnés, ` +
-          `l'hypoténuse est à trouver.\n` +
-          `2. Pythagore : hypoténuse = √(${nombre(c1)}² + ${nombre(c2)}²) = ` +
-          `√(${nombre(c1 * c1)} + ${nombre(c2 * c2)}) = √${nombre(hyp * hyp)} = ${nombre(hyp)} cm.\n` +
-          `3. Périmètre : ${nombre(c1)} + ${nombre(c2)} + ${nombre(hyp)} = ${nombre(reponse)} cm.\n` +
-          `Le raccourci qui fait gagner trente secondes : ce triangle est le triplet ${p}-${q}-${h} ` +
-          `multiplié par ${k}. Les six triplets à connaître par cœur — 3-4-5, 5-12-13, 8-15-17, 7-24-25, ` +
-          `9-40-41, 20-21-29 — couvrent presque tous les triangles rectangles du TAGE MAGE, ` +
-          `et dispensent de la racine carrée.`
-        : `1. L'aire d'un triangle rectangle se calcule sur les deux côtés de l'angle droit, ` +
-          `qui se servent mutuellement de base et de hauteur.\n` +
-          `2. Aire = (base × hauteur) ÷ 2 = (${nombre(c1)} × ${nombre(c2)}) ÷ 2 = ` +
-          `${nombre(c1 * c2)} ÷ 2 = ${nombre(reponse)} cm².\n` +
-          `3. L'hypoténuse (${nombre(hyp)} cm ici) ne sert à rien pour l'aire : elle n'est ni base ni hauteur.\n` +
-          `Les deux erreurs classiques : oublier la division par 2 — on obtient alors l'aire du rectangle, ` +
-          `soit le double — et faire entrer l'hypoténuse dans le produit.`,
-      difficulte: 2,
-    }
-  },
+  const { options, bonneReponse, diagnostics } = qcm(a, reponse, leurres, (n) => `${nombre(n, Number.isInteger(n) ? 0 : 1)} ${unite}`, { minimum: 1 })
+  return {
+    section: S,
+    skillId: 'tm.calcul.geometrie_plane',
+    typeItem: 'qcm',
+    enonce: echelle
+      ? `Une échelle de ${nombre(hyp)} m est appuyée contre un mur vertical ; son pied est posé à ${nombre(c1)} m du mur. À quelle hauteur le haut de l'échelle touche-t-il le mur ?`
+      : `Un triangle rectangle a une hypoténuse de ${nombre(hyp)} cm et un côté de l'angle droit de ${nombre(c1)} cm. ` +
+        (demande === 'aire' ? `Quelle est son aire ?` : `Quel est son périmètre ?`),
+    options,
+    bonneReponse,
+    diagnostics,
+    rappel: `Côté manquant = √(${nombre(hyp)}² − ${nombre(c1)}²) = ${nombre(c2)}` +
+      (demande === 'aire' ? ` ; aire = ${nombre(c1)} × ${nombre(c2)} ÷ 2 = ${nombre(aire)} cm².` : demande === 'perimetre' ? ` ; périmètre = ${nombre(reponse)} cm.` : ' m.'),
+    explication:
+      `1. Le côté manquant se trouve par Pythagore : hypoténuse² = somme des carrés des deux autres côtés.\n` +
+      `2. ${nombre(c2)}² = ${nombre(hyp)}² − ${nombre(c1)}² = ${nombre(hyp * hyp)} − ${nombre(c1 * c1)} = ${nombre(c2 * c2)}, donc le côté vaut ${nombre(c2)}.\n` +
+      (demande === 'aire'
+        ? `3. Aire : les deux côtés de l'angle droit servent de base et de hauteur, ${nombre(c1)} × ${nombre(c2)} ÷ 2 = ${nombre(aire)} cm².\n`
+        : demande === 'perimetre'
+          ? `3. Périmètre : ${nombre(c1)} + ${nombre(c2)} + ${nombre(hyp)} = ${nombre(reponse)} cm.\n`
+          : `3. Le mur, le sol et l'échelle forment un triangle rectangle dont l'échelle est l'hypoténuse : hauteur ${nombre(c2)} m.\n`) +
+      `Le raccourci : c'est le triplet ${p}-${q}-${h}${k > 1 ? ` multiplié par ${k}` : ''}. Le reconnaître évite la racine carrée.`,
+    difficulte: 3,
+  }
 }
 
 /* ------------------------------------------------------ aires et volumes -- */
@@ -1084,12 +1176,18 @@ const suites: Famille = {
   produire(a) {
     const u1 = a.entier(2, 30)
     const r = a.entier(2, 12)
-    const n = a.entier(8, 30)
+    const n = a.entier(12, 30)
     const chercheSomme = a.chance(0.5)
 
     const un = u1 + (n - 1) * r
     const somme = (n * (u1 + un)) / 2
     const reponse = chercheSomme ? somme : un
+    // Le terme de rang n à partir du premier se lisait d'une formule
+    // (difficulté 2). On donne maintenant deux termes intermédiaires : il
+    // faut retrouver le pas, puis repartir du bon rang.
+    const i = a.entier(2, 4)
+    const j = i + a.entier(3, 6)
+    const [ui, uj] = [u1 + (i - 1) * r, u1 + (j - 1) * r]
 
     const { options, bonneReponse, diagnostics } = qcm(
       a,
@@ -1102,10 +1200,10 @@ const suites: Famille = {
             [n * u1, 'tous les termes ont été supposés égaux au premier'],
           ]
         : [
-            [u1 + n * r, `${n} augmentations ont été comptées au lieu de ${n - 1} : le premier terme n’en a subi aucune`],
-            [somme, 'c’est la somme des ' + n + ' premiers termes, pas le ' + n + 'ᵉ terme'],
-            [u1 * n, 'le premier terme a été multiplié par le rang, au lieu d’ajouter la raison'],
-            [un + r, 'un terme de trop : c’est u' + (n + 1)],
+            [ui + (n - 1) * r, `les ${n - 1} pas ont été comptés depuis le ${i}ᵉ terme comme s’il était le premier`],
+            [Math.round(ui + (n - i) * ((uj - ui) / (j - i + 1))), `le pas a été calculé sur ${j - i + 1} intervalles au lieu de ${j - i}`],
+            [Math.round((uj * n) / j), 'règle de trois sur les rangs : une progression arithmétique n’est pas proportionnelle'],
+            [un + r, 'un pas de trop : c’est le terme suivant'],
           ],
       (v) => nombre(v),
       { minimum: 0 },
@@ -1117,20 +1215,26 @@ const suites: Famille = {
       typeItem: 'qcm',
       // Aucune « suite » dans l'énoncé : une situation qui avance d'un pas
       // constant, qu'il faut reconnaître, et dont il faut compter les pas.
-      enonce: a.choix([
-        `Dans un amphithéâtre, la 1ʳᵉ rangée compte ${nombre(u1)} sièges, et chaque rangée en compte ${nombre(r)} de plus que la précédente. ` +
-          (chercheSomme ? `Combien de sièges compte l'amphithéâtre, qui a ${n} rangées ?` : `Combien de sièges compte la ${n}ᵉ rangée ?`),
-        `Pour préparer une course, une coureuse parcourt ${nombre(u1)} km la 1ʳᵉ semaine, puis ${nombre(r)} km de plus chaque semaine que la précédente. ` +
-          (chercheSomme ? `Combien de kilomètres a-t-elle parcourus en tout au bout de ${n} semaines ?` : `Combien de kilomètres parcourt-elle la ${n}ᵉ semaine ?`),
-        `Un salarié met de côté ${nombre(u1)} € le 1ᵉʳ mois, puis chaque mois ${nombre(r)} € de plus que le mois précédent. ` +
-          (chercheSomme ? `Quelle somme a-t-il épargnée au total au bout de ${n} mois ?` : `Combien met-il de côté le ${n}ᵉ mois ?`),
-      ]),
+      enonce: a.choix(
+        chercheSomme
+          ? [
+              `Dans un amphithéâtre, la 1ʳᵉ rangée compte ${nombre(u1)} sièges, et chaque rangée en compte ${nombre(r)} de plus que la précédente. Combien de sièges compte l'amphithéâtre, qui a ${n} rangées ?`,
+              `Pour préparer une course, une coureuse parcourt ${nombre(u1)} km la 1ʳᵉ semaine, puis ${nombre(r)} km de plus chaque semaine que la précédente. Combien de kilomètres a-t-elle parcourus en tout au bout de ${n} semaines ?`,
+              `Un salarié met de côté ${nombre(u1)} € le 1ᵉʳ mois, puis chaque mois ${nombre(r)} € de plus que le mois précédent. Quelle somme a-t-il épargnée au total au bout de ${n} mois ?`,
+            ]
+          : // Ni premier terme ni pas : seulement deux rangs intermédiaires.
+            [
+              `Dans un amphithéâtre, chaque rangée compte le même nombre de sièges de plus que la précédente. La ${i}ᵉ rangée en compte ${nombre(ui)} et la ${j}ᵉ ${nombre(uj)}. Combien de sièges compte la ${n}ᵉ rangée ?`,
+              `Pour préparer une course, une coureuse ajoute chaque semaine la même distance à celle de la semaine précédente. La ${i}ᵉ semaine, elle parcourt ${nombre(ui)} km, et la ${j}ᵉ ${nombre(uj)} km. Combien de kilomètres parcourt-elle la ${n}ᵉ semaine ?`,
+              `Un salarié met de côté chaque mois la même somme de plus que le mois précédent. Le ${i}ᵉ mois, il met ${nombre(ui)} € de côté, et le ${j}ᵉ ${nombre(uj)} €. Combien met-il de côté le ${n}ᵉ mois ?`,
+            ],
+      ),
       options,
       bonneReponse,
       diagnostics,
       rappel: chercheSomme
         ? `u${n} = ${nombre(un)}, puis ${n} × (${nombre(u1)} + ${nombre(un)}) ÷ 2 = ${nombre(somme)}.`
-        : `u${n} = ${nombre(u1)} + ${n - 1} × ${nombre(r)} = ${nombre(un)}. Le « n − 1 » est le piège.`,
+        : `Pas = (${nombre(uj)} − ${nombre(ui)}) ÷ ${j - i} = ${nombre(r)} ; u${n} = ${nombre(ui)} + ${n - i} × ${nombre(r)} = ${nombre(un)}.`,
       explication:
         `1. La suite avance de ${nombre(r)} à chaque pas : c'est une progression arithmétique ` +
         `de premier terme ${nombre(u1)} et de raison ${nombre(r)}.\n` +
@@ -1144,11 +1248,11 @@ const suites: Famille = {
             `4. (${nombre(u1)} + ${nombre(un)}) ÷ 2 = ${nombre((u1 + un) / 2)}, puis × ${n} = ${nombre(somme)}.\n` +
             `Attention à ne pas rendre u${n} = ${nombre(un)} : c'est le dernier terme, une étape du calcul, ` +
             `pas la somme demandée.`
-          : `3. La question s'arrête là : ${nombre(un)}.\n` +
-            `L'erreur qui revient le plus souvent est ${nombre(u1 + n * r)}, obtenu avec ${n} pas au lieu de ${n - 1}. ` +
-            `Le contrôle en deux secondes : sur les premiers termes, u₁ = ${nombre(u1)}, u₂ = ${nombre(u1 + r)}, ` +
-            `u₃ = ${nombre(u1 + 2 * r)} — le rang dépasse toujours d'une unité le nombre d'augmentations.`),
-      difficulte: 2,
+          : `3. Ici le premier terme n'est pas donné : entre le ${i}ᵉ et le ${j}ᵉ, il y a ${j - i} pas, donc ` +
+            `r = (${nombre(uj)} − ${nombre(ui)}) ÷ ${j - i} = ${nombre(r)}.\n` +
+            `4. Du ${i}ᵉ au ${n}ᵉ terme, ${n - i} pas : ${nombre(ui)} + ${n - i} × ${nombre(r)} = ${nombre(un)}.\n` +
+            `Le piège : compter ${j - i + 1} intervalles entre le ${i}ᵉ et le ${j}ᵉ terme. Entre deux rangs, il y a leur différence de pas, pas un de plus.`),
+      difficulte: 3,
     }
   },
 }
