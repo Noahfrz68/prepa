@@ -300,8 +300,11 @@ const grilleSommes: Famille = {
 
     const lignes: Case[][] = [0, 1].map((i) =>
       grille.map((col, j): Case => {
+        // Une case de texte n'a pas de cadre par défaut (c'est la règle des
+        // séries de nombres) : sans cadre explicite, la grille se lisait comme
+        // des nombres épars, cases vides invisibles.
         if (j === jx && i === ix) return { texte: 'X', cadre: 'epais' }
-        return devoilee[j] === i ? { texte: String(col[i]) } : {}
+        return devoilee[j] === i ? { texte: String(col[i]), cadre: 'fin' } : { cadre: 'fin' }
       }),
     )
 
