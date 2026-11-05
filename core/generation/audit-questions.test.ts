@@ -5,6 +5,7 @@ import { CONNECTEURS, LEXIQUE, PAIRES, PHRASES } from './corpus-expression'
 import { FAILLES, SCENARIOS } from './corpus-raisonnement'
 import { FAMILLES_EXPRESSION } from './expression'
 import { FAMILLES_RAISONNEMENT, JUMELLES } from './raisonnement'
+import { FAMILLES_CONDITIONS } from './conditions'
 
 /**
  * Les défauts trouvés en relisant la banque question par question
@@ -113,5 +114,41 @@ describe('calcul — écriture des nombres', () => {
 
   it('n’affiche pas de décimales nulles quand toutes les propositions sont rondes', () => {
     for (const q of questions) expect(q.options.every((o) => /,00\b/.test(o)), q.options.join(' / ')).toBe(false)
+  })
+})
+
+/**
+ * Relevé le 2026-11-05 : « Que vaut x + y ? (1) x + y = 30. (2) x = 16 et
+ * y = 14. » Réponse D sans rien lire. Une information suffisante ne doit
+ * jamais réciter la réponse ; elle doit suffire APRÈS un raisonnement.
+ */
+describe('conditions minimales — informations suffisantes', () => {
+  // [question visée, information qui y répondrait sans raisonner]. La même
+  // phrase peut être légitime ailleurs : « x + y = 36 » est un piège quand on
+  // demande x, une récitation quand on demande x + y.
+  const RECITEES: Array<[RegExp, RegExp]> = [
+    [/que vaut x \+ y/, /^x \+ y = [\d  ]+\.$/],
+    [/que vaut x \+ y|que vaut le produit xy/, /^x = \d+ et y = \d/],
+    [/que vaut le produit xy/, /^xy = [\d  ]+\.$/],
+    [/femmes/, /dont [\d  ]+ femmes/],
+    [/périmètre d'un carré/, /^Son côté mesure \d/],
+    [/aire d'un rectangle/, /^Sa longueur mesure .* et sa largeur/],
+    [/médiane/, /^Rangées dans l'ordre|^Deux élèves ont moins de/],
+    [/coûte un cahier/, /^\d+ cahiers coûtent/],
+    [/nouveau prix/, /^Il coûtait .* et a augmenté/],
+  ]
+  const lot = FAMILLES_CONDITIONS.flatMap((f) => {
+    const a = aleaDepuis(11)
+    return Array.from({ length: 60 }, () => f.produire(a))
+  })
+
+  it('ne récitent jamais la réponse', () => {
+    for (const q of lot) {
+      for (const info of [q.info1, q.info2]) {
+        for (const [question, motif] of RECITEES) {
+          if (question.test(q.enonce)) expect(info, `${q.enonce} → ${info}`).not.toMatch(motif)
+        }
+      }
+    }
   })
 })

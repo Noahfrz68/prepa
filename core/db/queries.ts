@@ -288,7 +288,8 @@ function candidatesDrill(section: string, skillIds: string[], reserve = true): C
   return db()
     .prepare(
       `SELECT i.id, i.skill_id AS skillId, i.enonce,
-              (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu
+              (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu,
+              (SELECT MAX(a.created_at) FROM attempt a WHERE a.item_id = i.id) AS dernierVu
          FROM item i
         WHERE i.exam_id = 'tagemage' AND i.section = ? AND i.statut = 'valide' ${filtre}
           ${reserve ? `AND ${HORS_RESERVE}` : ''}`,
@@ -543,6 +544,10 @@ export interface Correction {
   rappel: string | null
   /** Ce que valait la proposition cochée, quand elle est nommée. */
   diagnostic: string | null
+  /** Ce que vaut CHAQUE proposition fausse, par lettre : affiché sous chacune. */
+  diagnostics: Record<string, string>
+  /** La méthode pour aller vite (questions générées). */
+  astuce: string | null
   /** La sous-compétence, pour renvoyer vers la leçon qui l’explique. */
   skillId: string | null
   /** Disposition dessinée de l'énoncé, pour les questions graphiques. */
@@ -609,6 +614,19 @@ export function diagnosticDe(brut: unknown, lettre: string | null): string | nul
   }
 }
 
+/** Toutes les explications de propositions, lues défensivement comme `diagnosticDe`. */
+export function diagnosticsDe(brut: unknown): Record<string, string> {
+  if (typeof brut !== 'string') return {}
+  try {
+    const table = JSON.parse(brut) as Record<string, unknown>
+    return Object.fromEntries(
+      Object.entries(table ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== ''),
+    )
+  } catch {
+    return {}
+  }
+}
+
 export interface RecapSerie {
   resultat: ReturnType<typeof resultatSerie>
   tempsTotalMs: number
@@ -625,7 +643,7 @@ export function terminerDrill(sessionId: number): RecapSerie {
               a.confiance, a.points_gagnes,
               i.enonce, i.type_item, i.options, i.info_1, i.info_2,
               i.figure, i.options_figure,
-              i.bonne_reponse, i.explication_reference, i.rappel, i.diagnostics, i.skill_id
+              i.bonne_reponse, i.explication_reference, i.rappel, i.astuce, i.diagnostics, i.skill_id
          FROM attempt a
          JOIN item i ON i.id = a.item_id
         WHERE a.session_id = ?
@@ -652,6 +670,8 @@ export function terminerDrill(sessionId: number): RecapSerie {
     explication: (l.explication_reference as string) ?? null,
     rappel: (l.rappel as string) ?? null,
     diagnostic: diagnosticDe(l.diagnostics, (l.reponse_donnee as string) ?? null),
+    diagnostics: diagnosticsDe(l.diagnostics),
+    astuce: (l.astuce as string) ?? null,
     skillId: (l.skill_id as string) ?? null,
     figure: lireFigure(l.figure),
     optionsFigure: lireCases(l.options_figure),

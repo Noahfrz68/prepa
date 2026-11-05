@@ -29,6 +29,11 @@ export interface QuestionGeneree {
    */
   rappel?: string
   /**
+   * La méthode pour aller vite : le raccourci, l'élimination, le repère à
+   * connaître. Une par famille (astuces.ts), posée par le tirage.
+   */
+  astuce?: string
+  /**
    * Ce que signifie chaque mauvaise proposition, par lettre.
    *
    * Rendu en face de la proposition effectivement cochée : « tu as répondu C —

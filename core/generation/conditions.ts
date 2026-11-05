@@ -198,13 +198,13 @@ function mouleRectangle(a: Alea): Moule {
 
   return {
     question: `Quelle est l'aire d'un rectangle ?`,
-    suffisant1: `Sa longueur mesure ${nombre(longueur)} cm et sa largeur ${nombre(largeur)} cm.`,
+    suffisant1: `Sa largeur mesure ${nombre(largeur)} cm, et un carré de côté égal à sa longueur aurait une aire de ${nombre(longueur * longueur)} cm².`,
     suffisant2: `Son périmètre vaut ${nombre(perimetre)} cm et sa longueur vaut ${k} fois sa largeur.`,
     partiel1: `Son périmètre vaut ${nombre(perimetre)} cm.`,
     partiel2: `Sa longueur vaut ${k} fois sa largeur.`,
     inutile1: `Son périmètre dépasse ${nombre(a.entier(4, perimetre - 2))} cm.`,
     inutile2: `Sa longueur dépasse ${nombre(a.entier(1, Math.max(2, largeur - 1)))} cm.`,
-    carS1: `les deux côtés sont donnés, l'aire s'en déduit directement : ` +
+    carS1: `le carré donne la longueur, √${nombre(longueur * longueur)} = ${nombre(longueur)} cm, et la largeur est donnée : ` +
       `${nombre(longueur)} × ${nombre(largeur)} = ${nombre(longueur * largeur)} cm²`,
     carS2: `le périmètre et le rapport forment un système : 2(l + ${k}l) = ${nombre(perimetre)} donne ` +
       `l = ${nombre(largeur)} et L = ${nombre(longueur)}`,
@@ -333,14 +333,16 @@ function mouleRatio(a: Alea): Moule {
 
   return {
     question: `Combien de femmes compte une association ?`,
-    suffisant1: `L'association compte ${nombre(total)} membres, dont ${nombre(femmes)} femmes.`,
+    suffisant1: `L'association compte ${nombre(total)} membres, et il y a ${nombre(ecart)} ` +
+      `${q > p ? 'femmes de plus que d’hommes' : 'hommes de plus que de femmes'}.`,
     suffisant2: `Le rapport hommes / femmes est de ${p} pour ${q}, et il y a ${nombre(ecart)} ` +
       `${q > p ? 'femmes de plus que d’hommes' : 'hommes de plus que de femmes'}.`,
     partiel1: `Le rapport entre le nombre d'hommes et celui de femmes est de ${p} pour ${q}.`,
     partiel2: `L'association compte ${nombre(total)} membres.`,
     inutile1: `L'association compte au moins ${nombre(a.entier(2, Math.max(3, unite)))} femmes.`,
     inutile2: `L'effectif total est inférieur à ${nombre(a.entier(total + 20, total + 900))}.`,
-    carS1: `le nombre de femmes est écrit noir sur blanc : ${nombre(femmes)}`,
+    carS1: `un total et un écart forment un système : femmes + hommes = ${nombre(total)} et l'écart vaut ${nombre(ecart)}, ` +
+      `donc femmes = (${nombre(total)} ${q > p ? '+' : '−'} ${nombre(ecart)}) ÷ 2 = ${nombre(femmes)}`,
     carS2: `un rapport ET un écart chiffré suffisent : l'écart de ${nombre(ecart)} correspond à ` +
       `${Math.abs(q - p)} part(s), donc une part vaut ${nombre(unite)} et les femmes en font ${q}, soit ${nombre(femmes)}`,
     manqueP1: `un rapport de ${p} pour ${q} vaut pour ${nombre(parts)} membres comme pour ${nombre(parts * 100)} : ` +
@@ -364,14 +366,15 @@ function mouleSomme(a: Alea): Moule {
 
   return {
     question: `Deux nombres x et y étant donnés, que vaut x + y ?`,
-    suffisant1: `x + y = ${nombre(somme)}.`,
-    suffisant2: `x = ${nombre(x)} et y = ${nombre(y)}.`,
+    suffisant1: `(x + y)² = ${nombre(somme * somme)}, et x et y sont positifs.`,
+    suffisant2: `x − y = ${nombre(difference)} et x = ${nombre(x)}.`,
     partiel1: `x − y = ${nombre(difference)}.`,
     partiel2: `x² − y² = ${nombre(differenceCarres)}.`,
     inutile1: `x et y sont des entiers strictement compris entre 0 et ${nombre(a.entier(x + 5, x + 200))}.`,
     inutile2: `x dépasse y d'au moins ${nombre(a.entier(1, Math.max(1, difference)))}.`,
-    carS1: `la somme est donnée telle quelle — inutile de chercher x et y, c'est la somme qu'on demande`,
-    carS2: `les deux nombres sont connus, leur somme aussi : ${nombre(x)} + ${nombre(y)} = ${nombre(somme)}`,
+    carS1: `x + y vaut ${nombre(somme)} ou −${nombre(somme)} ; deux nombres positifs ont une somme positive, donc x + y = ${nombre(somme)}. ` +
+      `Sans « positifs », l'information ne suffirait pas`,
+    carS2: `y = ${nombre(x)} − ${nombre(difference)} = ${nombre(y)}, donc x + y = ${nombre(somme)}`,
     manqueP1: `une différence de ${nombre(difference)} laisse une infinité de couples : ` +
       `(${nombre(x)} ; ${nombre(y)}) mais aussi (${nombre(x + 1)} ; ${nombre(y + 1)}), dont les sommes diffèrent`,
     manqueP2: `x² − y² = ${nombre(differenceCarres)} se factorise en (x + y)(x − y), ` +
@@ -428,16 +431,17 @@ function moulePrix(a: Alea): Moule {
   const x = c + s
   const n = a.entier(3, 6)
   const ecartClasseur = a.entier(1, 5)
+  const sac = a.entier(5, 25)
 
   return {
     question: `Combien coûte un cahier ?`,
-    suffisant1: `${n} cahiers coûtent ${euros(n * c)}.`,
+    suffisant1: `${n} cahiers et un sac à ${euros(sac)} coûtent ensemble ${euros(n * c + sac)}.`,
     suffisant2: `Un cahier et un stylo coûtent ensemble ${euros(x)}, et le stylo coûte ${euros(s)}.`,
     partiel1: `Un cahier et un stylo coûtent ensemble ${euros(x)}.`,
     partiel2: `Un stylo coûte ${euros(s)}.`,
     inutile1: `Deux cahiers et deux stylos coûtent ensemble ${euros(2 * x)}.`,
     inutile2: `Un cahier coûte ${euros(ecartClasseur)} de moins qu'un classeur.`,
-    carS1: `le prix de ${n} cahiers se divise : ${euros(n * c)} ÷ ${n} = ${euros(c)}`,
+    carS1: `on retire le sac, puis on divise : (${euros(n * c + sac)} − ${euros(sac)}) ÷ ${n} = ${euros(c)}`,
     carS2: `on retranche le stylo du total : ${euros(x)} − ${euros(s)} = ${euros(c)}`,
     manqueP1: `une seule équation pour deux prix inconnus : c + s = ${nombre(x)} admet une infinité de couples`,
     manqueP2: `le prix du stylo ne dit rien du cahier tant qu'aucune relation ne les lie`,
@@ -455,13 +459,13 @@ function mouleCarre(a: Alea): Moule {
 
   return {
     question: `Quel est le périmètre d'un carré ?`,
-    suffisant1: `Son côté mesure ${nombre(k)} cm.`,
+    suffisant1: `Le carré de sa diagonale vaut ${nombre(2 * k * k)} cm².`,
     suffisant2: `Son aire vaut ${nombre(k * k)} cm².`,
     partiel1: `Il a la même aire qu'un rectangle R.`,
     partiel2: `Le rectangle R mesure ${nombre(ra)} cm sur ${nombre(rb)} cm.`,
     inutile1: `Ses diagonales sont perpendiculaires et de même longueur.`,
     inutile2: `Son côté mesure un nombre entier de centimètres.`,
-    carS1: `le périmètre d'un carré vaut quatre fois son côté : 4 × ${nombre(k)} = ${nombre(4 * k)} cm`,
+    carS1: `Pythagore : diagonale² = 2 × côté², donc côté² = ${nombre(2 * k * k)} ÷ 2 = ${nombre(k * k)}, côté ${nombre(k)} cm et périmètre ${nombre(4 * k)} cm`,
     carS2: `le côté est la racine de l'aire — ${nombre(k)} cm, une longueur étant positive —, d'où 4 × ${nombre(k)} = ${nombre(4 * k)} cm`,
     manqueP1: `on ne sait rien de R : l'égalité des aires ne fixe aucune taille`,
     manqueP2: `R est une autre figure : ses dimensions ne disent rien du carré tant qu'aucun lien n'est donné`,
@@ -478,16 +482,17 @@ function mouleHausse(a: Alea): Moule {
   const ancien = a.entier(2, 20) * 20
   const hausse = (ancien * t) / 100
   const nouveau = ancien + hausse
+  const r = a.choix([10, 20, 25, 50])
 
   return {
     question: `Quel est le nouveau prix d'un abonnement après sa hausse ?`,
-    suffisant1: `Il coûtait ${euros(ancien)} et a augmenté de ${t} %.`,
+    suffisant1: `Après la hausse, une baisse de ${r} % le ramènerait à ${euros((nouveau * (100 - r)) / 100)}.`,
     suffisant2: `La hausse, de ${t} %, a représenté ${euros(hausse)}.`,
     partiel1: `Il a augmenté de ${t} %.`,
     partiel2: `Avant la hausse, il coûtait ${euros(ancien)}.`,
     inutile1: `Il a augmenté du même pourcentage que l'an dernier.`,
     inutile2: `Après la hausse, il reste moins cher que celui d'un concurrent.`,
-    carS1: `l'ancien prix et le taux donnent le nouveau : ${euros(ancien)} × ${nombre(1 + t / 100, 2)} = ${euros(nouveau)}`,
+    carS1: `${euros((nouveau * (100 - r)) / 100)} représentent ${100 - r} % du nouveau prix, qui vaut donc ${euros((nouveau * (100 - r)) / 100)} ÷ ${nombre(1 - r / 100, 2)} = ${euros(nouveau)}`,
     carS2: `${euros(hausse)} font ${t} % de l'ancien prix, qui valait donc ${euros(ancien)} ; le nouveau vaut ${euros(ancien)} + ${euros(hausse)} = ${euros(nouveau)}`,
     manqueP1: `un taux sans montant de départ ne donne aucun prix`,
     manqueP2: `l'ancien prix ne dit pas de combien il a augmenté`,
@@ -504,17 +509,19 @@ function mouleMediane(a: Alea): Moule {
   const notes = [m - 3, m - 1, m, m + 2, m + 4]
   // La note inconnue est m − 1 : la moyenne des cinq vaut m + 0,4.
   const moyenne = (5 * m + 2) / 5
+  // Données en désordre : la médiane exige de ranger d'abord.
+  const desordre = a.melanger(notes)
 
   return {
     question: `Quelle est la note médiane de cinq élèves à un devoir ?`,
-    suffisant1: `Rangées dans l'ordre, les notes sont ${notes.map((x) => nombre(x)).join(', ')}.`,
-    suffisant2: `Deux élèves ont moins de ${nombre(m)}, deux ont plus de ${nombre(m)}, et le cinquième a exactement ${nombre(m)}.`,
+    suffisant1: `Les cinq notes sont ${desordre.map((x) => nombre(x)).join(', ')}.`,
+    suffisant2: `La moyenne des cinq notes vaut ${nombre(moyenne, 1)}, et quatre d'entre elles sont ${nombre(m - 3)}, ${nombre(m)}, ${nombre(m + 2)} et ${nombre(m + 4)}.`,
     partiel1: `La moyenne des cinq notes vaut ${nombre(moyenne, 1)}.`,
     partiel2: `Quatre des notes sont ${nombre(m - 3)}, ${nombre(m)}, ${nombre(m + 2)} et ${nombre(m + 4)} ; la cinquième est inconnue.`,
     inutile1: `L'écart entre la meilleure et la moins bonne note vaut 7 points.`,
     inutile2: `Aucune note n'est répétée.`,
-    carS1: `la médiane de cinq valeurs rangées est la troisième : ${nombre(m)}`,
-    carS2: `la médiane est la valeur qui a autant de notes au-dessous qu'au-dessus : ${nombre(m)}`,
+    carS1: `rangées, elles donnent ${notes.map((x) => nombre(x)).join(', ')} : la médiane de cinq valeurs est la troisième, ${nombre(m)}`,
+    carS2: `la moyenne fixe le total, ${nombre(5 * moyenne)}, donc la note manquante, ${nombre(m - 1)} ; rangées, les notes placent ${nombre(m)} au milieu`,
     manqueP1: `une moyenne ne dit rien de la valeur du milieu : des séries très différentes ont la même`,
     manqueP2: `tout dépend de la note manquante — petite, la médiane vaut ${nombre(m)} ; grande, elle vaut ${nombre(m + 2)}`,
     ensemble: `la moyenne fixe le total, ${nombre(5 * moyenne)}, donc la note manquante : ${nombre(5 * moyenne)} − ${nombre(4 * m + 3)} = ${nombre(m - 1)}. Rangées, les notes placent ${nombre(m)} au milieu`,
@@ -566,14 +573,14 @@ function mouleProduit(a: Alea): Moule {
 
   return {
     question: `Deux nombres x et y étant donnés, que vaut le produit xy ?`,
-    suffisant1: `xy = ${nombre(x * y)}.`,
-    suffisant2: `x = ${nombre(x)} et y = ${nombre(y)}.`,
+    suffisant1: `(x + y)² − (x − y)² = ${nombre(4 * x * y)}.`,
+    suffisant2: `x + y = ${nombre(x + y)} et x − y = ${nombre(x - y)}.`,
     partiel1: `(x + y)² = ${nombre((x + y) ** 2)}.`,
     partiel2: `x² + y² = ${nombre(x * x + y * y)}.`,
     inutile1: `x et y sont deux entiers positifs distincts.`,
     inutile2: `x est le double de y.`,
-    carS1: `le produit est donné tel quel — inutile de chercher x et y`,
-    carS2: `les deux nombres sont connus : ${nombre(x)} × ${nombre(y)} = ${nombre(x * y)}`,
+    carS1: `en développant, (x + y)² − (x − y)² = 4xy : xy = ${nombre(4 * x * y)} ÷ 4 = ${nombre(x * y)}, sans jamais calculer x ni y`,
+    carS2: `somme et différence forment un système : x = (${nombre(x + y)} + ${nombre(x - y)}) ÷ 2 = ${nombre(x)}, y = ${nombre(y)}, et xy = ${nombre(x * y)}`,
     manqueP1: `(x + y)² fixe la somme, pas le produit : ${nombre(x + y)} = ${nombre(x)} + ${nombre(y)} = ${nombre(x + 1)} + ${nombre(y - 1)}, et les produits diffèrent`,
     manqueP2: `une somme de carrés laisse une infinité de couples possibles`,
     ensemble: `(x + y)² = x² + 2xy + y², donc 2xy = ${nombre((x + y) ** 2)} − ${nombre(x * x + y * y)} = ${nombre(2 * x * y)} et xy = ${nombre(x * y)}, sans jamais calculer x ni y`,

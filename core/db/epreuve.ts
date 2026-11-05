@@ -1,6 +1,6 @@
 import { lireCases, lireFigure } from '@/core/figures/lire'
 import type { Case, Figure } from '@/core/figures/types'
-import { db, diagnosticDe, difficultesDe } from './queries'
+import { db, diagnosticDe, diagnosticsDe, difficultesDe } from './queries'
 import type { DifficulteObservee } from '@/core/stats/difficulte'
 import { itemsComprehensionGroupes, texteLongComprehension } from './selection'
 import { poidsDesTypes } from './poids'
@@ -86,7 +86,8 @@ function preparerEtapes(mode: ModeEpreuve): { etapes: EtapePreparee[]; complete:
   // regarde que la sous-compétence, le début de l'énoncé et la fraîcheur.
   const candidates = d.prepare(
     `SELECT i.id, i.skill_id AS skillId, i.enonce, i.tags = 'annale' AS annale,
-            (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu
+            (SELECT COUNT(*) FROM attempt a WHERE a.item_id = i.id) AS vu,
+            (SELECT MAX(a.created_at) FROM attempt a WHERE a.item_id = i.id) AS dernierVu
        FROM item i
       WHERE i.exam_id = 'tagemage' AND i.section = ? AND i.statut = 'valide'`,
   )
@@ -375,6 +376,10 @@ export interface CorrectionEpreuve {
   explication: string | null
   rappel: string | null
   diagnostic: string | null
+  /** Ce que vaut CHAQUE proposition fausse, par lettre. */
+  diagnostics: Record<string, string>
+  /** La méthode pour aller vite (questions générées). */
+  astuce: string | null
   /** La sous-compétence, pour renvoyer vers la leçon qui l’explique. */
   skillId: string | null
   /** Disposition dessinée de l'énoncé, pour les questions graphiques. */
@@ -447,7 +452,7 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
               a.temps_ms, a.confiance, a.points_gagnes,
               i.section, i.enonce, i.type_item, i.options, i.info_1, i.info_2,
               i.figure, i.options_figure,
-              i.bonne_reponse, i.explication_reference, i.rappel, i.diagnostics, i.skill_id
+              i.bonne_reponse, i.explication_reference, i.rappel, i.astuce, i.diagnostics, i.skill_id
          FROM attempt a
          JOIN item i ON i.id = a.item_id
         WHERE a.session_id = ?
@@ -476,6 +481,8 @@ export function recapEpreuve(sessionId: number): RecapEpreuve {
     explication: (l.explication_reference as string) ?? null,
     rappel: (l.rappel as string) ?? null,
     diagnostic: diagnosticDe(l.diagnostics, (l.reponse_donnee as string) ?? null),
+    diagnostics: diagnosticsDe(l.diagnostics),
+    astuce: (l.astuce as string) ?? null,
     skillId: (l.skill_id as string) ?? null,
     figure: lireFigure(l.figure),
     optionsFigure: lireCases(l.options_figure),
