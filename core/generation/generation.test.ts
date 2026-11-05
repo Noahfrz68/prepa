@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { aleaDepuis, fraction, lettre, nombre, rang } from './alea'
 import { genererLot, SECTIONS_GENERABLES } from './index'
+import { ASTUCES } from './astuces'
 import { anomalies, signature } from './verifier'
 import { OPTIONS_CONDITIONS_MINIMALES } from '@/exams/tagemage'
 
@@ -259,5 +260,22 @@ describe('génération — difficulté plancher', () => {
     const notes = lot.questions.map((q) => q.difficulte)
     expect(Math.min(...notes)).toBeGreaterThanOrEqual(3)
     expect(notes.reduce((s, n) => s + n, 0) / notes.length).toBeGreaterThanOrEqual(3.5)
+  })
+})
+
+/** L'astuce s'affiche sous chaque question corrigée : aucune famille sans elle. */
+describe('génération — astuces', () => {
+  it.each(SECTIONS_GENERABLES)('%s : chaque question générée porte une astuce', (section) => {
+    const lot = genererLot(section, 200, 31)
+    const sans = lot.questions.filter((q) => !q.astuce?.trim()).map((q) => q.enonce.slice(0, 60))
+    expect(sans).toEqual([])
+    for (const nom of Object.keys(lot.parFamille)) expect(ASTUCES[section][nom], `${section} / ${nom}`).toBeTruthy()
+  })
+
+  it('n’a pas d’astuce orpheline, rattachée à une famille disparue', () => {
+    for (const section of SECTIONS_GENERABLES) {
+      const noms = new Set(Object.keys(genererLot(section, 300, 5).parFamille))
+      for (const nom of Object.keys(ASTUCES[section])) expect(noms.has(nom), `${section} / ${nom}`).toBe(true)
+    }
   })
 })

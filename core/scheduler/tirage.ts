@@ -29,6 +29,8 @@ export interface Candidat {
   vu: number
   /** Question tirée d'une annale réelle. */
   annale?: boolean
+  /** Date de la dernière réponse (ISO), quand la question a déjà été vue. */
+  dernierVu?: string | null
 }
 
 export interface OptionsTirage {
@@ -48,6 +50,14 @@ export interface OptionsTirage {
  */
 export function modeleEnonce(enonce: string, nbMots = 4): string {
   return enonce
+    // Les noms propres changent d'une variante à l'autre sans changer
+    // l'exercice : « Malik entoure d'une clôture… » et « Thomas entoure d'une
+    // clôture… » étaient pris pour deux modèles, et servis dans deux séries de
+    // suite (relevé du 2026-11-05). Tout mot à majuscule devient le même
+    // repère, à sa place : le supprimer décalerait la fenêtre des premiers mots.
+    .split(/\s+/)
+    .map((m) => (/^\p{Lu}/u.test(m) ? 'nom' : m))
+    .join(' ')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -111,12 +121,24 @@ export function tirageEquilibre(
   }
   const expo = (c: Candidat) => vuModele.get(`${c.skillId ?? '∅'}|${modeleEnonce(c.enonce)}`) ?? 0
   const inedite = (c: Candidat) => (options.prioriteAnnales && c.annale && c.vu === 0 ? 0 : 1)
+  const dejaVue = (c: Candidat) => (c.vu > 0 ? 1 : 0)
 
-  // Annales inédites d'abord (épreuves), puis les modèles les moins vus, puis
-  // les questions les moins vues ; le hasard départage.
+  // Annales inédites d'abord (épreuves), puis TOUTE question jamais vue avant
+  // toute question déjà vue. Le modèle le moins exposé ne départage qu'ensuite :
+  // placé en tête, il faisait repasser une question vue une seule fois (au
+  // début d'énoncé unique) devant des questions neuves, et la même question
+  // revenait trente minutes plus tard. Parmi les déjà vues, la plus
+  // anciennement vue revient d'abord ; le hasard départage le reste.
   const melanges = alea
     .melanger(candidats)
-    .sort((a, b) => inedite(a) - inedite(b) || expo(a) - expo(b) || a.vu - b.vu)
+    .sort(
+      (a, b) =>
+        inedite(a) - inedite(b) ||
+        dejaVue(a) - dejaVue(b) ||
+        (dejaVue(a) ? (a.dernierVu ?? '').localeCompare(b.dernierVu ?? '') : 0) ||
+        expo(a) - expo(b) ||
+        a.vu - b.vu,
+    )
 
   const parSkill = new Map<string, Candidat[]>()
   for (const c of melanges) {
@@ -143,22 +165,33 @@ export function tirageEquilibre(
     modeles.add(cleModele(c))
   }
 
+  // Premier passage : la répartition par compétence, mais seulement parmi les
+  // questions jamais vues. Une compétence épuisée cède sa place à une autre
+  // plutôt que de resservir une question ; le complément ne puise dans les
+  // déjà vues qu'une fois toutes les neuves servies.
   for (const skill of ordreDesCompetences(poids, n, alea)) {
     const liste = parSkill.get(skill)!.filter((c) => !pris.has(c.id))
     // Un modèle déjà servi cède la place : mieux vaut une autre compétence
     // qu'un énoncé que l'on vient de voir avec d'autres nombres.
-    const c = liste.find((x) => !modeles.has(cleModele(x)))
+    const c = liste.find((x) => x.vu === 0 && !modeles.has(cleModele(x)))
     if (c) prendre(c)
   }
 
-  // Complément quand certaines compétences n'avaient pas assez de questions.
-  for (const c of melanges) {
-    if (choisis.length >= n) break
-    if (!pris.has(c.id) && !modeles.has(cleModele(c))) prendre(c)
-  }
-  for (const c of melanges) {
-    if (choisis.length >= n) break
-    if (!pris.has(c.id)) prendre(c)
+  // Complément quand certaines compétences n'avaient pas assez de questions,
+  // par étapes : une question neuve d'un modèle nouveau, puis toute question
+  // neuve, puis une déjà vue d'un modèle nouveau, puis n'importe laquelle.
+  // Une question neuve d'un modèle déjà servi vaut mieux qu'une revue.
+  const etapes: Array<(c: Candidat) => boolean> = [
+    (c) => c.vu === 0 && !modeles.has(cleModele(c)),
+    (c) => c.vu === 0,
+    (c) => !modeles.has(cleModele(c)),
+    () => true,
+  ]
+  for (const accepte of etapes) {
+    for (const c of melanges) {
+      if (choisis.length >= n) break
+      if (!pris.has(c.id) && accepte(c)) prendre(c)
+    }
   }
 
   return choisis.slice(0, n)

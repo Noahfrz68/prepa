@@ -22,7 +22,7 @@ export interface ResultatGeneration {
  * questions de chaque famille — exactement le reproche fait à une banque de
  * quinze questions : toujours les mêmes.
  */
-function signaturesExistantes(section: string, examId: string): Set<string> {
+export function signaturesExistantes(section: string, examId: string): Set<string> {
   const lignes = db()
     .prepare(
       `SELECT enonce, info_1, info_2, options, bonne_reponse, type_item, figure
@@ -71,48 +71,7 @@ export function genererEtInserer(
   const d = db()
   const rapport = genererLot(section, combien, graine, signaturesExistantes(section, examId))
 
-  const inserer = d.prepare(`
-    INSERT OR IGNORE INTO item
-      (exam_id, section, skill_id, type_item, enonce, info_1, info_2, options,
-       bonne_reponse, difficulte_estimee, explication_reference, rappel, diagnostics,
-       figure, options_figure, source, statut)
-    VALUES (@exam, @section, @skill, @type, @enonce, @info1, @info2, @options,
-            @bonne, @difficulte, @explication, @rappel, @diagnostics,
-            @figure, @optionsFigure, 'genere', 'valide')
-  `)
-
-  let inseres = 0
-
-  const tout = d.transaction((liste: QuestionGeneree[]) => {
-    for (const q of liste) {
-      const r = inserer.run({
-        exam: examId,
-        section: q.section,
-        skill: q.skillId,
-        type: q.typeItem,
-        enonce: q.enonce,
-        info1: q.info1 ?? null,
-        info2: q.info2 ?? null,
-        options: q.typeItem === 'conditions_minimales' ? null : JSON.stringify(q.options),
-        bonne: q.bonneReponse,
-        difficulte: q.difficulte,
-        explication: q.explication,
-        rappel: q.rappel ?? null,
-        // Absent quand aucun leurre n'était nommé : mieux vaut NULL qu'un objet
-        // vide, qui donnerait l'illusion d'un diagnostic disponible.
-        diagnostics:
-          q.diagnostics && Object.keys(q.diagnostics).length > 0
-            ? JSON.stringify(q.diagnostics)
-            : null,
-        figure: q.figure ? JSON.stringify(q.figure) : null,
-        optionsFigure:
-          q.optionsFigure && q.optionsFigure.length > 0 ? JSON.stringify(q.optionsFigure) : null,
-      })
-      inseres += r.changes
-    }
-  })
-
-  tout(rapport.questions)
+  const inseres = insererQuestions(rapport.questions, examId)
 
   const total = (
     d
@@ -148,6 +107,59 @@ export function genererEtInserer(
     total,
     avertissements,
   }
+}
+
+/**
+ * Enregistre des questions déjà produites. Séparé de la génération pour qu’un
+ * lot puisse être choisi avant d’entrer en banque (par exemple pour viser une
+ * difficulté moyenne). Rend le nombre de lignes réellement insérées.
+ */
+export function insererQuestions(liste: QuestionGeneree[], examId = 'tagemage'): number {
+  const d = db()
+  const inserer = d.prepare(`
+    INSERT OR IGNORE INTO item
+      (exam_id, section, skill_id, type_item, enonce, info_1, info_2, options,
+       bonne_reponse, difficulte_estimee, explication_reference, rappel, astuce, diagnostics,
+       figure, options_figure, source, statut)
+    VALUES (@exam, @section, @skill, @type, @enonce, @info1, @info2, @options,
+            @bonne, @difficulte, @explication, @rappel, @astuce, @diagnostics,
+            @figure, @optionsFigure, 'genere', 'valide')
+  `)
+
+  let inseres = 0
+
+  const tout = d.transaction((liste: QuestionGeneree[]) => {
+    for (const q of liste) {
+      const r = inserer.run({
+        exam: examId,
+        section: q.section,
+        skill: q.skillId,
+        type: q.typeItem,
+        enonce: q.enonce,
+        info1: q.info1 ?? null,
+        info2: q.info2 ?? null,
+        options: q.typeItem === 'conditions_minimales' ? null : JSON.stringify(q.options),
+        bonne: q.bonneReponse,
+        difficulte: q.difficulte,
+        explication: q.explication,
+        rappel: q.rappel ?? null,
+        astuce: q.astuce ?? null,
+        // Absent quand aucun leurre n'était nommé : mieux vaut NULL qu'un objet
+        // vide, qui donnerait l'illusion d'un diagnostic disponible.
+        diagnostics:
+          q.diagnostics && Object.keys(q.diagnostics).length > 0
+            ? JSON.stringify(q.diagnostics)
+            : null,
+        figure: q.figure ? JSON.stringify(q.figure) : null,
+        optionsFigure:
+          q.optionsFigure && q.optionsFigure.length > 0 ? JSON.stringify(q.optionsFigure) : null,
+      })
+      inseres += r.changes
+    }
+  })
+
+  tout(liste)
+  return inseres
 }
 
 /** Supprime les questions engendrées d'un sous-test, sans toucher aux annales. */

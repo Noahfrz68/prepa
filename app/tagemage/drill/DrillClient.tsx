@@ -1,16 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { EnonceQuestion, EnonceRappel, Proposition } from '@/app/_composants/Enonce'
+import { EnonceQuestion, Proposition } from '@/app/_composants/Enonce'
+import CorrectionPasAPas from '@/app/_composants/CorrectionPasAPas'
 import type { Case, Figure } from '@/core/figures/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DebriefIA from '@/app/_composants/DebriefIA'
 import GroupeComprehension, { type ReponseGroupe } from './GroupeComprehension'
 import { poster } from '@/app/_composants/reseau'
 import Panne, { type EtatPanne } from '@/app/_composants/Panne'
-import Difficulte from '@/app/_composants/Difficulte'
 import TempsCorrection from '@/app/_composants/TempsCorrection'
-import ChoixCause from '@/app/_composants/CauseErreur'
 import ManqueAGagner from '@/app/_composants/ManqueAGagner'
 import type { DifficulteObservee } from '@/core/stats/difficulte'
 import {
@@ -55,6 +54,10 @@ interface Correction {
   explication: string | null
   rappel: string | null
   diagnostic: string | null
+  diagnostics?: Record<string, string>
+  astuce?: string | null
+  info1?: string | null
+  info2?: string | null
   skillId: string | null
 }
 
@@ -765,12 +768,7 @@ function VueRecap({
       {sessionId !== null && <DebriefIA sessionId={sessionId} />}
       <TempsCorrection sessionId={sessionId} />
 
-      <h2 className="mt-10 mb-4 text-sm uppercase tracking-widest text-doux">Corrections</h2>
-      <ol className="space-y-3">
-        {corrections.map((c, i) => (
-          <LigneCorrection key={c.itemId} numero={i + 1} c={c} />
-        ))}
-      </ol>
+      <CorrectionPasAPas fiches={corrections.map((c) => ({ ...c, section }))} />
 
       <div className="mt-10 flex gap-3">
         <Link
@@ -802,108 +800,6 @@ function Tuile({ valeur, libelle, ton }: { valeur: string; libelle: string; ton?
     <div className="rounded-xl border border-bord bg-carte px-4 py-3">
       <p className={`chiffres text-2xl font-semibold ${couleur}`}>{valeur}</p>
       <p className="text-xs text-doux">{libelle}</p>
-    </div>
-  )
-}
-
-function LigneCorrection({ numero, c }: { numero: number; c: Correction }) {
-  const etat = c.aSaute ? 'sautée' : c.estCorrect ? 'juste' : 'fausse'
-  const couleur = c.aSaute ? 'text-blanc' : c.estCorrect ? 'text-juste' : 'text-faux'
-
-  const options =
-    c.typeItem === 'conditions_minimales' ? OPTIONS_CONDITIONS_MINIMALES : c.options
-  const indexBonne = LETTRES.indexOf(c.bonneReponse as (typeof LETTRES)[number])
-
-  return (
-    <li className="rounded-xl border border-bord bg-carte px-5 py-4">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-doux">
-        <span className="chiffres">#{numero}</span>
-        <span className={couleur}>{etat}</span>
-        <span className="chiffres">
-          {c.points > 0 ? '+' : ''}
-          {c.points} pt
-        </span>
-        <span className="chiffres">{Math.round(c.tempsMs / 1000)} s</span>
-        {!c.aSaute && <span>confiance {c.confiance}/4</span>}
-        <Difficulte d={c.difficulte} />
-      </div>
-
-      <EnonceRappel enonce={c.enonce} figure={c.figure} />
-
-      <div className="mt-2 text-sm">
-        <span className="text-doux">Bonne réponse : </span>
-        <span className="text-juste">{c.bonneReponse}</span>
-        {options[indexBonne] && (
-          <span className="text-juste">
-            {' — '}
-            <Proposition texte={options[indexBonne]} c={c.optionsFigure?.[indexBonne]} taille={48} />
-          </span>
-        )}
-      </div>
-
-      {!c.estCorrect && !c.aSaute && c.reponseDonnee && (
-        <div className="mt-1 text-sm">
-          <span className="text-doux">Ta réponse : </span>
-          <span className="text-faux">{c.reponseDonnee}</span>
-          {c.diagnostic && <span className="text-doux"> — {c.diagnostic}</span>}
-        </div>
-      )}
-
-      <Correctif c={c} />
-
-      {/* Le moment où l'on est le plus prêt à lire une leçon, c'est juste après
-          avoir raté la question qu'elle explique. Sans ce lien, il faut savoir
-          que la leçon existe, deviner son nom, et la retrouver à la main. */}
-      {!c.estCorrect && c.skillId && (
-        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-          <Link href={`/tagemage/cours#${c.skillId}`} className="text-accent hover:underline">
-            Revoir la leçon →
-          </Link>
-          <Link
-            href={`/tagemage/drill?section=${sectionDe(c.skillId)}&revanche=${c.itemId}&taille=3`}
-            className="text-accent hover:underline"
-            title="Trois questions du même type, du même modèle d’énoncé d’abord"
-          >
-            Revanche : même modèle →
-          </Link>
-          <Link
-            href={`/tagemage/drill?section=${sectionDe(c.skillId)}&skills=${c.skillId}`}
-            className="text-doux hover:text-texte"
-          >
-            Refaire une série de ce type
-          </Link>
-        </p>
-      )}
-      {!c.estCorrect && <ChoixCause itemId={c.itemId} section={c.skillId ? sectionDe(c.skillId) : ''} />}
-    </li>
-  )
-}
-
-/** « tm.calcul.systemes » → « calcul ». Le sous-test est encodé dans l'identifiant. */
-function sectionDe(skillId: string): string {
-  return skillId.split('.')[1] ?? ''
-}
-
-/**
- * Le texte de correction, réglé sur ce qui vient de se passer.
- *
- * Juste : une ligne, le réflexe. Relire cinq lignes de démarche pour confirmer
- * ce qu'on vient de faire correctement, c'est du temps de révision dépensé à
- * zéro — et c'est ainsi qu'on prend l'habitude de sauter les corrections.
- *
- * Faux ou sauté : la démarche entière. À ce moment-là, connaître le bon
- * résultat ne sert à rien ; ce qu'il faut voir, c'est où le chemin bifurque.
- */
-function Correctif({ c }: { c: Pick<Correction, 'estCorrect' | 'explication' | 'rappel'> }) {
-  const texte = c.estCorrect ? (c.rappel ?? c.explication) : (c.explication ?? c.rappel)
-  if (!texte) return null
-
-  return (
-    <div className="mt-3 border-t border-bord pt-3">
-      {!c.estCorrect && (
-        <p className="mb-1.5 text-xs uppercase tracking-widest text-doux">La démarche</p>
-      )}
-      <p className="whitespace-pre-line text-sm leading-relaxed text-doux">{texte}</p>
     </div>
   )
 }

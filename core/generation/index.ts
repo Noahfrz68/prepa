@@ -1,4 +1,5 @@
 import { aleaDepuis } from './alea'
+import { ASTUCES } from './astuces'
 import { FAMILLES_CALCUL } from './calcul'
 import { FAMILLES_CONDITIONS } from './conditions'
 import { FAMILLES_EXPRESSION } from './expression'
@@ -100,6 +101,7 @@ export function genererLot(
     }
 
     signatures.add(sig)
+    q.astuce ??= ASTUCES[section][famille.nom]
     questions.push(q)
     parFamille[famille.nom]++
   }

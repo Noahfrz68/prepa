@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { EnonceRappel, Proposition } from '@/app/_composants/Enonce'
 import { notFound } from 'next/navigation'
 import { recapEpreuve, type CorrectionEpreuve } from '@/core/db/epreuve'
 import { dernierScoreSurAnnales, reussiteParOrigine } from '@/core/db/scores'
@@ -11,11 +10,9 @@ import { MINIMUM_ESTIMATION, CIBLE_REUSSITE_LEVIER } from '@/core/stats/diagnost
 import { REPERES } from '@/core/scoring/tagemage'
 import { SECTIONS_PAR_ID } from '@/exams/tagemage'
 import DebriefIA from '@/app/_composants/DebriefIA'
-import Difficulte from '@/app/_composants/Difficulte'
 import TempsCorrection from '@/app/_composants/TempsCorrection'
-import ChoixCause from '@/app/_composants/CauseErreur'
+import CorrectionPasAPas, { type FicheCorrection } from '@/app/_composants/CorrectionPasAPas'
 import { causesDeclarees } from '@/core/db/carnet'
-import type { CauseErreur } from '@/core/stats/causes'
 import ManqueAGagner from '@/app/_composants/ManqueAGagner'
 
 export const dynamic = 'force-dynamic'
@@ -392,111 +389,12 @@ function Leviers({ leviers }: { leviers: Awaited<ReturnType<typeof recapEpreuve>
 
 function Corrections({ corrections }: { corrections: CorrectionEpreuve[] }) {
   const causes = causesDeclarees(corrections.filter((c) => !c.estCorrect).map((c) => c.itemId))
-  const parSection = new Map<string, CorrectionEpreuve[]>()
-  for (const c of corrections) {
-    if (!parSection.has(c.section)) parSection.set(c.section, [])
-    parSection.get(c.section)!.push(c)
-  }
-
-  return (
-    <section className="mt-10">
-      <h2 className="mb-4 text-sm uppercase tracking-widest text-doux">Corrections</h2>
-
-      <div className="space-y-6">
-        {[...parSection.entries()].map(([section, liste]) => (
-          <div key={section}>
-            <h3 className="mb-2 text-sm font-medium text-doux">
-              {SECTIONS_PAR_ID.get(section as never)?.libelle ?? section}
-            </h3>
-            <ol className="space-y-2">
-              {liste.map((c, i) => (
-                <Ligne key={c.itemId} numero={i + 1} c={c} cause={causes.get(c.itemId)} />
-              ))}
-            </ol>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function Ligne({ numero, c, cause }: { numero: number; c: CorrectionEpreuve; cause?: CauseErreur }) {
-  const etat = c.motifBlanc === 'non_traite' ? 'non traitée' : c.aSaute ? 'sautée' : c.estCorrect ? 'juste' : 'fausse'
-  const couleur = c.aSaute ? 'text-blanc' : c.estCorrect ? 'text-juste' : 'text-faux'
-  const options = c.typeItem === 'conditions_minimales' ? [] : c.options
-  const iBonne = ['A', 'B', 'C', 'D', 'E'].indexOf(c.bonneReponse)
-
-  return (
-    <li className="rounded-xl border border-bord bg-carte px-5 py-3">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-doux">
-        <span className="chiffres">#{numero}</span>
-        <span className={couleur}>{etat}</span>
-        <span className="chiffres">
-          {c.points > 0 ? '+' : ''}
-          {c.points}
-        </span>
-        <span className="chiffres">{secondes(c.tempsMs)}</span>
-        {!c.aSaute && <span>confiance {c.confiance}/4</span>}
-        <Difficulte d={c.difficulte} />
-      </div>
-
-      <EnonceRappel enonce={c.enonce} figure={c.figure} />
-
-      <div className="mt-1.5 text-sm">
-        <span className="text-doux">Bonne réponse : </span>
-        <span className="text-juste">{c.bonneReponse}</span>
-        {options[iBonne] && (
-          <span className="text-juste">
-            {' — '}
-            <Proposition texte={options[iBonne]} c={c.optionsFigure?.[iBonne]} taille={48} />
-          </span>
-        )}
-        {!c.estCorrect && !c.aSaute && c.reponseDonnee && (
-          <>
-            <span className="text-doux"> · ta réponse : </span>
-            <span className="text-faux">{c.reponseDonnee}</span>
-          </>
-        )}
-      </div>
-
-      {c.diagnostic && !c.estCorrect && (
-        <p className="mt-1 text-sm text-doux">Ce que vaut cette proposition : {c.diagnostic}</p>
-      )}
-
-      {/* Juste : le réflexe en une ligne. Faux ou sauté : la démarche entière —
-          c'est là qu'on apprend quelque chose, pas en relisant ce qu'on a su faire. */}
-      {(c.estCorrect ? (c.rappel ?? c.explication) : (c.explication ?? c.rappel)) && (
-        <div className="mt-2 border-t border-bord pt-2">
-          {!c.estCorrect && (
-            <p className="mb-1.5 text-xs uppercase tracking-widest text-doux">La démarche</p>
-          )}
-          <p className="whitespace-pre-line text-sm leading-relaxed text-doux">
-            {c.estCorrect ? (c.rappel ?? c.explication) : (c.explication ?? c.rappel)}
-          </p>
-        </div>
-      )}
-
-      {!c.estCorrect && c.skillId && (
-        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-          <Link href={`/tagemage/cours#${c.skillId}`} className="text-accent hover:underline">
-            Revoir la leçon →
-          </Link>
-          <Link
-            href={`/tagemage/drill?section=${c.section}&revanche=${c.itemId}&taille=3`}
-            className="text-accent hover:underline"
-            title="Trois questions du même type, du même modèle d’énoncé d’abord"
-          >
-            Revanche : même modèle →
-          </Link>
-          <Link
-            href={`/tagemage/drill?section=${c.section}&skills=${c.skillId}`}
-            className="text-doux hover:text-texte"
-          >
-            Refaire une série de ce type
-          </Link>
-        </p>
-      )}
-      {!c.estCorrect && <ChoixCause itemId={c.itemId} section={c.section} initiale={cause ?? null} />}
-    </li>
-  )
+  // L'ordre de l'épreuve, sous-test par sous-test : le libellé dit où l'on en est.
+  const fiches: FicheCorrection[] = corrections.map((c) => ({
+    ...c,
+    libelleSection: SECTIONS_PAR_ID.get(c.section as never)?.libelle ?? c.section,
+    nonTraitee: c.motifBlanc === 'non_traite',
+    cause: causes.get(c.itemId) ?? null,
+  }))
+  return <CorrectionPasAPas fiches={fiches} />
 }

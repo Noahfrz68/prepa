@@ -16,6 +16,15 @@ describe('modeleEnonce', () => {
     ).toBe(modeleEnonce("Le chiffre d'affaires d'un club augmente de 20 %"))
     expect(modeleEnonce('Un vélo coûte 1 400 €.')).toBe(modeleEnonce('Un velo coute 900 €.'))
   })
+
+  // Relevé du 2026-11-05 : le même problème de clôture, servi dans deux séries
+  // de suite, parce que le prénom en tête en faisait deux « modèles ».
+  it('ignore les prénoms et les noms propres', () => {
+    expect(modeleEnonce('Malik entoure d’une clôture sa piscine carrée.')).toBe(
+      modeleEnonce('Thomas entoure d’une clôture sa piscine carrée.'),
+    )
+    expect(modeleEnonce('Élodie achète 6 cahiers et 3 stylos.')).toBe(modeleEnonce('Antoine achète 8 cahiers et 2 stylos.'))
+  })
 })
 
 describe('tirageEquilibre', () => {
@@ -85,6 +94,38 @@ describe('tirageEquilibre — fraîcheur du modèle et annales', () => {
     ]
     for (let graine = 1; graine <= 20; graine++) {
       expect(tirageEquilibre(b, 1, new Map([['p', 1]]), aleaDepuis(graine))[0].id).toBe(60)
+    }
+  })
+
+  // Relevé du 2026-11-05 : une question vue une fois, au début d'énoncé unique,
+  // passait devant des questions neuves d'un modèle déjà rencontré, et revenait
+  // trente minutes plus tard.
+  it('ne ressert jamais une question déjà vue tant qu’il reste une question neuve, même d’un modèle rebattu', () => {
+    const b: Candidat[] = [
+      candidat(1, 'p', 'Dans une jardinerie le rapport', 1),
+      ...Array.from({ length: 6 }, (_, i) => candidat(10 + i, 'p', `Une urne contient ${i} boules`, i < 5 ? 2 : 0)),
+    ]
+    for (let graine = 1; graine <= 20; graine++) {
+      expect(tirageEquilibre(b, 1, new Map([['p', 1]]), aleaDepuis(graine))[0].id).toBe(15)
+    }
+  })
+
+  it('cède la place d’une compétence épuisée à une question neuve d’une autre', () => {
+    const b: Candidat[] = [candidat(1, 'a', 'Question vue', 3), candidat(2, 'b', 'Question neuve', 0), candidat(3, 'b', 'Autre neuve', 0)]
+    for (let graine = 1; graine <= 20; graine++) {
+      const t = tirageEquilibre(b, 2, new Map([['a', 9], ['b', 1]]), aleaDepuis(graine))
+      expect(t.map((c) => c.id).sort()).toEqual([2, 3])
+    }
+  })
+
+  it('parmi les questions déjà vues, ressert d’abord la plus anciennement vue', () => {
+    const b: Candidat[] = [
+      { ...candidat(1, 'p', 'Vue hier', 1), dernierVu: '2026-11-04 10:00:00' },
+      { ...candidat(2, 'p', 'Vue il y a un mois', 1), dernierVu: '2026-10-05 10:00:00' },
+      { ...candidat(3, 'p', 'Vue la semaine dernière', 1), dernierVu: '2026-10-29 10:00:00' },
+    ]
+    for (let graine = 1; graine <= 20; graine++) {
+      expect(tirageEquilibre(b, 3, new Map([['p', 1]]), aleaDepuis(graine)).map((c) => c.id)).toEqual([2, 3, 1])
     }
   })
 
